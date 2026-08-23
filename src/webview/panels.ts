@@ -812,7 +812,7 @@ export function createPanels(ctx: PanelsContext) {
       { id: "claude", label: ".claude" },
       { id: "codex", label: ".codex" },
       { id: "githubCopilot", label: "GitHub Copilot" },
-      { id: "dshUserSkills", label: "DSH 用户技能" },
+      { id: "dshUserSkills", label: t("DSH 用户技能") },
     ];
     for (const opt of dirOptions) {
       const on = state.agentDirs?.[opt.id] !== false;

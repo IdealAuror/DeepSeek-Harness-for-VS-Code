@@ -6,7 +6,7 @@
 > npx @deepseek-ai/dsh web
 > ```
 
-[中文版](#chinese) | Publisher: Jager · Latest: 0.12.79
+[中文版](#chinese) | Publisher: Jager · Latest: 0.12.89
 
 Use [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) directly in VS Code, alongside ChatGPT / Copilot: the built-in `@dsh` chat participant, secondary sidebar / standalone chat windows, workspaces / jobs / trajectory / settings panels, turn-level Git rollback, and a **multi-language UI** (简体中文 / 繁體中文 / English / 日本語 / 한국어 / Deutsch / Français / Español / Português / ไทย / Bahasa Indonesia / Türkçe / Русский / العربية — follows the VS Code display language or switch manually).
 
@@ -19,7 +19,11 @@ Use [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) 
 - **Standalone chat window**: `DSH: Open Standalone Chat Window`.
 - **Modern chat UI**: large rounded input box, pill toolbar (thinking depth / model / preset / permission), session stats line (turns · steps · LLM/tool time · first token · tok/s · cache hit · in/out tokens), context usage bar.
 - **Per-message actions** (minimal line icons): copy (double-rectangle icon) / branch (forked line icon; menu: counter-clockwise arrow "Rewind here" · forked icon "Branch from here" · up-left fold "Branch and rewind earlier" · up-left arrow "Back to main") / thumbs up/down (line icons, official `/feedback`) / message header shows model · thinking time · per-step tokens.
-- **Turn-level Git rollback** (↩ button on each assistant turn + branch-menu entries): the DSH server-side plugin `dsh-git-rollback` snapshots the workspace's git state (tracked + untracked files) at every turn start into hidden refs (`refs/dsh/checkpoints/<sid>`, zero pollution of your branch history) and records them under `.dsh/rollback`; the button restores the workspace to the state before that turn. Commands `/rollback [N]`, `/redo`, `/checkpoints` work in both the web command panel and the VS Code chat (rollback is non-destructive: the pre-rollback state is saved first, `/redo` restores it, ignored files are never touched). The web chat gets the same Copilot-style turn dividers and a floating restore dialog out of the box (plugin web half, served via the DSH client-modules pipeline).
+- **Turn-level Git rollback** (↩ button on each assistant turn + branch-menu entries): the DSH server-side plugin `dsh-git-rollback` snapshots the workspace's git state (tracked + untracked files) at every turn start into hidden refs (`refs/dsh/checkpoints/<sid>`, zero pollution of your branch history) and records them under `.dsh/rollback`; the button restores the workspace to the state before that turn. Commands `/rollback [N]`, `/redo`, `/checkpoints` work in both the web command panel and the VS Code chat (rollback is non-destructive: the pre-rollback state is saved first, `/redo` restores it, ignored files are never touched). Each message's ⋯/branch menu also offers **"Undo this turn's file changes"** (preview-and-confirm review dialog, reverses only the files that turn changed — your own commits and HEAD stay untouched), **"View checkpoints"**, and "Undo this turn's changes and branch from here". The web chat gets the same Copilot-style turn dividers and a floating restore dialog out of the box (plugin web half, served via the DSH client-modules pipeline).
+
+![Undo turn's changes review dialog](https://raw.githubusercontent.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code/main/media/git.jpg)
+
+![Message actions with undo / checkpoints / branch](https://raw.githubusercontent.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code/main/media/git-2.jpg)
 - **Collapsible reasoning** (hidden by default) and per-turn tool summary ("Called N tools this turn").
 - **Deliverables box**: files produced each turn listed at the end of the conversation, click to open.
 - **Session management**: ⋯ menu with fork / rename (pre-filled title) / archive.
@@ -62,7 +66,7 @@ Prerequisites: VS Code ≥ 1.90 (built-in chat ≥ 1.95; secondary sidebar conta
 - Enter to send, Shift+Enter for newline; while running the send button (paper-plane line icon) becomes stop (square line icon), typing turns it back into send (queued send).
 - `/` button (bottom-left): command menu (plan / compact / goal / feedback / permission / skills / .claude) — inserts the command into the input; press Enter to run.
 - `+` button next to it: add file / add folder; the blue chip is the auto-attached active file.
-- Message actions: click the forked-line icon to open the branch/rewind menu — counter-clockwise arrow "Rewind here", forked icon "Branch from here", up-left fold "Branch and rewind earlier"; branch sessions also show the up-left arrow "Back to main". The counter-clockwise arrow on each assistant turn (when the DSH server-side plugin is active) restores the workspace to the state before that turn.
+- Message actions: click the forked-line icon to open the branch/rewind menu — counter-clockwise arrow "Rewind here", forked icon "Branch from here", up-left fold "Branch and rewind earlier", plus "Undo this turn's file changes" / "View checkpoints" when the git-rollback plugin is active; branch sessions also show the up-left arrow "Back to main". The counter-clockwise arrow on each assistant turn (when the DSH server-side plugin is active) restores the workspace to the state before that turn.
 - Session ⋯ menu: fork / rename / archive; preset pill at the top-right (new sessions only); thinking / model pills at the bottom-right.
 - Source Control title bar: the ✨ button generates a Conventional Commits message from the current diff and fills the SCM input box (a picker appears when several repositories are open).
 - Context menus: selection → `DSH: Send Selection to @dsh`; file → `DSH: Ask @dsh About This File`.
@@ -124,7 +128,7 @@ npm run package     # → Releases/
 > npx @deepseek-ai/dsh web
 > ```
 
-[English version](#) | 发布者:Jager · 最新版本:0.12.79
+[English version](#) | 发布者:Jager · 最新版本:0.12.89
 
 在 VS Code 中直接使用 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)(`dsh`),与 ChatGPT / Copilot 一样融入 VS Code 聊天体系:内置聊天参与者 `@dsh`、辅助侧栏 / 独立聊天窗口、工作区 / 后台任务 / 轨迹 / 设置面板、回合级 Git 回退,以及**多语言界面**(简体中文 / 繁體中文 / English / 日本語 / 한국어 / Deutsch / Français / Español / Português / ไทย / Bahasa Indonesia / Türkçe / Русский / العربية,跟随 VS Code 显示语言或手动切换)。
 
@@ -135,7 +139,11 @@ npm run package     # → Releases/
 - **独立聊天窗口**:编辑器区 WebviewPanel,命令 `DSH: 打开独立聊天窗口`。
 - **现代聊天界面**:大号圆角输入框、胶囊工具栏(思考深度 / 模型 / 预设 / 权限)、会话统计行(轮数 · 步骤 · LLM/工具耗时 · 首 token · tok/s · 缓存命中 · 输入/输出 token)、上下文用量进度条。
 - **消息操作条**(每条回答下方,简约线条图标):复制(双层矩形图标)/ 分支(分叉线条图标,点击展开菜单:逆时针箭头"回退到此处" · 分叉图标"从此处新建分支" · 左上折线"分支并回退到更早位置" · 左上箭头"回到主线")/ 点赞、点踩(拇指线条图标,官方 `/feedback` 记录)/ 消息头显示模型名 · 思考耗时 · 本步 token 消耗。
-- **回合级 Git 回退**(每条助手回答上的 ↩ 按钮 + 「分支/回退」菜单项):DSH 服务端插件 `dsh-git-rollback` 在每个回合开始时把工作区 git 状态(含未跟踪文件)快照到隐藏引用(`refs/dsh/checkpoints/<sid>`,用户分支历史零污染)并记录在 `.dsh/rollback`;点击按钮即可把工作区恢复到该回合之前的状态。`/rollback [N]`、`/redo`、`/checkpoints` 命令在 web 命令面板与 VS Code 聊天面板通用——回退非破坏性(先存保存点,`/redo` 可恢复,ignored 文件永不触碰)。网页端聊天开箱即用地获得同款 Copilot 风格回合分隔线与悬浮还原弹窗(插件 web 半区,经 DSH client-modules 管线分发)。
+- **回合级 Git 回退**(每条助手回答上的 ↩ 按钮 + 「分支/回退」菜单项):DSH 服务端插件 `dsh-git-rollback` 在每个回合开始时把工作区 git 状态(含未跟踪文件)快照到隐藏引用(`refs/dsh/checkpoints/<sid>`,用户分支历史零污染)并记录在 `.dsh/rollback`;点击按钮即可把工作区恢复到该回合之前的状态。`/rollback [N]`、`/redo`、`/checkpoints` 命令在 web 命令面板与 VS Code 聊天面板通用——回退非破坏性(先存保存点,`/redo` 可恢复,ignored 文件永不触碰)。每条消息的 ⋯/分支菜单另提供 **「撤销本回合改动」**(先预览后确认的审核弹窗,只反向应用该回合自身产生的文件改动——你自己的提交与 HEAD 完全不受影响)、**「查看检查点」** 与「撤销本回合变更并从此处新建分支」。网页端聊天开箱即用地获得同款 Copilot 风格回合分隔线与悬浮还原弹窗(插件 web 半区,经 DSH client-modules 管线分发)。
+
+![撤销本回合改动审核弹窗](https://raw.githubusercontent.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code/main/media/git.jpg)
+
+![消息操作菜单(撤销 / 检查点 / 分支)](https://raw.githubusercontent.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code/main/media/git-2.jpg)
 - **思考过程折叠**:💭 思考过程默认收起,点击展开;工具调用每轮折叠为一行摘要"本轮调用 N 个工具"。
 - **产物文件框**:每轮结束在对话末尾显示生成的文件列表,点击在编辑器中打开。
 - **会话管理**:会话下拉旁的 ⋯ 菜单支持 分叉 / 重命名(预填当前标题)/ 归档(仍保留在服务器)。
@@ -200,7 +208,7 @@ npm run watch
 - 输入框:`Enter` 发送,`Shift+Enter` 换行;运行中发送按钮(纸飞机线条图标)变为停止(方块线条图标),输入文字变回发送(消息排队)。
 - 左下角 `/` 按钮:命令菜单(计划模式 / 压缩上下文 / 设置目标 / 记录反馈 / 切换权限 / 技能 / .claude 命令与技能)—— 点击插入命令到输入框,回车执行。
 - 左上角 `+` 按钮:添加文件 / 添加文件夹(二选一);附件行蓝色芯片为自动附加的激活文件(× 移除)。
-- 消息操作条:点击分叉线条图标打开分支/回退菜单 —— 逆时针箭头"回退到此处"(去掉本条及之后)、分叉图标"从此处新建分支"(保留到此)、左上折线"分支并回退到更早位置";分叉会话另有左上箭头"回到主线"。
+- 消息操作条:点击分叉线条图标打开分支/回退菜单 —— 逆时针箭头"回退到此处"(去掉本条及之后)、分叉图标"从此处新建分支"(保留到此)、左上折线"分支并回退到更早位置",以及 git-rollback 插件激活时的"撤销本回合改动 / 查看检查点";分叉会话另有左上箭头"回到主线"。
 - 会话 ⋯ 菜单:分叉 / 重命名 / 归档;右上角"预设"胶囊(仅新会话显示);右下角"思考 / 模型"胶囊。
 - 模式芯片:📝 计划模式(点击退出)、🎯 目标模式(点击管理目标)。
 - 右键菜单:编辑器选中代码 → `DSH: 发送选中代码到 @dsh`;文件右键 → `DSH: 向 @dsh 询问此文件`。
