@@ -10,31 +10,36 @@
  */
 import { commitTree, checkpointRef, gitExec, readRecord, untrackedList, writeRecord } from "./git.js";
 import { MAX_CHECKPOINTS, } from "./types.js";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { rmSync } from "node:fs";
 /** git 的空树对象(空索引的等价物)。 */
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
-/** 全量快照提交:返回新提交;无改动(树与父一致)时返回 {ok, unchanged}。 */
+/** 生成一次快照用的临时索引文件路径(独立于真实 .git/index,避免与用户 git 操作互踩)。 */
+function tmpIndexPath() {
+    return join(tmpdir(), `dsh-rollback-idx-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.gitindex`);
+}
+/**
+ * 全量快照提交:返回新提交;无改动(树与父一致)时返回 {ok, unchanged}。
+ * 整个快照用独立的 GIT_INDEX_FILE 临时索引完成 —— git add/write-tree/read-tree
+ * 都只读写该临时索引,绝不触碰真实的 .git/index,因此不会产生/争用 index.lock,
+ * 与用户自己的 `git add`/`git commit`/同步流程互不干扰。
+ */
 export async function snapshotCommit(gitBin, cwd, parent, message) {
-    const idx = await gitExec(gitBin, cwd, ["write-tree"]);
-    let indexTree = EMPTY_TREE;
-    if (idx.ok) {
-        indexTree = idx.stdout;
-    }
-    else {
-        // write-tree 失败:区分「索引为空(unborn 仓库,尚无 add)」与「存在未合并冲突」
-        const unmerged = await gitExec(gitBin, cwd, ["ls-files", "-u"]);
-        if (unmerged.ok && unmerged.stdout)
-            return { ok: false, reason: "index has unmerged entries; skipping snapshot" };
-        // 空索引:以空树还原
-    }
+    // 真实索引存在未合并冲突时跳过快照(临时索引的 ls-files 看不到真实冲突)
+    const unmerged = await gitExec(gitBin, cwd, ["ls-files", "-u"]);
+    if (unmerged.ok && unmerged.stdout)
+        return { ok: false, reason: "index has unmerged entries; skipping snapshot" };
+    const tmpIndex = tmpIndexPath();
     try {
         // 全量入暂存(无 pathspec:ignored 文件静默跳过、退出码恒为 0);
         // 带 pathspec 的写法会在工作区 .gitignore 忽略某些目录时以非零退出。
-        const add = await gitExec(gitBin, cwd, ["add", "-A"]);
+        const add = await gitExec(gitBin, cwd, ["add", "-A"], { indexFile: tmpIndex });
         if (!add.ok)
             return { ok: false, reason: `add: ${add.stderr || "failed"}` };
-        // 插件自己的记录目录(.dsh/rollback)不进快照:从索引撤出;目录尚不存在时忽略失败
-        await gitExec(gitBin, cwd, ["reset", "--quiet", "--", ".dsh/rollback"]);
-        const tree = await gitExec(gitBin, cwd, ["write-tree"]);
+        // 插件自己的记录目录(.dsh/rollback)不进快照:从临时索引撤出
+        await gitExec(gitBin, cwd, ["reset", "--quiet", "--", ".dsh/rollback"], { indexFile: tmpIndex });
+        const tree = await gitExec(gitBin, cwd, ["write-tree"], { indexFile: tmpIndex });
         if (!tree.ok)
             return { ok: false, reason: `write-tree: ${tree.stderr || "failed"}` };
         let parentTree;
@@ -51,7 +56,14 @@ export async function snapshotCommit(gitBin, cwd, parent, message) {
         return { ok: true, commit: commit.stdout, tree: tree.stdout };
     }
     finally {
-        await gitExec(gitBin, cwd, ["read-tree", indexTree]);
+        // 清理临时索引文件与其锁(真实 .git/index 从未被触碰)
+        try {
+            rmSync(tmpIndex, { force: true });
+            rmSync(`${tmpIndex}.lock`, { force: true });
+        }
+        catch {
+            // 忽略清理失败
+        }
     }
 }
 /** 当前检查点 tip(链头);返回是否来自 ref(决定 update-ref 的 old 值)。 */

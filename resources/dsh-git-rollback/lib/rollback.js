@@ -14,6 +14,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gitExec, readRecord, saveRef, shortHash, untrackedList, writeRecord } from "./git.js";
 import { MAX_ROLLS } from "./types.js";
+/** 保存点临时索引路径(独立于真实 .git/index,避免争用 index.lock)。 */
+function savepointIndex() {
+    return join(tmpdir(), `dsh-savepoint-idx-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.gitindex`);
+}
+/** 清理临时索引与锁。 */
+function rmSavepointIndex(path) {
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { rmSync } = require("node:fs");
+        rmSync(path, { force: true });
+        rmSync(`${path}.lock`, { force: true });
+    }
+    catch {
+        // 忽略清理失败
+    }
+}
 /** 解析 /rollback 参数:空 = 最近一回合;数字 = 回合号;40 位十六进制 = 直接指定检查点提交。 */
 export function parseTurnArg(rawInput) {
     const raw = rawInput.trim();
@@ -32,15 +48,15 @@ export function parseTurnArg(rawInput) {
  * (检查点树里"当时未跟踪、现已被还原"的文件重新显示为未跟踪,不污染暂存区)。
  */
 async function restoreTreeContent(gitBin, cwd, commit) {
-    const first = await gitExec(gitBin, cwd, ["read-tree", "--reset", "-u", commit]);
+    const first = await gitExec(gitBin, cwd, ["read-tree", "--reset", "-u", commit], { retryLock: true });
     if (!first.ok) {
         await gitExec(gitBin, cwd, ["clean", "-fd"]);
-        const retry = await gitExec(gitBin, cwd, ["read-tree", "--reset", "-u", commit]);
+        const retry = await gitExec(gitBin, cwd, ["read-tree", "--reset", "-u", commit], { retryLock: true });
         if (!retry.ok)
             return { ok: false, reason: `read-tree: ${retry.stderr || first.stderr || "failed"}` };
     }
     const clean = await gitExec(gitBin, cwd, ["clean", "-fd"]);
-    const reset = await gitExec(gitBin, cwd, ["reset", "--quiet"]);
+    const reset = await gitExec(gitBin, cwd, ["reset", "--quiet"], { retryLock: true });
     if (!clean.ok || !reset.ok)
         return { ok: false, reason: `clean/reset: ${clean.stderr || reset.stderr || ""}`.trim() };
     return { ok: true };
@@ -53,17 +69,16 @@ async function savepointAndRestore(gitBin, cwd, sid, targetCommit, opts) {
     const head = await gitExec(gitBin, cwd, ["rev-parse", "--verify", "HEAD"]);
     if (!head.ok)
         return { ok: false, reason: "仓库还没有任何提交,无法回退" };
-    // 1) 保存点:当前完整状态(含未跟踪)入 refs/dsh/saves/<sid>
-    const idx = await gitExec(gitBin, cwd, ["write-tree"]);
-    if (!idx.ok)
-        return { ok: false, reason: `保存点失败:${idx.stderr || "write-tree failed"}` };
-    let saveCommit;
+    // 1) 保存点:当前完整状态(含未跟踪)入 refs/dsh/saves/<sid> —— 用独立临时索引,
+    //    不触碰真实 .git/index,避免与用户自己的 git 操作争用 index.lock
+    const saveIdx = savepointIndex();
+    const gitOpts = { indexFile: saveIdx };
     try {
-        const add = await gitExec(gitBin, cwd, ["add", "-A"]);
+        const add = await gitExec(gitBin, cwd, ["add", "-A"], gitOpts);
         if (!add.ok)
             return { ok: false, reason: `保存点失败:${add.stderr || "add failed"}` };
-        await gitExec(gitBin, cwd, ["reset", "--quiet", "--", ".dsh/rollback"]);
-        const tree = await gitExec(gitBin, cwd, ["write-tree"]);
+        await gitExec(gitBin, cwd, ["reset", "--quiet", "--", ".dsh/rollback"], gitOpts);
+        const tree = await gitExec(gitBin, cwd, ["write-tree"], gitOpts);
         if (!tree.ok)
             return { ok: false, reason: `保存点失败:${tree.stderr || "write-tree failed"}` };
         const commit = await gitExec(gitBin, cwd, [
@@ -85,7 +100,7 @@ async function savepointAndRestore(gitBin, cwd, sid, targetCommit, opts) {
         }
     }
     finally {
-        await gitExec(gitBin, cwd, ["read-tree", idx.stdout]);
+        rmSavepointIndex(saveIdx);
     }
     await gitExec(gitBin, cwd, ["update-ref", saveRef(opts.refPrefix, sid), saveCommit]);
     const currentUntracked = await untrackedList(gitBin, cwd);

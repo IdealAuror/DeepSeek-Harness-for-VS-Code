@@ -128,10 +128,12 @@ function gitExec(cwd: string, args: string[]): Promise<{ ok: boolean; stdout: st
   return new Promise((resolve) => {
     // core.quotepath=false:中文等非 ASCII 路径在 diff/status 输出中保持原始 UTF-8,
     // 避免解析出的路径是 "\346\265\213..." 转义串而无法用于后续 diff/apply。
+    // GIT_OPTIONAL_LOCKS=0:status/diff/ls-files/rev-parse 等只读命令不刷新索引、
+    // 不获取 index.lock,避免与用户自己的 git add / git commit / 同步流程互相踩。
     execFile(
       resolveGitPath(),
       ["-c", "core.quotepath=false", ...args],
-      { cwd, timeout: 30000, maxBuffer: 8 * 1024 * 1024, windowsHide: true },
+      { cwd, timeout: 30000, maxBuffer: 8 * 1024 * 1024, windowsHide: true, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } },
       (error, stdout, stderr) => {
         resolve({
           ok: !error,

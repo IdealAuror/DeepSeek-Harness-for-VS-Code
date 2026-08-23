@@ -6,37 +6,65 @@ import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MAX_UNTRACKED, RECORD_DIR, } from "./types.js";
+/** index.lock 重试用例(等待重试次数与间隔)。 */
+const LOCK_RETRIES = 5;
+const LOCK_RETRY_MS = 250;
+/** git 命令是否因 index.lock 失败(另一 git 进程正在写索引)。 */
+function isIndexLock(stderr, stdout) {
+    const s = `${stderr}\n${stdout}`;
+    return s.includes("index.lock") || s.includes("Unable to create '.git/index.lock'") || /Index file is locked/i.test(s);
+}
+/** 延时(重试间等待)。 */
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 export function gitExec(gitBin, cwd, args, opts = {}) {
     return new Promise((resolve) => {
-        // core.quotepath=false:非 ASCII 路径(中文等)在 diff/status/ls-files 输出中
-        // 保持原始 UTF-8,不被转义成 "\346\265\213..." —— 否则解析出的路径无法
-        // 用于后续 diff/apply(报"差异不可用"/"工作区不一致")。
-        const child = spawn(gitBin, ["-c", "core.quotepath=false", ...args], { cwd, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
-        const stdout = [];
-        const stderr = [];
-        let timedOut = false;
-        const timer = setTimeout(() => {
-            timedOut = true;
-            child.kill();
-        }, opts.timeoutMs ?? 30000);
-        child.stdout.on("data", (d) => stdout.push(d));
-        child.stderr.on("data", (d) => stderr.push(d));
-        child.on("error", (err) => {
-            clearTimeout(timer);
-            resolve({ ok: false, stdout: "", stderr: String(err) });
-        });
-        child.on("close", (code) => {
-            clearTimeout(timer);
-            const raw = Buffer.concat(stdout).toString("utf8");
-            resolve({
-                ok: code === 0 && !timedOut,
-                stdout: opts.trim === false ? raw : raw.trim(),
-                stderr: Buffer.concat(stderr).toString("utf8").trim(),
+        // GIT_OPTIONAL_LOCKS=0:status/diff/ls-files/rev-parse 等只读命令不获取 index.lock,
+        // 避免与用户自己的 `git add`/`git commit`/同步流程互踩;
+        // opts.indexFile → GIT_INDEX_FILE:快照用独立临时索引,完全绕开真实 .git/index。
+        const env = { ...process.env, GIT_OPTIONAL_LOCKS: "0" };
+        if (typeof opts.indexFile === "string" && opts.indexFile) env.GIT_INDEX_FILE = opts.indexFile;
+        let attempt = 0;
+        const run = () => {
+            // core.quotepath=false:非 ASCII 路径(中文等)在 diff/status/ls-files 输出中
+            // 保持原始 UTF-8,不被转义成 "\346\265\213..." —— 否则解析出的路径无法
+            // 用于后续 diff/apply(报"差异不可用"/"工作区不一致")。
+            const child = spawn(gitBin, ["-c", "core.quotepath=false", ...args], { cwd, windowsHide: true, stdio: ["pipe", "pipe", "pipe"], env });
+            const stdout = [];
+            const stderr = [];
+            let timedOut = false;
+            const timer = setTimeout(() => {
+                timedOut = true;
+                child.kill();
+            }, opts.timeoutMs ?? 30000);
+            child.stdout.on("data", (d) => stdout.push(d));
+            child.stderr.on("data", (d) => stderr.push(d));
+            child.on("error", (err) => {
+                clearTimeout(timer);
+                resolve({ ok: false, stdout: "", stderr: String(err) });
             });
-        });
-        if (opts.stdin !== undefined)
-            child.stdin.write(opts.stdin, "utf8");
-        child.stdin.end();
+            child.on("close", (code) => {
+                clearTimeout(timer);
+                const raw = Buffer.concat(stdout).toString("utf8");
+                const errText = Buffer.concat(stderr).toString("utf8").trim();
+                // index.lock 争用:等待已持有锁的进程完成后再重试(默认不做,写索引命令用 opts.retryLock 开启)
+                if (opts.retryLock === true && isIndexLock(errText, raw) && attempt < LOCK_RETRIES) {
+                    attempt += 1;
+                    sleep(LOCK_RETRY_MS).then(run);
+                    return;
+                }
+                resolve({
+                    ok: code === 0 && !timedOut,
+                    stdout: opts.trim === false ? raw : raw.trim(),
+                    stderr: errText,
+                });
+            });
+            if (opts.stdin !== undefined)
+                child.stdin.write(opts.stdin, "utf8");
+            child.stdin.end();
+        };
+        run();
     });
 }
 /** commit-tree 的身份兜底:缺失 user.name/email 时以插件身份重试。(-c 必须在子命令之前) */
