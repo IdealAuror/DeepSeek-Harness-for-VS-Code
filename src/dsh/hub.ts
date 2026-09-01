@@ -1,7 +1,7 @@
-import { DshApiClient, DshApiError, type FrameEnvelope } from "./apiClient";
+import { DshApiClient, DshApiError, DshAuthError, type RemoteStreamHandle } from "./apiClient";
 import { ServerManager } from "./serverManager";
 import { SessionStore, type StoredSession } from "./sessionStore";
-import type { CommandExecutionView, HostFrame, MuxFrame, PromptContentPart } from "./types";
+import type { CommandExecutionView, PromptContentPart, SessionFollowFrame } from "./types";
 import type {
   CordisPluginRow,
   CordisRequestRun,
@@ -41,7 +41,7 @@ export interface HubDeps {
 
 const HISTORY_PAGE_MESSAGES = 60;
 
-/** 中枢:服务器 + API 客户端 + 会话存储的统一入口。 */
+/** 中枢:服务器 + API 客户端 + 会话存储的统一入口(0.1.2-alpha.4 线协议)。 */
 export class DshHub {
   readonly store = new SessionStore();
   readonly client: DshApiClient;
@@ -56,8 +56,18 @@ export class DshHub {
   };
 
   private readyPromise: Promise<{ ok: boolean; message?: string }> | undefined;
-  private hostInfoPromise: Promise<void> | undefined;
   private statusListeners = new Set<(status: HubStatus) => void>();
+
+  /** 当前跟随的会话(session/follow 流只能按地址打开)。 */
+  private followedSession: string | undefined;
+  private followHandle: RemoteStreamHandle | undefined;
+  /** session/follow 打开帧的 cursor(分页用)。 */
+  private followCursor = new Map<string, number>();
+  private followSource = new Map<string, ("session" | "subagent")>();
+  /** 生命周期流(control / workspace)句柄,每次连接重建。 */
+  private controlHandle: RemoteStreamHandle | undefined;
+  private workspaceHandle: RemoteStreamHandle | undefined;
+  private connectionGeneration = 0;
 
   constructor(private readonly deps: HubDeps) {
     this.client = new DshApiClient(deps.url);
@@ -71,29 +81,37 @@ export class DshHub {
         this.emitStatus();
       },
     );
-    this.client.setFrameHandlers({
-      onMuxFrame: (env) => this.onMux(env),
-      onHostFrame: (env) => this.onHost(env),
-      onState: (which, state) => {
-        if (which === "mux") this.statusState.muxConnected = state === "connected";
-        else {
-          this.statusState.hostConnected = state === "connected";
-          if (state === "connected") {
-            // 服务器可能已重启/升级(npx 缓存更新):刷新版本与能力门控
-            // (commands/execute 的 images 参数等线协议能力随版本变化)
-            void this.client.ping().then((describe) => {
-              if (describe) {
-                this.statusState.version = describe.version;
-                this.statusState.provider = describe.provider;
-                this.statusState.model = describe.model;
-                this.client.setServerVersion(describe.version);
-                this.emitStatus();
-              }
-            });
-          }
-        }
+    this.client.setStreamState((state) => {
+      this.statusState.muxConnected = state === "connected";
+      if (state === "connected") {
+        // 每次连接建立后重建生命周期流(流随 socket 关闭而失效)
+        this.rebuildLiveStreams();
+      }
+      this.emitStatus();
+    });
+    this.client.setEventsHandlers({
+      onReady: () => {
+        // $events 打开帧:主机信息(session.list 探测所需)
         this.emitStatus();
       },
+      onEmit: (event, args) => {
+        if (event.startsWith("api-session/")) {
+          this.store.handleApiSessionEvent(event, args);
+          return;
+        }
+        if (event === "commands/change") {
+          this.clearCommandCache();
+          return;
+        }
+        if (event === "agent-preset/selected" || event === "llm/adapters-updated") {
+          void this.refreshSessions();
+          return;
+        }
+        // 其余 emit(cordis/* 等)交给存储层转发
+        this.store.handleRemoteEvent(event, args);
+      },
+      onWaterfall: (frame) => this.store.handleWaterfall(frame),
+      onCancel: (eventId) => this.store.handleWaterfallCancel(eventId),
     });
   }
 
@@ -118,12 +136,25 @@ export class DshHub {
     }
   }
 
-  private onMux(env: FrameEnvelope<MuxFrame>) {
-    this.store.handleMuxEnvelope(env);
-  }
-
-  private onHost(env: FrameEnvelope<HostFrame>) {
-    this.store.handleHostFrame(env.frame);
+  /** 在每次 remote.mux 连接建立后重建控制流与工作区流。 */
+  private rebuildLiveStreams() {
+    const generation = ++this.connectionGeneration;
+    this.controlHandle?.cancel();
+    this.workspaceHandle?.cancel();
+    this.controlHandle = this.client.openStream("session/control", {}, {
+      onItem: (value) => {
+        if (generation !== this.connectionGeneration) return;
+        this.store.handleControlFrame(value as Parameters<SessionStore["handleControlFrame"]>[0]);
+      },
+      onError: () => undefined, // socket 级失败由 client 重连后重建
+    });
+    this.workspaceHandle = this.client.openStream("workspace/follow", {}, {
+      onItem: (value) => {
+        if (generation !== this.connectionGeneration) return;
+        this.store.handleWorkspaceFrame(value as Parameters<SessionStore["handleWorkspaceFrame"]>[0]);
+      },
+      onError: () => undefined,
+    });
   }
 
   /** 确保服务器 + 客户端 + 初始数据就绪(可并发调用,共享同一 Promise)。 */
@@ -138,7 +169,21 @@ export class DshHub {
 
   /** 仅探测(不自动启动):服务器在线时刷新会话;不主动选中会话,由用户从下拉框选择。 */
   async probe(): Promise<boolean> {
-    const describe = await this.client.ping();
+    let describe;
+    try {
+      describe = await this.client.ping();
+    } catch (error) {
+      if (error instanceof DshAuthError) {
+        // 服务器在,但外部启动且未授权:明确提示
+        this.statusState.serverUp = true;
+        this.statusState.message = error.message;
+        this.emitStatus();
+        return false;
+      }
+      this.statusState.serverUp = false;
+      this.emitStatus();
+      return false;
+    }
     if (describe === undefined) {
       this.statusState.serverUp = false;
       this.emitStatus();
@@ -146,10 +191,10 @@ export class DshHub {
     }
     this.statusState.serverUp = true;
     this.statusState.version = describe.version;
-    this.statusState.provider = describe.provider;
-    this.statusState.model = describe.model;
     this.client.setServerVersion(describe.version);
     this.emitStatus();
+    // 服务器已在线:启动 remote.mux 流(events/control/workspace;旧版服务器无 token 时握手以 401 重试)
+    this.client.startStreams();
     await this.refreshSessions();
     return true;
   }
@@ -160,17 +205,27 @@ export class DshHub {
       this.deps.onNotice?.(ensured.message ?? this.deps.t?.("hub.serverUnavailable") ?? "DSH server unavailable", "error");
       return { ok: false, message: ensured.message };
     }
-    const describe = await this.client.ping();
+    // 从启动器日志解析的授权 URL 获取启动 token(0.1.2 起 /api 需要 cookie)
+    const token = this.server.launchToken;
+    if (token) this.client.setLaunchToken(token);
+    let describe;
+    try {
+      describe = await this.client.ping();
+    } catch (error) {
+      const msg = error instanceof DshAuthError ? error.message : `DSH server at ${this.deps.url} is not responding`;
+      this.deps.onNotice?.(msg, "error");
+      return { ok: false, message: msg };
+    }
     if (describe === undefined) {
       const msg = this.deps.t?.("hub.serverNoResponse", { url: this.deps.url }) ?? `DSH server at ${this.deps.url} is not responding`;
       this.deps.onNotice?.(msg, "error");
       return { ok: false, message: msg };
     }
     this.statusState.version = describe.version;
-    this.statusState.provider = describe.provider;
-    this.statusState.model = describe.model;
     this.client.setServerVersion(describe.version);
     this.emitStatus();
+    // 启动流(remote.mux:$events + control + workspace)
+    this.client.startStreams();
     await this.refreshSessions();
     return { ok: true };
   }
@@ -178,23 +233,18 @@ export class DshHub {
   /** 刷新会话列表(合并 host 帧之外的信息:标题、running、更新顺序)。 */
   async refreshSessions() {
     try {
-      const [sessionList, workspaceList] = await Promise.all([
-        this.client.listSessions(),
-        this.client.listWorkspaces().catch(() => undefined),
-      ]);
-      if (workspaceList) {
-        this.store.applyWorkspaceList(workspaceList.items, workspaceList.archivedSessionIds);
-      }
+      const sessionList = await this.client.listSessions();
       let changed = false;
       for (const item of sessionList.items) {
         const existing = this.store.sessions.get(item.sessionId);
+        const values = item.projections?.values ?? {};
         const next: StoredSession = {
           sessionId: item.sessionId,
-          title: item.projections?.values?.title ?? existing?.title,
+          title: typeof values.title === "string" ? values.title : existing?.title,
           running: item.running,
           blank: item.blank,
           cwd: item.cwd ?? existing?.cwd,
-          agentPreset: item.agentPreset ?? existing?.agentPreset,
+          agentPreset: typeof values.agentPreset === "string" ? values.agentPreset : existing?.agentPreset,
           parentSessionId: item.parentSessionId,
           origin: item.origin,
           updatedAt: item.updatedAt,
@@ -204,32 +254,25 @@ export class DshHub {
           this.store.sessions.set(item.sessionId, next);
           changed = true;
         }
-        const goal = item.projections?.values?.goal;
-        if (goal !== undefined) this.store.applyGoal(item.sessionId, goal);
-        const context = item.projections?.values?.contextPressure;
-        if (context !== undefined) {
-          this.store.context.set(item.sessionId, context as { pressureTokens?: number; projectedTokens?: number; contextWindow?: number });
+        if (values.goal !== undefined) this.store.applyGoal(item.sessionId, values.goal);
+        if (values.contextPressure !== undefined) {
+          this.store.context.set(item.sessionId, values.contextPressure as { pressureTokens?: number; projectedTokens?: number; contextWindow?: number });
         }
-        const permissions = item.projections?.values?.permissions;
-        if (permissions !== undefined) {
-          this.store.permissions.set(item.sessionId, permissions as { options: { value: string; name: string }[]; currentValue: string });
+        if (values.permissions !== undefined) {
+          this.store.permissions.set(item.sessionId, values.permissions as { options: { value: string; name: string }[]; currentValue: string });
         }
-        const todos = item.projections?.values?.todos;
-        if (todos !== undefined) {
-          this.store.todos.set(item.sessionId, todos as { content: string; status: "pending" | "in_progress" | "completed" }[] | null);
+        if (values.todos !== undefined) {
+          this.store.todos.set(item.sessionId, values.todos as { content: string; status: "pending" | "in_progress" | "completed" }[] | null);
         }
-        const sessionStats = item.projections?.values?.sessionStats;
-        const tokenUsage = item.projections?.values?.tokenUsage;
-        if (sessionStats !== undefined || tokenUsage !== undefined) {
+        if (values.sessionStats !== undefined || values.tokenUsage !== undefined) {
           const current = this.store.stats.get(item.sessionId) ?? {};
-          if (sessionStats !== undefined) current.sessionStats = sessionStats;
-          if (tokenUsage !== undefined) current.tokenUsage = tokenUsage;
+          if (values.sessionStats !== undefined) current.sessionStats = values.sessionStats;
+          if (values.tokenUsage !== undefined) current.tokenUsage = values.tokenUsage;
           this.store.stats.set(item.sessionId, current);
         }
       }
       if (changed) {
-        // 通知会话列表变化(通过伪造帧路径之外,直接派发)
-        this.notifySessionsChanged();
+        this.store.notifySessionsChanged();
       }
       return sessionList.items;
     } catch (error) {
@@ -238,44 +281,96 @@ export class DshHub {
     }
   }
 
-  private notifySessionsChanged() {
-    this.store.notifySessionsChanged();
-  }
-
-  /** 打开会话并回填历史。 */
+  /** 打开会话:切换到该会话并从 session/follow 回填(分叉会话必拉快照以还原边界)。 */
   async openSession(sessionId: string) {
     this.store.selectSession(sessionId);
-    await this.loadInitialHistory(sessionId);
+    await this.startFollow(sessionId);
   }
 
-  private async loadInitialHistory(sessionId: string) {
-    // 分叉会话即使 store 已有事件(mux 实时推送的回合增量)也必须拉历史:
-    // session/end-seed 边界事件只存在于历史日志,实时推送永远不会携带它;
-    // 不拉的话「还原检查点」分隔线就永远渲染不出来。
-    const isForked = !!this.store.sessions.get(sessionId)?.parentSessionId;
-    if (this.store.eventsFor(sessionId).length === 0 || isForked) {
-      try {
-        const { events, hasMore } = await this.client.sessionHistory({ sessionId, maxMessages: HISTORY_PAGE_MESSAGES });
-        this.store.mergeHistory(sessionId, events.map((e) => ({ event: e.event, view: e.view })));
-        this.store.historyHasMore.set(sessionId, hasMore);
-      } catch (error) {
-        console.error("[dsh] history load failed:", error);
-      }
-    }
+  /** 跟随一个会话:打开 session/follow 流(替换旧跟随)。 */
+  private async startFollow(sessionId: string) {
+    if (this.followedSession === sessionId && this.followHandle) return;
+    this.followHandle?.cancel();
+    this.followedSession = sessionId;
+    this.followHandle = this.client.openStream("session/follow", { address: { kind: "session", sessionId }, maxMessages: HISTORY_PAGE_MESSAGES }, {
+      onItem: (value) => {
+        const frame = value as SessionFollowFrame;
+        if (frame.type === "snapshot") {
+          this.followCursor.set(sessionId, frame.cursor);
+          this.followSource.set(sessionId, "session");
+          this.store.handleFollowSnapshot(frame);
+        } else {
+          this.store.handleFollowEvent(sessionId, frame);
+        }
+      },
+      onError: () => {
+        // 跟随断开:保留现有内容,后续重新打开时再补
+        if (this.followedSession === sessionId) this.followedSession = undefined;
+      },
+    });
   }
 
-  /** 向前翻页加载更早的历史。 */
-  async loadMoreHistory(sessionId: string): Promise<{ hasMore: boolean }> {
+  /** 子代理历史:0.1.2 无 subagent.history,改为按子代理地址短暂 follow 取快照。 */
+  async subagentHistory(
+    parentSessionId: string,
+    childSessionId: string,
+    mode: "one-shot" | "continuable",
+    beforeSeq?: number,
+    maxMessages?: number,
+  ): Promise<{ events: { event: { type: string; seq: number; time: number; data: any }; view?: unknown }[]; hasMore: boolean }> {
+    const result = await new Promise<{ events: { event: { type: string; seq: number; time: number; data: any }; view?: unknown }[]; hasMore: boolean }>((resolve) => {
+      let resolved = false;
+      const finish = (value: { events: { event: { type: string; seq: number; time: number; data: any }; view?: unknown }[]; hasMore: boolean }) => {
+        if (!resolved) {
+          resolved = true;
+          handle.cancel();
+          resolve(value);
+        }
+      };
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          handle.cancel();
+          resolve({ events: [], hasMore: false });
+        }
+      }, 10_000);
+      const handle = this.client.openStream("session/follow", { address: { kind: "subagent", parentSessionId, childSessionId, mode }, maxMessages: HISTORY_PAGE_MESSAGES }, {
+        onItem: (value) => {
+          const frame = value as SessionFollowFrame;
+          if (frame.type === "snapshot") {
+            clearTimeout(timeout);
+            this.followCursor.set(childSessionId, frame.cursor);
+            this.followSource.set(childSessionId, "subagent");
+            finish({
+              events: frame.records.map((r) => (r.type === "event" ? { event: r.event } : { event: r.event })),
+              hasMore: frame.hasMore,
+            });
+          }
+        },
+        onError: () => {
+          clearTimeout(timeout);
+          finish({ events: [], hasMore: false });
+        },
+      });
+    });
+    return result;
+  }
+
+  /** 向前翻页加载更早的历史(基于 follow cursor 的 session/page)。 */
+  async loadMoreHistory(sessionId: string, mode: "session" | "subagent" = "session"): Promise<{ hasMore: boolean }> {
     if (this.store.isHistoryLoading(sessionId)) return { hasMore: true };
+    const throughSeq = this.followCursor.get(sessionId);
+    if (throughSeq === undefined) return { hasMore: false };
     const beforeSeq = this.store.historyBeforeSeq(sessionId);
-    if (beforeSeq === undefined) {
-      await this.loadInitialHistory(sessionId);
-      return { hasMore: false };
-    }
     this.store.setHistoryLoading(sessionId, true);
     try {
-      const { events, hasMore } = await this.client.sessionHistory({ sessionId, beforeSeq, maxMessages: HISTORY_PAGE_MESSAGES });
-      this.store.mergeHistory(sessionId, events.map((e) => ({ event: e.event, view: e.view })));
+      const parent = this.store.sessions.get(sessionId);
+      const address =
+        mode === "subagent" && parent?.parentSessionId
+          ? { kind: "subagent" as const, parentSessionId: parent.parentSessionId, childSessionId: sessionId, mode: "continuable" as const }
+          : { kind: "session" as const, sessionId };
+      const { records, hasMore } = await this.client.sessionHistory({ address, throughSeq, ...(beforeSeq !== undefined ? { beforeSeq } : {}), maxMessages: HISTORY_PAGE_MESSAGES });
+      this.store.mergeHistory(sessionId, records.map((r) => ({ event: r.event })));
       this.store.historyHasMore.set(sessionId, hasMore);
       return { hasMore };
     } catch (error) {
@@ -289,7 +384,7 @@ export class DshHub {
   async createSession(cwd?: string, agentPreset?: string): Promise<string> {
     // 服务器行为:仅当 session.create 携带 workspaceId 时,会话才会挂入对应工作区;
     // 只传 cwd 的话目录正确但会话落入"未分组"。因此先按 cwd 反查已注册工作区。
-    const workspaceId = cwd ? await this.resolveWorkspaceId(cwd) : undefined;
+    const workspaceId = cwd ? this.resolveWorkspaceId(cwd) : undefined;
     const { sessionId } = await this.client.createSession({
       ...(workspaceId ? { workspaceId } : cwd ? { cwd } : {}),
       ...(agentPreset ? { agentPreset } : {}),
@@ -299,29 +394,17 @@ export class DshHub {
     return sessionId;
   }
 
-  /** 按 cwd 路径解析已注册工作区;未注册时返回 undefined(回退按 cwd 创建)。 */
-  async resolveWorkspaceId(cwd: string): Promise<string | undefined> {
+  /** 按 cwd 路径解析已注册工作区(本地清单;未注册时返回 undefined)。 */
+  resolveWorkspaceId(cwd: string): string | undefined {
     const norm = (p: string) => p.replace(/[\\/]+$/, "").replace(/\//g, "\\").toLowerCase();
     const target = norm(cwd);
     const local = this.store.listWorkspaces().find((w) => norm(w.path) === target);
-    if (local) return local.workspaceId;
-    // 本地工作区列表可能尚未加载:直接询问服务器
-    try {
-      const list = await this.client.listWorkspaces();
-      const match = list.items.find((w) => norm(w.path) === target);
-      if (match) {
-        this.store.upsertWorkspace(match);
-        return match.workspaceId;
-      }
-    } catch {
-      // 忽略:按 cwd 创建,会话保持未分组(与网页端无对应工作区时一致)
-    }
-    return undefined;
+    return local?.workspaceId;
   }
 
   async send(sessionId: string, text: string): Promise<{ accepted: true; command?: { kind: "success"; text?: string } } | undefined> {
     try {
-      return await this.client.sendPrompt({ sessionId, mode: "queue", content: [{ type: "text", text }] });
+      return await this.client.sendPromptParts(sessionId, "queue", [{ type: "text", text }]);
     } catch (error) {
       const message = error instanceof DshApiError ? `${error.code}: ${error.message}` : String(error);
       this.deps.onNotice?.(this.deps.t?.("hub.sendFailed", { message }) ?? `Send failed: ${message}`, "error");
@@ -331,12 +414,9 @@ export class DshHub {
 
   /**
    * 执行一条斜杠命令(网页端 live.command() 同款语义):
-   * 1. 优先 commands.execute 网关通道(纯命令执行,不产生模型回合);
-   *    rc.8 起网关接受 images 参数(命令按自身 input.images 声明裁决,不接受的命令返回错误结果);
-   * 2. 网关不可用时回退 session.prompt 命令路径,并检查响应中的 command 槽确认宿主拦截;
-   * 3. 若两者都未被宿主拦截(命令会进入模型),在会话空闲时立即取消该轮,避免模型收到命令文本。
-   * 返回 outcome("executed" / "unmatched" / "unavailable")+ 命令结果视图
-   * (execution.result.text 为命令自身的输出文本,如 /rollback 的回退摘要)。
+   * 1. 优先 commands.execute 网关通道(0.1.2 始终提供,含 images 参数);
+   * 2. 网关不可用时回退 session.prompt 命令路径,并监听 command/run 事件确认宿主拦截;
+   * 3. 若命令未被拦截,在会话空闲时立即取消该轮,避免模型收到命令文本。
    */
   async runCommandLine(
     sessionId: string,
@@ -351,19 +431,39 @@ export class DshHub {
       console.error("[dsh] commands.execute unavailable, falling back to session.prompt:", error);
     }
     const wasRunning = this.store.sessions.get(sessionId)?.running === true;
+    const intercepted = await this.promptAsCommand(sessionId, images, line, wasRunning);
+    if (intercepted === true) return { outcome: "executed" };
+    if (intercepted === false) return { outcome: "unavailable" };
+    return { outcome: "unmatched" };
+  }
+
+  /** 命令回退路径:发送 prompt,短窗口内听 command/run 事件。 */
+  private async promptAsCommand(sessionId: string, images: { mediaType: string; data: string; name?: string }[], line: string, wasRunning: boolean): Promise<boolean | undefined> {
+    const seen = new Promise<boolean>((resolve) => {
+      const off = this.store.on("sessionEvent", (sid: string, stored) => {
+        if (sid !== sessionId) return;
+        if (stored.event.type === "command/run") {
+          off();
+          resolve(true);
+        }
+      });
+      setTimeout(() => {
+        off();
+        resolve(false);
+      }, 1500);
+    });
     try {
       const content: PromptContentPart[] = [
         ...(images.length > 0 ? images.map((img) => ({ type: "image" as const, mediaType: img.mediaType, data: img.data, ...(img.name ? { name: img.name } : {}) })) : []),
         { type: "text" as const, text: line },
       ];
-      const res = await this.client.sendPrompt({ sessionId, mode: "queue", content });
-      if (res.command !== undefined) return { outcome: "executed" };
-      // 宿主未拦截:命令文本会进入模型。会话原本空闲时立即取消该轮,避免产生可见回复
-      if (!wasRunning) await this.client.cancelSession(sessionId);
-      return { outcome: "unavailable" };
+      await this.client.sendPromptParts(sessionId, "queue", content);
     } catch {
-      return { outcome: "unavailable" };
+      return false;
     }
+    const intercepted = await seen;
+    if (!intercepted && !wasRunning) await this.client.cancelSession(sessionId);
+    return intercepted;
   }
 
   /** 宿主命令名缓存(sessionId → 名称集合),供 /token 路由判定:命令走命令通道,技能 token 走普通 prompt。 */
@@ -423,8 +523,8 @@ export class DshHub {
       return;
     }
     try {
-      await this.client.respondApproval(sessionId, approvalId, outcome, pending.frameRpcId);
-      this.store.pendingApprovals.delete(approvalId);
+      await this.client.respondApproval(pending.sessionId ?? sessionId, approvalId, outcome, pending.frameRpcId);
+      this.store.resolveWaterfall(approvalId, outcome);
     } catch (error) {
       this.deps.onNotice?.(this.deps.t?.("hub.approvalFailed", { error: String(error) }) ?? `Respond to approval failed: ${String(error)}`, "error");
     }
@@ -437,18 +537,18 @@ export class DshHub {
       return;
     }
     try {
-      await this.client.respondQuestion(sessionId, { answers }, frameRpcId);
-      this.store.pendingQuestions.delete(frameRpcId);
+      await this.client.respondQuestion(pending.sessionId ?? sessionId, { answers }, frameRpcId);
+      this.store.resolveWaterfall(frameRpcId, "answered");
     } catch (error) {
       this.deps.onNotice?.(this.deps.t?.("hub.questionFailed", { error: String(error) }) ?? `Answer question failed: ${String(error)}`, "error");
     }
   }
 
-  /** 取消提问/计划审批(网页端 pending.cancel:错误信封 code=cancelled)。 */
+  /** 取消提问/计划审批(以 rejected + code=cancelled 结束 waterfall)。 */
   async cancelQuestion(_sessionId: string, frameRpcId: string) {
     try {
-      await this.client.cancelQuestion(frameRpcId);
-      this.store.pendingQuestions.delete(frameRpcId);
+      await this.client.cancelQuestion(_sessionId, frameRpcId);
+      this.store.resolveWaterfall(frameRpcId, "cancelled");
     } catch (error) {
       this.deps.onNotice?.(this.deps.t?.("hub.questionFailed", { error: String(error) }) ?? `Cancel question failed: ${String(error)}`, "error");
     }
@@ -456,16 +556,17 @@ export class DshHub {
 
   // ---------- 模型 / 预设 / 思考深度 ----------
 
-  getSessionModels(sessionId: string) {
-    return this.client.sessionModels(sessionId);
+  /** 模型目录(0.1.2:session/modelCatalog,全局目录)。 */
+  getSessionModels(_sessionId: string) {
+    return this.client.sessionModels("");
   }
 
-  /** 读取会话当前模型并同步到状态栏(host.describe 只提供默认模型)。 */
+  /** 读取目录默认模型并同步到状态栏。 */
   async updateCurrentModel(sessionId: string) {
     try {
-      const models = await this.client.sessionModels(sessionId);
-      this.statusState.model = models.current.model;
-      this.statusState.provider = models.current.provider;
+      const catalog = await this.client.sessionModels(sessionId);
+      this.statusState.model = catalog.current?.model;
+      this.statusState.provider = catalog.current?.provider;
       this.emitStatus();
     } catch {
       // 忽略:状态栏保持原值
@@ -507,9 +608,9 @@ export class DshHub {
   // ---------- goal ----------
 
   async createGoal(sessionId: string, objective: string, maxGoalRounds?: number) {
-    const result = await this.client.goalCreate(sessionId, objective, maxGoalRounds);
+    const { ref } = await this.client.goalCreate(sessionId, objective, maxGoalRounds);
     await this.refreshSessions();
-    return result;
+    return { ref };
   }
 
   async completeGoal(sessionId: string, ref: { id: string; revision: number }) {
@@ -552,8 +653,8 @@ export class DshHub {
     return this.client.listSubagents(sessionId);
   }
 
-  subagentHistory(sessionId: string, childSessionId: string, mode: "one-shot" | "continuable", beforeSeq?: number, maxMessages?: number) {
-    return this.client.subagentHistory(sessionId, childSessionId, mode, beforeSeq, maxMessages);
+  subagentHistoryOld(parentSessionId: string, childSessionId: string, mode: "one-shot" | "continuable", beforeSeq?: number, maxMessages?: number) {
+    return this.subagentHistory(parentSessionId, childSessionId, mode, beforeSeq, maxMessages);
   }
 
   subagentPrompt(parentSessionId: string, childSessionId: string, text: string) {
@@ -567,18 +668,13 @@ export class DshHub {
   // ---------- 工作区 ----------
 
   listWorkspaces() {
-    return this.client.listWorkspaces();
+    return this.store.listWorkspaces();
   }
 
   async refreshWorkspaces() {
-    try {
-      const list = await this.client.listWorkspaces();
-      this.store.applyWorkspaceList(list.items, list.archivedSessionIds);
-      return list;
-    } catch (error) {
-      console.error("[dsh] refreshWorkspaces failed:", error);
-      return undefined;
-    }
+    // 0.1.2 起工作区列表来自 workspace/follow 流;此处仅确保流已打开
+    this.client.startStreams();
+    return this.store.listWorkspaces();
   }
 
   createWorkspace(path: string) {
@@ -663,11 +759,12 @@ export class DshHub {
     const configured = this.deps.defaultReasoningEffort?.trim();
     if (!configured) return;
     try {
-      const models = await this.client.sessionModels(sessionId);
-      const group = models.groups.find((g) => g.id === models.current.provider);
-      const model = group?.models.find((m) => m.id === models.current.model);
+      const catalog = await this.client.sessionModels(sessionId);
+      const current = catalog.current;
+      const group = catalog.groups.find((g) => g.id === current.provider);
+      const model = group?.models.find((m) => m.id === current.model);
       if (model?.reasoning?.efforts.some((e) => e.id === configured)) {
-        await this.client.selectModel(sessionId, models.current.provider, models.current.model, configured);
+        await this.client.selectModel(sessionId, current.provider, current.model, configured);
       }
     } catch (error) {
       console.error("[dsh] applyDefaultReasoningEffort failed:", error);
@@ -733,7 +830,6 @@ export class DshHub {
    *    client-pending(含 Client 半段的包)—— 若是,用 resolveRequestRun 以
    *    {ok:true, waitingFor: host 缺失服务} 结算 —— VS Code 无浏览器客户端,
    *    Client 半段不加载,但运行被标记为 running(宿主半段生效)。
-   *    若跳过结算,审批请求会一直挂着,网页端会持续显示"待审批"。
    */
   async cordisApprove(request: CordisRequestRun, approveFutureVersions: boolean): Promise<{ ok: boolean; message?: string }> {
     try {
@@ -745,7 +841,7 @@ export class DshHub {
         requestId: request.requestId,
         approveFutureVersions,
       });
-      if (!started.ok) return { ok: false, message: started.message };
+      if (!started.ok) return { ok: false, message: (started as any).message };
       if (await this.cordisNeedsClientSettlement(request.pluginId, started.pluginRunId)) {
         const resolved = await this.client.cordisResolveRequestRun(request.requestId, {
           ok: true,
@@ -774,10 +870,7 @@ export class DshHub {
     }
   }
 
-  /**
-   * 面板直接运行/重启/切换版本(用户手势即授权,requestId 为 null):
-   * runHostHalf 后若权威清单显示 client-pending,立即 settleUserRun 结算(同上,Client 不加载)。
-   */
+  /** 面板直接运行/重启/切换版本:runHostHalf 后若 client-pending 则 settleUserRun 结算。 */
   async cordisRun(agentId: string, pluginId: string, packageId: string, mode: "run" | "update"): Promise<{ ok: boolean; message?: string }> {
     try {
       const started = await this.client.cordisRunHostHalf({
@@ -788,14 +881,14 @@ export class DshHub {
         requestId: null,
         approveFutureVersions: false,
       });
-      if (!started.ok) return { ok: false, message: started.message };
+      if (!started.ok) return { ok: false, message: (started as any).message };
       if (await this.cordisNeedsClientSettlement(pluginId, started.pluginRunId)) {
         const settled = await this.client.cordisSettleUserRun(agentId, pluginId, {
           ok: true,
           pluginRunId: started.pluginRunId,
           waitingFor: started.waitingFor ?? [],
         });
-        if (!settled.ok) return { ok: false, message: settled.message };
+        if (!settled.ok) return { ok: false, message: (settled as any).message };
       }
       return { ok: true };
     } catch (error) {

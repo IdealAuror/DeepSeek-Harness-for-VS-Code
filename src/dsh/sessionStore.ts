@@ -1,12 +1,14 @@
 import type {
   AskUserQuestionItem,
-  HostFrame,
   JobView,
-  MuxFrame,
   QueueItem,
+  SessionControlFrame,
   SessionEvent,
+  SessionFollowFrame,
+  SessionHistoryRecord,
   SessionSummary,
   ToolEventView,
+  WorkspaceFollowFrame,
   WorkspaceItem,
 } from "./types";
 
@@ -30,6 +32,7 @@ export interface PendingApproval {
   toolName: string;
   callId?: string;
   reason?: string;
+  /** $events 的 waterfall eventId(回答时作为 frameRpcId 回传)。 */
   frameRpcId: string;
 }
 
@@ -47,25 +50,26 @@ export interface StoredEvent {
 type Listener = (...args: any[]) => void;
 
 /**
- * 会话与事件的进程内存储:消费 mux/host 帧,向 UI/参与者分发增量。
- * 事件按 seq 去重;历史通过 session.history 回填。
+ * 会话与事件的进程内存储:消费 0.1.2 的 session/follow、session/control、
+ * workspace/follow 与 $events 帧,向 UI/参与者分发增量。
+ * 事件按 seq 去重;历史通过 session/page 回填。
  */
 export class SessionStore {
   readonly sessions = new Map<string, StoredSession>();
   /** sessionId → seq → event */
   readonly events = new Map<string, Map<number, StoredEvent>>();
   readonly maxSeq = new Map<string, number>();
-  readonly pendingApprovals = new Map<string, PendingApproval>(); // key: approvalId
-  readonly pendingQuestions = new Map<string, PendingQuestion>(); // key: frameRpcId
+  readonly pendingApprovals = new Map<string, PendingApproval>(); // key: approvalId(=eventId)
+  readonly pendingQuestions = new Map<string, PendingQuestion>(); // key: frameRpcId(=eventId)
   readonly queues = new Map<string, QueueItem[]>();
   readonly jobs = new Map<string, JobView[]>();
-  /** 工作区(workspace.list 基线 + host/workspace-changed 帧) */
+  /** 工作区(workspace/follow 基线 + 增量) */
   readonly workspaces = new Map<string, WorkspaceItem>();
-  /** 工作区显示顺序(host/workspace-order-changed / workspace.list) */
+  /** 工作区显示顺序(workspace/follow order 增量) */
   workspaceOrder: string[] = [];
-  /** 全局归档会话集合(host/archived-sessions-changed / workspace.list) */
+  /** 全局归档会话集合(workspace/follow baseline / archived 增量) */
   readonly archivedSessionIds = new Set<string>();
-  /** 会话的目标状态(session.list / session/projection 帧的 goal 投影) */
+  /** 会话的目标状态(session.list / 投影帧的 goal 投影) */
   readonly goals = new Map<string, unknown>();
   /** 上下文压力(contextPressure 投影) */
   readonly context = new Map<string, { pressureTokens?: number; projectedTokens?: number; contextWindow?: number }>();
@@ -75,7 +79,7 @@ export class SessionStore {
   readonly stats = new Map<string, { sessionStats?: unknown; tokenUsage?: unknown }>();
   /** 待办事项(todos 投影,每回合重置) */
   readonly todos = new Map<string, { content: string; status: "pending" | "in_progress" | "completed" }[] | null>();
-  /** 每个会话是否还有更早的历史可加载(session.history 分页) */
+  /** 每个会话是否还有更早的历史可加载(session/page 分页) */
   readonly historyHasMore = new Map<string, boolean>();
   /** 最近活跃会话(用于面板默认选择) */
   currentSessionId: string | undefined;
@@ -131,136 +135,196 @@ export class SessionStore {
     this.emit("sessionsChanged", this.listSessions());
   }
 
-  // ---------- 帧消费 ----------
+  // ---------- 帧消费(0.1.2:session/follow) ----------
 
-  handleMuxFrame(frame: MuxFrame) {
-    switch (frame.type) {
-      case "session/event":
-        this.addEvent(frame.sessionId, frame.event, frame.view);
-        break;
-      case "session/subscribed":
-        if (!this.maxSeq.has(frame.sessionId)) this.maxSeq.set(frame.sessionId, frame.lastSeq);
-        break;
-      case "approval/requested":
-        this.pendingApprovals.set(frame.approvalId, { ...frame, frameRpcId: "" } as PendingApproval);
-        break;
-      case "approval/resolved":
-        this.pendingApprovals.delete(frame.approvalId);
-        this.emit("approvalResolved", frame.approvalId);
-        break;
-      case "question/requested":
-        this.pendingQuestions.set("", { sessionId: frame.sessionId, frameRpcId: "", questions: frame.questions });
-        break;
-      case "question/resolved":
-        this.pendingQuestions.delete(frame.questionRpcId);
-        this.emit("questionResolved", frame.questionRpcId);
-        break;
-      case "session/queue":
-        this.queues.set(frame.sessionId, frame.items);
-        this.emit("queue", frame.sessionId, frame.items);
-        break;
-      case "session/jobs":
-        this.jobs.set(frame.sessionId, frame.jobs);
-        this.emit("jobs", frame.sessionId, frame.jobs);
-        break;
-      case "session/projection":
-        this.applyProjection(frame.sessionId, frame.key, frame.value);
-        break;
-      case "stream/error":
-        console.error("[dsh] mux stream error:", frame.error);
-        break;
+  /** session/follow 的打开快照:回填历史与投影基线。 */
+  handleFollowSnapshot(frame: Extract<SessionFollowFrame, { type: "snapshot" }>) {
+    const sessionId = frame.header.id;
+    this.mergeHistory(sessionId, frame.records.map((r) => this.toStored(r)));
+    this.historyHasMore.set(sessionId, frame.hasMore);
+    if (frame.projections && typeof frame.projections.values === "object" && frame.projections.values !== null) {
+      for (const [key, value] of Object.entries(frame.projections.values)) this.applyProjection(sessionId, key, value);
     }
+    this.emit("sessionsChanged", this.listSessions());
   }
 
-  /** 携带 rpcId 的帧入口(approval/question 需要 frameRpcId 来回应)。 */
-  handleMuxEnvelope(env: { rpcId: string; frame: MuxFrame }) {
-    const { rpcId, frame } = env;
-    if (frame.type === "approval/requested") {
-      this.pendingApprovals.set(frame.approvalId, { ...frame, frameRpcId: rpcId });
-      this.emit("approval", this.pendingApprovals.get(frame.approvalId));
-      this.emit("sessionsChanged", this.listSessions());
-    } else if (frame.type === "approval/resolved") {
-      this.pendingApprovals.delete(frame.approvalId);
-      this.emit("approvalResolved", frame.approvalId, frame.outcome);
-      this.emit("sessionsChanged", this.listSessions());
-    } else if (frame.type === "question/requested") {
-      this.pendingQuestions.set(rpcId, { sessionId: frame.sessionId, frameRpcId: rpcId, questions: frame.questions });
-      this.emit("question", this.pendingQuestions.get(rpcId));
-      this.emit("sessionsChanged", this.listSessions());
-    } else if (frame.type === "question/resolved") {
-      this.pendingQuestions.delete(frame.questionRpcId);
-      this.emit("questionResolved", frame.questionRpcId);
-      this.emit("sessionsChanged", this.listSessions());
-    } else {
-      this.handleMuxFrame(frame);
-    }
+  /** session/follow 的逐条事件(传入被跟随的 sessionId)。 */
+  handleFollowEvent(sessionId: string, frame: Extract<SessionFollowFrame, { type: "event" }>) {
+    this.addEvent(sessionId, frame.event);
   }
 
-  handleHostFrame(frame: HostFrame) {
-    switch (frame.type) {
-      case "host/session-added": {
-        const existing = this.sessions.get(frame.sessionId);
-        if (!existing) {
-          this.sessions.set(frame.sessionId, {
-            sessionId: frame.sessionId,
-            running: false,
-            blank: frame.blank,
-            cwd: frame.cwd,
-            agentPreset: frame.agentPreset,
-            parentSessionId: frame.parentSessionId,
-            origin: frame.origin,
-            updatedAt: Date.now(),
-          });
-          this.emit("sessionsChanged", this.listSessions());
-        }
-        break;
+  private toStored(record: SessionHistoryRecord): StoredEvent {
+    if (record.type === "chunks") {
+      // 压缩的 chunk 序列:UI 按未知事件类型忽略,仅占位(消息正文仍由 assistant/message 事件渲染)
+      return { event: record.event };
+    }
+    return { event: record.event };
+  }
+
+  // ---------- 帧消费(0.1.2:session/control) ----------
+
+  handleControlFrame(frame: SessionControlFrame) {
+    if (frame.type === "baseline") {
+      for (const [sessionId, items] of Object.entries(frame.value.queues ?? {})) {
+        this.queues.set(sessionId, items);
+        this.emit("queue", sessionId, items);
       }
-      case "host/session-removed":
-        this.sessions.delete(frame.sessionId);
+      for (const [sessionId, jobs] of Object.entries(frame.value.jobs ?? {})) {
+        this.jobs.set(sessionId, jobs);
+        this.emit("jobs", sessionId, jobs);
+      }
+      for (const [sessionId, projections] of Object.entries(frame.value.projections ?? {})) {
+        for (const [key, value] of Object.entries(projections.values ?? {})) this.applyProjection(sessionId, key, value);
+      }
+      this.emit("sessionsChanged", this.listSessions());
+      return;
+    }
+    if (frame.type === "queue") {
+      this.queues.set(frame.sessionId, frame.items);
+      this.emit("queue", frame.sessionId, frame.items);
+      return;
+    }
+    if (frame.type === "jobs") {
+      this.jobs.set(frame.sessionId, frame.jobs);
+      this.emit("jobs", frame.sessionId, frame.jobs);
+      return;
+    }
+    this.applyProjection(frame.sessionId, frame.key, frame.value);
+  }
+
+  // ---------- 帧消费(0.1.2:workspace/follow) ----------
+
+  handleWorkspaceFrame(frame: WorkspaceFollowFrame) {
+    if (frame.type === "baseline") {
+      this.applyWorkspaceList(frame.value.items, frame.value.archivedSessionIds);
+      return;
+    }
+    if (frame.type === "upsert") {
+      this.upsertWorkspace(frame.workspace);
+      this.emit("workspaces");
+      return;
+    }
+    if (frame.type === "remove") {
+      this.workspaces.delete(frame.workspaceId);
+      this.workspaceOrder = this.workspaceOrder.filter((id) => id !== frame.workspaceId);
+      this.emit("workspaces");
+      return;
+    }
+    if (frame.type === "order") {
+      this.workspaceOrder = frame.workspaceIds;
+      this.emit("workspaces");
+      return;
+    }
+    this.archivedSessionIds.clear();
+    for (const id of frame.archivedSessionIds) this.archivedSessionIds.add(id);
+    this.emit("workspaces");
+  }
+
+  // ---------- 帧消费(0.1.2:$events;api-session/* 遥测) ----------
+
+  handleApiSessionEvent(event: string, args: unknown[]) {
+    const [arg0, arg1] = args as [any, any];
+    if (event === "api-session/added") {
+      const summary = arg0 as SessionSummary;
+      const existing = this.sessions.get(summary.sessionId);
+      if (!existing) {
+        this.sessions.set(summary.sessionId, {
+          sessionId: summary.sessionId,
+          running: summary.running ?? false,
+          blank: summary.blank ?? false,
+          cwd: summary.cwd,
+          parentSessionId: summary.parentSessionId,
+          origin: summary.origin,
+          updatedAt: summary.updatedAt ?? Date.now(),
+        });
         this.emit("sessionsChanged", this.listSessions());
-        break;
-      case "host/session-status": {
-        const s = this.sessions.get(frame.sessionId);
-        if (s) {
-          s.running = frame.running;
-          this.emit("running", frame.sessionId, frame.running);
-        }
-        break;
       }
-      case "host/agent-error": {
-        const s = this.sessions.get(frame.sessionId);
-        if (s) s.running = false;
-        this.emit("agentError", frame.sessionId, frame.message);
-        break;
+      return;
+    }
+    if (event === "api-session/removed") {
+      this.sessions.delete(String(arg0));
+      this.emit("sessionsChanged", this.listSessions());
+      return;
+    }
+    if (event === "api-session/status") {
+      const s = this.sessions.get(String(arg0));
+      if (s) {
+        s.running = Boolean(arg1);
+        this.emit("running", s.sessionId, s.running);
       }
-      case "host/remote-event":
-        // 宿主远程事件转发(网页端 ctx.remote.$on 同款):
-        // cordis/request-run、cordis/request-run-resolved、cordis/dynamic-package、
-        // cordis/dynamic-retract 等,args 为位置参数数组
-        this.emit("remoteEvent", frame.event, frame.args);
-        break;
-      case "host/workspace-changed": {
-        this.upsertWorkspace(frame.workspace);
-        this.emit("workspaces");
-        break;
+      return;
+    }
+    if (event === "api-session/error") {
+      const s = this.sessions.get(String(arg0));
+      if (s) s.running = false;
+      this.emit("agentError", String(arg0), String(arg1 ?? ""));
+      return;
+    }
+    if (event === "api-session/activity") {
+      const s = this.sessions.get(String(arg0));
+      if (s) {
+        s.updatedAt = Number(arg1 ?? Date.now());
+        this.emit("sessionsChanged", this.listSessions());
       }
-      case "host/workspace-removed":
-        this.workspaces.delete(frame.workspaceId);
-        this.workspaceOrder = this.workspaceOrder.filter((id) => id !== frame.workspaceId);
-        this.emit("workspaces");
-        break;
-      case "host/workspace-order-changed":
-        this.workspaceOrder = frame.workspaceIds;
-        this.emit("workspaces");
-        break;
-      case "host/archived-sessions-changed":
-        this.archivedSessionIds.clear();
-        for (const id of frame.archivedSessionIds) this.archivedSessionIds.add(id);
-        this.emit("workspaces");
-        break;
-      case "stream/error":
-        console.error("[dsh] host stream error:", frame.error);
-        break;
+    }
+  }
+
+  /** $events 的 emit 帧(宿主远程事件;Cordis 审批/清单等)。 */
+  handleRemoteEvent(event: string, args: unknown[]) {
+    this.emit("remoteEvent", event, args);
+  }
+
+  // ---------- 帧消费(0.1.2:$events waterfall:审批 / 提问) ----------
+
+  handleWaterfall(frame: { event: string; eventId: string; agentId: string; request: unknown }) {
+    if (frame.event === "approval/request") {
+      const req = (frame.request ?? {}) as { toolName?: string; callId?: string; reason?: string };
+      const approval: PendingApproval = {
+        sessionId: frame.agentId,
+        approvalId: frame.eventId,
+        toolName: req.toolName ?? "",
+        callId: req.callId,
+        reason: req.reason,
+        frameRpcId: frame.eventId,
+      };
+      this.pendingApprovals.set(frame.eventId, approval);
+      this.emit("approval", approval);
+      this.emit("sessionsChanged", this.listSessions());
+      return;
+    }
+    if (frame.event === "user-questions/request") {
+      const req = (frame.request ?? {}) as { questions?: AskUserQuestionItem[] };
+      const question: PendingQuestion = {
+        sessionId: frame.agentId,
+        frameRpcId: frame.eventId,
+        questions: req.questions ?? [],
+      };
+      this.pendingQuestions.set(frame.eventId, question);
+      this.emit("question", question);
+      this.emit("sessionsChanged", this.listSessions());
+    }
+  }
+
+  /** $events 的 cancel 帧(宿主撤回 waterfall:审批/提问被取消)。 */
+  handleWaterfallCancel(eventId: string) {
+    if (this.pendingApprovals.delete(eventId)) {
+      this.emit("approvalResolved", eventId, "cancelled");
+      this.emit("sessionsChanged", this.listSessions());
+    }
+    if (this.pendingQuestions.delete(eventId)) {
+      this.emit("questionResolved", eventId);
+      this.emit("sessionsChanged", this.listSessions());
+    }
+  }
+
+  /** 本地回答完一个 waterfall(审批/提问)后清除挂起状态。 */
+  resolveWaterfall(eventId: string, outcome: string) {
+    if (this.pendingApprovals.delete(eventId)) {
+      this.emit("approvalResolved", eventId, outcome);
+      this.emit("sessionsChanged", this.listSessions());
+    } else if (this.pendingQuestions.delete(eventId)) {
+      this.emit("questionResolved", eventId);
+      this.emit("sessionsChanged", this.listSessions());
     }
   }
 
@@ -292,7 +356,7 @@ export class SessionStore {
           // 回合结束但排队区仍有待处理消息时,宿主 agent 阶段保持 running
           // (turn() 返回 true 直接进入下一回合,不会置 idle)—— 与 agent.status 语义一致。
           // 只有队列清空才真正空闲(取消/出错/维护后也可能出现"空闲但仍有排队项",
-          // 此时 running 由 host/session-status 帧置 false)。
+          // 此时 running 由 api-session/status 帧置 false)。
           const stillPending = (this.queues.get(sessionId) ?? []).length > 0;
           s.running = stillPending;
           this.emit("running", sessionId, stillPending);
@@ -316,6 +380,13 @@ export class SessionStore {
     if (key === "title" && typeof value === "string" && value) {
       if (s) {
         s.title = value;
+        this.emit("sessionsChanged", this.listSessions());
+      }
+      return;
+    }
+    if (key === "agentPreset" && typeof value === "string" && value) {
+      if (s) {
+        s.agentPreset = value;
         this.emit("sessionsChanged", this.listSessions());
       }
       return;
@@ -364,7 +435,7 @@ export class SessionStore {
     }
   }
 
-  /** 应用 workspace.list 基线(顺序 + 归档集合)。 */
+  /** 应用 workspace/follow 基线(顺序 + 归档集合)。 */
   applyWorkspaceList(items: WorkspaceItem[], archivedSessionIds: string[]) {
     for (const item of items) this.upsertWorkspace(item);
     // 服务器顺序只在前端尚无顺序信息时整体覆盖(帧增量优先)

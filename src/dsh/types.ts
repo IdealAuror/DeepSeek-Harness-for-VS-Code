@@ -1,6 +1,14 @@
 /**
- * DSH Web API 的 wire 类型(与 @deepseek-ai/dsh-host-apiproxy 的 zod schema 对齐)。
- * 协议:POST /api/<method>(四象限 RPC 信封)+ WebSocket /api/events.mux、/api/events.host 事件流。
+ * DSH Web API 的 wire 类型(对齐 @deepseek-ai/dsh 0.1.2-alpha.4 的 Typert Remote 契约)。
+ *
+ * 0.1.1-rc.2 → 0.1.2-alpha.4 协议变更:
+ * - 一元端点为斜杠形式 <namespace>/<method>(session.list → session/list),
+ *   载荷信封 payload 必须是恰好一个字段的 { args: {...} };
+ * - host.describe 已移除(版本/主机信息改由 $events 打开帧 + session/modelCatalog 提供);
+ * - /api/respond 移除,审批/提问改走 $events waterfall + /api/$events/result;
+ * - /api/events.mux 与 /api/events.host 移除,改为 /api/remote.mux 单 WebSocket 多路流:
+ *   session/follow(会话事件)、session/control(队列/任务/投影)、workspace/follow(工作区)、$events(主机事件);
+ * - /api 需要浏览器认证 cookie(GET /?token=… 交换)。
  */
 
 // ---------- RPC 信封 ----------
@@ -50,31 +58,65 @@ export interface SessionSummary {
   parentSessionId?: string;
   origin?: "subagent";
   cwd?: string;
+  /** 0.1.2 起 agentPreset 移到 projections.values.agentPreset。 */
   agentPreset?: string;
   projections?: { asOfSeq: number; values: Record<string, any> };
 }
 
-export interface HistoryEntry {
-  event: SessionEvent;
-  view?: ToolEventView;
+/** session/page 或 session/follow 的一条历史记录:原始事件或压缩的 chunk 序列。 */
+export type SessionHistoryRecord =
+  | { type: "event"; event: SessionEvent }
+  | { type: "chunks"; event: SessionEvent };
+
+// ---------- session/page / session/follow ----------
+
+/** 会话或子代理会话的持久地址(0.1.2 起 history 改为按地址分页/跟随)。 */
+export type SessionAddress =
+  | { kind: "session"; sessionId: string }
+  | { kind: "subagent"; parentSessionId: string; childSessionId: string; mode: "one-shot" | "continuable" };
+
+export interface SessionPageRequest {
+  address: SessionAddress;
+  /** 来自对应 session/follow 打开帧的 cursor(含)。 */
+  throughSeq: number;
+  beforeSeq?: number;
+  maxMessages?: number;
 }
 
-// ---------- Mux 帧(WebSocket /api/events.mux) ----------
-
-export interface AskUserQuestionItem {
-  id: string;
-  question: string;
-  header?: string;
-  detail?: string;
-  options?: { label: string; description?: string }[];
-  multiSelect?: boolean;
-  intent?: unknown;
+export interface SessionPageValue {
+  records: SessionHistoryRecord[];
+  hasMore: boolean;
 }
+
+/** session/follow 打开帧:完整基线,随后逐条会话事件。 */
+export type SessionFollowFrame =
+  | {
+      type: "snapshot";
+      header: {
+        version: number;
+        id: string;
+        createdAt: number;
+        cwd?: string;
+        parentSession?: string;
+        seedLength?: number;
+        origin?: "subagent";
+        delegationDepth?: number;
+        agentPreset?: string;
+      };
+      cursor: number;
+      records: SessionHistoryRecord[];
+      hasMore: boolean;
+      projections: { asOfSeq: number; values: Record<string, any> };
+    }
+  | { type: "event"; event: SessionEvent };
+
+// ---------- session/control(0.1.2 起队列/任务/投影的单一控制流) ----------
 
 export interface QueueItem {
   id: string;
   placement: "queued" | "steering" | "context";
-  message: { id: string; role: "system" | "user" | "assistant"; content: unknown[]; source: { kind: string } };
+  rpcId?: string;
+  message: { id: string; content: unknown[] };
 }
 
 export interface JobView {
@@ -87,33 +129,85 @@ export interface JobView {
   finishedAt?: number;
 }
 
-export type MuxFrame =
-  | { type: "session/event"; sessionId: string; event: SessionEvent; view?: ToolEventView }
-  | { type: "session/subscribed"; sessionId: string; lastSeq: number }
-  | { type: "approval/requested"; sessionId: string; approvalId: string; toolName: string; callId?: string; reason?: string }
-  | { type: "approval/resolved"; sessionId: string; approvalId: string; outcome: "allowed-once" | "rejected" | "cancelled" | "unavailable" }
-  | { type: "question/requested"; sessionId: string; questions: AskUserQuestionItem[] }
-  | { type: "question/resolved"; sessionId: string; questionRpcId: string; outcome: "answered" | "cancelled" }
-  | { type: "session/queue"; sessionId: string; items: QueueItem[] }
-  | { type: "session/jobs"; sessionId: string; jobs: JobView[] }
-  | { type: "session/projection"; sessionId: string; key: string; value: unknown; seq: number }
-  | { type: "stream/error"; error: RpcError };
+export type SessionControlFrame =
+  | {
+      type: "baseline";
+      value: {
+        queues: Record<string, QueueItem[]>;
+        jobs: Record<string, JobView[]>;
+        projections: Record<string, { asOfSeq: number; values: Record<string, any> }>;
+      };
+    }
+  | { type: "queue"; sessionId: string; items: QueueItem[] }
+  | { type: "jobs"; sessionId: string; jobs: JobView[] }
+  | { type: "projection"; sessionId: string; key: string; value: unknown; seq: number };
 
-// ---------- Host 帧(WebSocket /api/events.host) ----------
+// ---------- workspace/follow(0.1.2 起工作区改走流) ----------
 
-export type HostFrame =
-  | { type: "host/session-added"; sessionId: string; blank: boolean; parentSessionId?: string; origin?: "subagent"; cwd?: string; agentPreset?: string }
-  | { type: "host/session-removed"; sessionId: string }
-  | { type: "host/session-status"; sessionId: string; running: boolean }
-  | { type: "host/agent-error"; sessionId: string; message: string }
-  | { type: "host/workspace-changed"; workspace: WorkspaceItem }
-  | { type: "host/workspace-removed"; workspaceId: string }
-  | { type: "host/workspace-order-changed"; workspaceIds: string[] }
-  | { type: "host/archived-sessions-changed"; archivedSessionIds: string[] }
-  | { type: "host/remote-event"; event: string; args: unknown[] }
-  | { type: "stream/error"; error: RpcError };
+export interface WorkspaceItem {
+  workspaceId: string;
+  path: string;
+  title: string;
+  sessionIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
 
-// ---------- Unary 方法的请求/响应 ----------
+export type WorkspaceFollowFrame =
+  | { type: "baseline"; value: { items: WorkspaceItem[]; archivedSessionIds: string[] } }
+  | { type: "upsert"; workspace: WorkspaceItem }
+  | { type: "remove"; workspaceId: string }
+  | { type: "order"; workspaceIds: string[] }
+  | { type: "archived"; archivedSessionIds: string[] };
+
+// ---------- $events 主机事件流(0.1.2 起 host.describe / events.mux / events.host / /api/respond 的替代) ----------
+
+/** $events 打开帧(ready)携带的客户端身份与主机信息。 */
+export interface RemoteEventReady {
+  type: "ready";
+  clientId: string;
+  host: { home: string };
+}
+
+export type RemoteEventFrame =
+  | RemoteEventReady
+  | { type: "emit"; event: string; args: unknown[] }
+  | { type: "waterfall"; event: string; eventId: string; agentId: string; request: unknown }
+  | { type: "cancel"; eventId: string };
+
+/** 审批请求(approval/request waterfall 的 request)。 */
+export interface ApprovalRequestEvent {
+  toolName: string;
+  callId?: string;
+  reason?: string;
+}
+
+/** 提问请求(user-questions/request waterfall 的 request)。 */
+export interface AskUserQuestionItem {
+  id: string;
+  question: string;
+  header?: string;
+  detail?: string;
+  options?: { label: string; description?: string }[];
+  multiSelect?: boolean;
+  intent?: { kind: string; [key: string]: unknown };
+}
+
+export interface AskUserQuestionRequest {
+  questions: AskUserQuestionItem[];
+}
+
+export interface AskUserQuestionAnswer {
+  answers: { id: string; selected: string[]; custom?: string }[];
+}
+
+/** $events/result 的 outcome(回答 / 拒绝 / 让给下一个 answerer)。 */
+export type RemoteEventOutcome =
+  | { kind: "result"; value?: unknown }
+  | { kind: "rejected"; error: { name: string; message: string; code?: string; details?: unknown } }
+  | { kind: "next" };
+
+// ---------- 一元方法请求/响应 ----------
 
 export interface HostDescribeValue {
   version: string;
@@ -136,17 +230,19 @@ export interface SessionCreateValue {
 }
 
 export interface SessionHistoryRequest {
-  sessionId: string;
+  address: SessionAddress;
+  throughSeq: number;
   beforeSeq?: number;
   maxMessages?: number;
 }
 export interface SessionHistoryValue {
-  events: HistoryEntry[];
+  records: SessionHistoryRecord[];
   hasMore: boolean;
-  projections?: { asOfSeq: number; values: Record<string, any> };
 }
 
 export interface SessionPromptRequest {
+  /** 客户端预生成的请求标识(0.1.2 起必需)。 */
+  requestId: string;
   sessionId: string;
   mode: "queue" | "steer";
   content: PromptContentPart[];
@@ -154,7 +250,6 @@ export interface SessionPromptRequest {
 }
 export interface SessionPromptValue {
   accepted: true;
-  command?: { kind: "success"; text?: string };
 }
 
 /** commands/execute 网关返回的 CommandExecution 视图(命令结果文本透传界面)。 */
@@ -203,6 +298,7 @@ export interface ModelCatalogFailure {
   message: string;
 }
 
+/** session/modelCatalog:0.1.2 起代替 session.models + llm.models。 */
 export interface SessionModelsValue {
   current: ModelSelection;
   routable: boolean;
@@ -212,6 +308,7 @@ export interface SessionModelsValue {
 
 export interface AgentPresetInfo {
   id: string;
+  trust?: "system" | "user";
   isDefault: boolean;
   name?: string;
   description?: string;
@@ -220,20 +317,6 @@ export interface AgentPresetInfo {
 export interface AgentPresetListValue {
   presets: AgentPresetInfo[];
   authorable: boolean;
-  hasDocument: boolean;
-}
-
-// ---------- /api/respond ----------
-
-export interface ApprovalAnswer {
-  sessionId: string;
-  approvalId: string;
-  outcome: "allowed-once" | "rejected";
-}
-
-export interface QuestionAnswer {
-  sessionId: string;
-  answer: { answers: { id: string; selected: string[]; custom?: string }[] };
 }
 
 // ---------- skills / subagents ----------
@@ -249,16 +332,7 @@ export type SubagentEntry =
   | { kind: "child"; id: string; mode: "one-shot" | "continuable"; activity: "running" | "inactive"; hasChildren: boolean; label?: string }
   | { kind: "diagnostic"; id: string; reason: string };
 
-// ---------- 工作区(workspace.*) ----------
-
-export interface WorkspaceItem {
-  workspaceId: string;
-  path: string;
-  title: string;
-  sessionIds: string[];
-  createdAt: string;
-  updatedAt: string;
-}
+// ---------- 工作区(workspace.* 请求/响应) ----------
 
 export interface WorkspaceListValue {
   items: WorkspaceItem[];
@@ -293,7 +367,7 @@ export interface SessionAttachmentValue {
   data: string;
 }
 
-// ---------- Agent 预设作者(agentPreset.read/copy/openDocument/remove) ----------
+// ---------- Agent 预设作者(agentPresets.*) ----------
 
 export interface AgentPresetReadValue {
   agentPreset: string;
@@ -308,7 +382,7 @@ export interface AgentPresetOpenDocumentValue {
   path?: string;
 }
 
-// ---------- 设置(settings.* / credentials.*) ----------
+// ---------- 设置(settings.* / credentials.*;字段形状与 0.1.1 一致,端点改斜杠) ----------
 
 export interface SettingsSecretView {
   path: string[];
@@ -342,7 +416,7 @@ export interface CredentialView {
   writable: boolean;
 }
 
-// ---------- LLM 目录(llm.*) ----------
+// ---------- LLM 目录(llm.* / session.modelCatalog) ----------
 
 export interface ConfigurableProviderView {
   provider: string;
@@ -360,8 +434,35 @@ export interface DiscoveredModelView {
   maxTokens?: number;
 }
 
-// ---------- 子代理追问/打断(subagent.prompt / subagent.interrupt) ----------
+// ---------- 子代理追问/打断(subagents.*) ----------
 
 export interface SubagentPromptReceipt {
   messageId: string;
 }
+
+// ---------- goal(goals.*:0.1.2 起 payload 为 {agentId, ref, request}) ----------
+
+export interface GoalRef {
+  id: string;
+  revision: number;
+}
+
+export interface CreateGoalRequest {
+  objective: string;
+  maxGoalRounds?: number;
+}
+
+export interface CreateGoalResult {
+  ref: GoalRef;
+}
+
+// ---------- 流式传输(remote.mux) ----------
+
+export type RemoteMuxClientMessage =
+  | { type: "open"; streamId: string; endpoint: string; payload: { args: unknown } }
+  | { type: "cancel"; streamId: string };
+
+export type RemoteMuxServerMessage =
+  | { type: "item"; streamId: string; value: unknown }
+  | { type: "end"; streamId: string }
+  | { type: "error"; streamId: string; error: { code: string; message: string; details: unknown } };

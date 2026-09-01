@@ -73,6 +73,7 @@ async function savepointAndRestore(gitBin, cwd, sid, targetCommit, opts) {
     //    不触碰真实 .git/index,避免与用户自己的 git 操作争用 index.lock
     const saveIdx = savepointIndex();
     const gitOpts = { indexFile: saveIdx };
+    let saveCommit;
     try {
         const add = await gitExec(gitBin, cwd, ["add", "-A"], gitOpts);
         if (!add.ok)

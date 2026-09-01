@@ -4,18 +4,19 @@ import type {
   AgentPresetListValue,
   AgentPresetOpenDocumentValue,
   AgentPresetReadValue,
-  ApprovalAnswer,
+  AskUserQuestionAnswer,
   ClientRequest,
   CommandExecutionView,
   ConfigurableProviderView,
+  CreateGoalResult,
   CredentialView,
   DiscoveredModelView,
-  HostFrame,
+  GoalRef,
   HostDescribeValue,
-  MuxFrame,
   PromptContentPart,
-  QuestionAnswer,
-  SessionAttachmentValue,
+  RemoteEventFrame,
+  RemoteEventOutcome,
+  RemoteMuxServerMessage,
   SessionCreateRequest,
   SessionCreateValue,
   SessionHistoryRequest,
@@ -31,7 +32,6 @@ import type {
   SubagentEntry,
   SubagentPromptReceipt,
   WorkspaceItem,
-  WorkspaceListValue,
 } from "./types";
 import type {
   CordisPluginRow,
@@ -52,43 +52,336 @@ export class DshApiError extends Error {
   }
 }
 
+/** /api 未认证且无法获得 token(外部启动的服务器)时的专用错误。 */
+export class DshAuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DshAuthError";
+  }
+}
+
 interface ServerResponse {
   type: "server-response";
   rpcId: string;
   result: { ok: true; value: any } | { ok: false; error: { code: string; message: string; details?: unknown } };
 }
 
-interface ServerRequest {
-  type: "server-request";
-  rpcId: string;
-  method: string;
-  payload: any;
-}
-
-export interface FrameEnvelope<F> {
-  rpcId: string;
-  frame: F;
-}
-
 export type ConnectionState = "disconnected" | "connecting" | "connected";
 
-/** DSH Web API 客户端:unary RPC + 双 WebSocket 事件流 + 自动重连。 */
+/** 一个 remote.mux 逻辑流(打开/取消)。 */
+export interface RemoteStreamHandle {
+  cancel(): void;
+}
+
+/**
+ * DSH Web API 客户端(0.1.2-alpha.4 线协议):
+ * - 一元:POST /api/<namespace>/<method>,信封 payload 为 {args:{...}};
+ * - 流:/api/remote.mux 单 WebSocket 多路(session/follow、session/control、workspace/follow、$events);
+ * - 认证:GET /?token=<启动 token> 交换签名 cookie,所有请求携带。
+ */
 export class DshApiClient {
   readonly baseUrl: string;
-  private wsMux: WebSocket | undefined;
-  private wsHost: WebSocket | undefined;
-  private disposed = false;
-  private reconnectTimerMux: NodeJS.Timeout | undefined;
-  private reconnectTimerHost: NodeJS.Timeout | undefined;
-  private retryDelayMux = 1000;
-  private retryDelayHost = 1000;
-  private muxOnFrame: ((env: FrameEnvelope<MuxFrame>) => void) | undefined;
-  private hostOnFrame: ((env: FrameEnvelope<HostFrame>) => void) | undefined;
-  private onState: ((which: "mux" | "host", state: ConnectionState) => void) | undefined;
-  /** 服务器版本(host.describe),用于展示与能力门控。 */
+  /** 服务器版本(0.1.2 起 host.describe 已移除;保留字段仅为兼容展示)。 */
   serverVersion: string | undefined;
+  /** $events 打开帧提供的主机信息(home)。 */
+  hostInfo: { home: string } | undefined;
 
-  /** 设置服务器版本(probe / ensureReady 时由 host.describe 回填)。 */
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl.replace(/\/+$/, "");
+  }
+
+  private ws: WebSocket | undefined;
+  private disposed = false;
+  private reconnectTimer: NodeJS.Timeout | undefined;
+  private retryDelay = 1000;
+  private wsOnState: ((state: ConnectionState) => void) | undefined;
+
+  /** 逻辑流注册表:streamId → 回调。 */
+  private streams = new Map<
+    string,
+    { onItem: (value: unknown) => void; onEnd: () => void; onError: (error: { code: string; message: string; details: unknown }) => void }
+  >();
+  private pendingOpens: { streamId: string; endpoint: string; args: unknown }[] = [];
+
+  // ---------- auth(0.1.2 新增浏览器认证) ----------
+
+  private launchToken: string | undefined;
+  private cookie: string | undefined;
+  private authPromise: Promise<void> | undefined;
+
+  /** 设置服务器启动时从日志解析到的启动 token(换取 cookie 用)。 */
+  setLaunchToken(token: string) {
+    this.launchToken = token;
+  }
+
+  /** 是否已持有认证 cookie。 */
+  get authenticated(): boolean {
+    return this.cookie !== undefined;
+  }
+
+  private async ensureAuth(force = false): Promise<void> {
+    if (this.cookie !== undefined && !force) return;
+    if (this.authPromise !== undefined && !force) return this.authPromise;
+    this.authPromise = this.doEnsureAuth(force).finally(() => {
+      this.authPromise = undefined;
+    });
+    return this.authPromise;
+  }
+
+  private async doEnsureAuth(force: boolean): Promise<void> {
+    const token = this.launchToken;
+    if (!token) {
+      // 外部启动的服务器:无 token 可交换;等待 setLaunchToken/重试
+      if (!force) throw new DshAuthError("授权数据缺失(服务器由外部启动):请通过本扩展启动服务器,或重启后重试");
+      return;
+    }
+    const authUrl = new URL("/", new URL(this.baseUrl));
+    authUrl.searchParams.set("token", token);
+    const res = await fetch(authUrl, {
+      method: "GET",
+      redirect: "manual",
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 401 || res.status === 403) {
+      throw new DshAuthError("服务器拒绝了授权令牌(令牌可能已过期):请重启服务器后重试");
+    }
+    const setCookie = res.headers.get("set-cookie");
+    if (!setCookie) {
+      // 旧版服务器(0.1.1-)无认证或已带有效 cookie:视为已认证
+      this.cookie = "";
+      return;
+    }
+    this.cookie = setCookie.split(";")[0].trim();
+  }
+
+  /** 供外部(非本客户端的启动流程)注入直接可用的 cookie。 */
+  setAuthCookie(cookie: string) {
+    this.cookie = cookie;
+  }
+
+  private async request<T>(method: string, args: unknown, timeoutMs = 30_000): Promise<T> {
+    const run = async (): Promise<T> => {
+      await this.ensureAuth();
+      const message: ClientRequest = { type: "client-request", rpcId: randomUUID(), method, payload: { args } };
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      if (this.cookie) headers.cookie = this.cookie;
+      const res = await fetch(`${this.baseUrl}/api/${method}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(message),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (res.status === 401 || res.status === 403) {
+        // 可能 cookie 过期/服务器重启:若有 token 强制刷新一次
+        if (this.launchToken) {
+          this.cookie = undefined;
+          await this.ensureAuth(true);
+          return run();
+        }
+        throw new DshAuthError(`服务器要求授权(HTTP ${res.status}):请重启服务器或通过本扩展启动`);
+      }
+      if (!res.ok) throw new Error(`DSH transport failure for ${method}: HTTP ${res.status}`);
+      const full = (await res.json()) as ServerResponse;
+      if (full.rpcId !== message.rpcId) throw new Error(`DSH rpcId mismatch for ${method}`);
+      if (!full.result.ok) {
+        throw new DshApiError(full.result.error.code, full.result.error.message, full.result.error.details);
+      }
+      return full.result.value as T;
+    };
+    return run();
+  }
+
+  /** 探测服务器:0.1.2 起 host.describe 移除,改用 session/list 作为探测。 */
+  async ping(timeoutMs = 3000): Promise<HostDescribeValue | undefined> {
+    try {
+      await this.request<SessionListValue>("session/list", {}, timeoutMs);
+      return {
+        version: "0.0.1",
+        cwd: this.hostInfo?.home ?? "",
+        provider: undefined,
+        model: undefined,
+        attachedSessions: 0,
+        canOpenPath: false,
+      };
+    } catch (error) {
+      if (error instanceof DshAuthError) throw error; // 认证问题让调用方明确提示
+      return undefined;
+    }
+  }
+
+  // ---------- remote.mux 流 ----------
+
+  setStreamState(listener: (state: ConnectionState) => void) {
+    this.wsOnState = listener;
+  }
+
+  private wsUrl(path: string): string {
+    const u = new URL(this.baseUrl);
+    u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
+    u.pathname = path;
+    return u.toString();
+  }
+
+  private connectMux() {
+    if (this.disposed || this.ws !== undefined) return;
+    this.wsOnState?.("connecting");
+    const ws = new WebSocket(this.wsUrl("/api/remote.mux"), {
+      handshakeTimeout: 5000,
+      headers: this.cookie ? { cookie: this.cookie } : {},
+    });
+    this.ws = ws;
+    ws.on("open", () => {
+      this.retryDelay = 1000;
+      this.wsOnState?.("connected");
+      // 补发连接期间排队的流打开
+      const pending = this.pendingOpens;
+      this.pendingOpens = [];
+      for (const item of pending) this.sendStreamOpen(item.streamId, item.endpoint, item.args);
+    });
+    ws.on("message", (data) => {
+      try {
+        const frame = JSON.parse(data.toString()) as RemoteMuxServerMessage;
+        const stream = this.streams.get(frame.streamId);
+        if (!stream) return;
+        if (frame.type === "item") stream.onItem(frame.value);
+        else if (frame.type === "end") {
+          this.streams.delete(frame.streamId);
+          stream.onEnd();
+        } else {
+          this.streams.delete(frame.streamId);
+          stream.onError(frame.error);
+        }
+      } catch {
+        // 丢弃损坏帧
+      }
+    });
+    ws.on("error", () => {});
+    ws.on("close", () => {
+      if (this.ws !== ws) return;
+      this.ws = undefined;
+      if (this.disposed) return;
+      this.wsOnState?.("disconnected");
+      // 所有逻辑流失败;连接重建后需由调用方重新打开
+      const streams = [...this.streams];
+      this.streams.clear();
+      for (const [, stream] of streams) stream.onError({ code: "stream/socket-closed", message: "remote.mux socket closed", details: {} });
+      const delay = this.retryDelay;
+      this.retryDelay = Math.min(delay * 2, 15_000);
+      this.reconnectTimer = setTimeout(() => this.connectMux(), delay);
+    });
+  }
+
+  /** 确保物理连接已建立。 */
+  startStreams() {
+    this.connectMux();
+  }
+
+  private sendStreamOpen(streamId: string, endpoint: string, args: unknown) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+    this.ws.send(JSON.stringify({ type: "open", streamId, endpoint, payload: { args } }));
+    return true;
+  }
+
+  /**
+   * 打开一个 remote.mux 逻辑流。onItem 逐条接收,onEnd 正常结束,
+   * onError 收到错误(含连接级失败,需重新 open)。返回取消句柄。
+   */
+  openStream(
+    endpoint: string,
+    args: unknown,
+    handlers: { onItem: (value: unknown) => void; onEnd?: () => void; onError?: (error: { code: string; message: string; details: unknown }) => void },
+  ): RemoteStreamHandle {
+    const streamId = randomUUID();
+    this.streams.set(streamId, {
+      onItem: handlers.onItem,
+      onEnd: () => handlers.onEnd?.(),
+      onError: (error) => handlers.onError?.(error),
+    });
+    if (!this.sendStreamOpen(streamId, endpoint, args)) this.pendingOpens.push({ streamId, endpoint, args });
+    return {
+      cancel: () => {
+        this.streams.delete(streamId);
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({ type: "cancel", streamId }));
+        }
+      },
+    };
+  }
+
+  // ---------- $events(主机事件流;0.1.2 起审批/提问/Cordis 事件的唯一通道) ----------
+
+  private eventsClientId: string | undefined;
+  private eventsReady = false;
+  private eventsHandlers:
+    | {
+        onReady?: (clientId: string, host: { home: string }) => void;
+        onEmit?: (event: string, args: unknown[]) => void;
+        onWaterfall?: (frame: { event: string; eventId: string; agentId: string; request: unknown }) => void;
+        onCancel?: (eventId: string) => void;
+      }
+    | undefined;
+
+  /** 注册 $events 帧消费(幂等:重复调用只覆盖回调,不重复开流)。 */
+  setEventsHandlers(handlers: NonNullable<DshApiClient["eventsHandlers"]>) {
+    this.eventsHandlers = handlers;
+    if (this.eventsReady) return;
+    this.eventsReady = true;
+    this.openStream("$events", {}, {
+      onItem: (value) => this.handleRemoteEventFrame(value as RemoteEventFrame),
+      onError: () => {
+        // 重连后重新打开
+        this.eventsReady = false;
+        this.setEventsHandlers(this.eventsHandlers!);
+      },
+    });
+  }
+
+  private handleRemoteEventFrame(frame: RemoteEventFrame) {
+    if (frame.type === "ready") {
+      this.eventsClientId = frame.clientId;
+      this.hostInfo = frame.host;
+      this.eventsHandlers?.onReady?.(frame.clientId, frame.host);
+      return;
+    }
+    if (frame.type === "emit") {
+      this.eventsHandlers?.onEmit?.(frame.event, frame.args);
+      return;
+    }
+    if (frame.type === "waterfall") {
+      this.eventsHandlers?.onWaterfall?.({ event: frame.event, eventId: frame.eventId, agentId: frame.agentId, request: frame.request });
+      return;
+    }
+    this.eventsHandlers?.onCancel?.(frame.eventId);
+  }
+
+  /** 回答一个 $events waterfall 请求(审批 / 提问 / 让渡)。 */
+  async respondEvent(clientId: string, eventId: string, outcome: RemoteEventOutcome): Promise<{ accepted: boolean }> {
+    return this.request<{ accepted: boolean }>("$events/result", { clientId, eventId, outcome }, 30_000);
+  }
+
+  /** 以工具层 API 回答审批(waterfall eventId 即审批 id)。 */
+  async respondApproval(agentId: string, approvalId: string, outcome: "allowed-once" | "rejected", frameRpcId: string) {
+    return this.respondEvent(this.eventsClientId ?? "", frameRpcId || approvalId, {
+      kind: "result",
+      value: outcome,
+    });
+  }
+
+  /** 以工具层 API 回答提问。 */
+  async respondQuestion(agentId: string, answer: AskUserQuestionAnswer, frameRpcId: string) {
+    return this.respondEvent(this.eventsClientId ?? "", frameRpcId, { kind: "result", value: answer });
+  }
+
+  /** 取消提问(网页端取消按钮同款:以 rejected 结束 waterfall)。 */
+  async cancelQuestion(agentId: string, frameRpcId: string): Promise<{ accepted: boolean }> {
+    return this.respondEvent(this.eventsClientId ?? "", frameRpcId, {
+      kind: "rejected",
+      error: { name: "Error", message: "user cancelled the question", code: "cancelled" },
+    });
+  }
+
+  // ---------- 会话域 ----------
+
   setServerVersion(version: string | undefined) {
     this.serverVersion = version;
   }
@@ -100,87 +393,42 @@ export class DshApiClient {
     this.commandImagesCapability = supported;
   }
 
-  /** commands/execute 是否接受 images 参数(rc.8+;缺失会被网关按 arguments-invalid 拒绝)。 */
+  /** commands/execute 是否接受 images 参数(0.1.2 网关始终声明,此能力一致保留)。 */
   commandImagesSupported(): boolean {
     return this.commandImagesCapability;
   }
 
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl.replace(/\/+$/, "");
-  }
-
-  setFrameHandlers(handlers: {
-    onMuxFrame: (env: FrameEnvelope<MuxFrame>) => void;
-    onHostFrame: (env: FrameEnvelope<HostFrame>) => void;
-    onState?: (which: "mux" | "host", state: ConnectionState) => void;
-  }) {
-    this.muxOnFrame = handlers.onMuxFrame;
-    this.hostOnFrame = handlers.onHostFrame;
-    this.onState = handlers.onState;
-    this.connectMux();
-    this.connectHost();
-  }
-
-  // ---------- unary RPC ----------
-
-  private async post<T>(method: string, payload: unknown, timeoutMs = 30_000): Promise<T> {
-    const message: ClientRequest = { type: "client-request", rpcId: randomUUID(), method, payload };
-    const res = await fetch(`${this.baseUrl}/api/${method}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(message),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (!res.ok) throw new Error(`DSH transport failure for ${method}: HTTP ${res.status}`);
-    const full = (await res.json()) as ServerResponse;
-    if (full.rpcId !== message.rpcId) throw new Error(`DSH rpcId mismatch for ${method}`);
-    if (!full.result.ok) {
-      throw new DshApiError(full.result.error.code, full.result.error.message, full.result.error.details);
-    }
-    return full.result.value as T;
-  }
-
-  async ping(timeoutMs = 3000): Promise<HostDescribeValue | undefined> {
-    try {
-      return await this.post<HostDescribeValue>("host.describe", {}, timeoutMs);
-    } catch {
-      return undefined;
-    }
-  }
-
-  // 会话域
   listSessions() {
-    return this.post<SessionListValue>("session.list", {});
+    return this.request<SessionListValue>("session/list", {});
   }
   searchSessions(query: string) {
-    return this.post<SessionSearchValue>("session.search", { query });
+    return this.request<SessionSearchValue>("session/search", { query });
   }
   readAttachment(sessionId: string, attachmentId: string) {
-    return this.post<SessionAttachmentValue>("session.attachment", { sessionId, attachmentId });
+    return this.request<{ attachment: { id: string; mediaType?: string; name?: string; [key: string]: unknown }; data: string }>(
+      "session/attachment",
+      { sessionId, attachmentId },
+    );
   }
   createSession(payload: SessionCreateRequest) {
-    return this.post<SessionCreateValue>("session.create", payload);
+    return this.request<SessionCreateValue>("session/create", payload);
   }
+  /** 0.1.2 起历史分页改为 session/page(需要 throughSeq)。 */
   sessionHistory(payload: SessionHistoryRequest) {
-    return this.post<SessionHistoryValue>("session.history", payload);
+    return this.request<SessionHistoryValue>("session/page", payload);
   }
   sendPrompt(payload: SessionPromptRequest) {
-    return this.post<SessionPromptValue>("session.prompt", payload, 60_000);
+    return this.request<SessionPromptValue>("session/prompt", payload, 60_000);
   }
   sendPromptParts(sessionId: string, mode: "queue" | "steer", content: PromptContentPart[]) {
-    return this.post<SessionPromptValue>("session.prompt", { sessionId, mode, content }, 60_000);
+    return this.request<SessionPromptValue>("session/prompt", { requestId: randomUUID(), sessionId, mode, content }, 60_000);
   }
 
   /**
    * 会话级斜杠命令执行(与网页端 live.command() 完全一致的通道):
-   * 连接 RPC 端点为斜杠形式 /api/commands/execute(点号形式会 404),
-   * 信封 {type:"client-request", rpcId, method:"commands/execute",
-   * payload:{args:{agentId, line, images?}}},响应为标准 server-response 信封;
-   * result.value === undefined 表示未匹配任何命令。
-   * result.value 是 CommandExecution { commandId, result: {kind, text?} } ——
-   * 命令的结果文本(如 /rollback 的回退摘要)随返回值透传给界面展示。
-   * rc.8 起 execute 携带 images 参数(缺失会被网关按 arguments-invalid 拒绝);
-   * rc.7 及更早版本描述符没有该参数(多余字段同样被拒),按服务器版本门控。
+   * 端点 /api/commands/execute,信封 {type:"client-request", rpcId, method:"commands/execute",
+   * payload:{args:{agentId, line, images?}}};result.value === undefined 表示未匹配任何命令。
+   * 0.1.2 契约与 rc.8+ 一致(images 为网关必填字段,按描述符探测)。
    */
   async executeCommand(
     sessionId: string,
@@ -189,7 +437,8 @@ export class DshApiClient {
   ): Promise<{ matched: boolean; execution?: CommandExecutionView }> {
     const endpoint = "commands/execute";
     const args: Record<string, unknown> = { agentId: sessionId, line };
-    if (this.commandImagesSupported()) args.images = images;    const message: ClientRequest = {
+    if (this.commandImagesSupported()) args.images = images;
+    const message: ClientRequest = {
       type: "client-request",
       rpcId: randomUUID(),
       method: endpoint,
@@ -197,10 +446,14 @@ export class DshApiClient {
     };
     const res = await fetch(`${this.baseUrl}/api/${endpoint}`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: this.headers(),
       body: JSON.stringify(message),
       signal: AbortSignal.timeout(30_000),
     });
+    if (res.status === 401 || res.status === 403) {
+      await this.ensureAuth(true);
+      return this.executeCommand(sessionId, line, images);
+    }
     if (!res.ok) throw new Error(`DSH transport failure for commands/execute: HTTP ${res.status}`);
     const full = (await res.json()) as {
       type?: string;
@@ -230,81 +483,7 @@ export class DshApiClient {
     };
   }
 
-  /**
-   * 通用 Typert Remote 调用(网页端 ctx.remote.* 同款通道):
-   * 端点为斜杠形式 /api/<namespace>/<method>,载荷信封 {args:{...}}。
-   */
-  private async remoteCall<T>(namespace: string, method: string, args: Record<string, unknown>, timeoutMs = 30_000): Promise<T> {
-    const endpoint = `${namespace}/${method}`;
-    const message: ClientRequest = { type: "client-request", rpcId: randomUUID(), method: endpoint, payload: { args } };
-    const res = await fetch(`${this.baseUrl}/api/${endpoint}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(message),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (!res.ok) throw new Error(`DSH transport failure for ${endpoint}: HTTP ${res.status}`);
-    const full = (await res.json()) as ServerResponse;
-    if (full.rpcId !== message.rpcId) throw new Error(`DSH rpcId mismatch for ${endpoint}`);
-    if (!full.result.ok) {
-      throw new DshApiError(full.result.error.code, full.result.error.message, full.result.error.details);
-    }
-    return full.result.value as T;
-  }
-
-  // ---------- @ 引用(rc.8 网页端 @ 菜单同款:文件与文件夹 / Session 对话) ----------
-
-  /** @ 文件/文件夹候选(相对会话 cwd;kind: file | directory)。 */
-  fileReferenceList(agentId: string, query: string) {
-    return this.remoteCall<{ path: string; kind: "file" | "directory" }[]>("fileReferences", "list", { agentId, query });
-  }
-
-  /** @ Session 候选(含可直接插入草稿的 markdown 提及)。 */
-  sessionReferenceCandidates(agentId: string, query: string) {
-    return this.remoteCall<
-      { sessionId: string; label: string; cwd?: string; createdAt: number; mention: string }[]
-    >("sessionReferenceResolver", "candidates", { agentId, query });
-  }
-
-  // ---------- Cordis 动态插件(dynamicCordisRunner remote) ----------
-
-  cordisInventory() {
-    return this.remoteCall<CordisPluginRow[]>("dynamicCordisRunner", "inventory", {});
-  }
-
-  cordisRunHostHalf(args: {
-    agentId: string;
-    pluginId: string;
-    packageId: string;
-    mode: "run" | "update";
-    requestId: string | null;
-    approveFutureVersions: boolean;
-  }) {
-    return this.remoteCall<CordisRunHostHalfResult>("dynamicCordisRunner", "runHostHalf", args, 60_000);
-  }
-
-  cordisResolveRequestRun(requestId: string, resolution: CordisRunResolution) {
-    return this.remoteCall<{ accepted: boolean }>("dynamicCordisRunner", "resolveRequestRun", { requestId, resolution });
-  }
-
-  cordisSettleUserRun(agentId: string, pluginId: string, resolution: CordisRunResolution) {
-    return this.remoteCall<CordisRunHostHalfResult>("dynamicCordisRunner", "settleUserRun", { agentId, pluginId, resolution });
-  }
-
-  cordisStopFromPanel(agentId: string, pluginId: string) {
-    return this.remoteCall<CordisStopResult>("dynamicCordisRunner", "stopFromPanel", { agentId, pluginId });
-  }
-
-  cordisUndefineFromPanel(agentId: string, pluginId: string) {
-    return this.remoteCall<CordisUndefineResult>("dynamicCordisRunner", "undefineFromPanel", { agentId, pluginId });
-  }
-
-  /**
-   * 列出某会话可用的宿主命令(网页端 ui-commands 目录同款通道 /api/commands/list)。
-   * 用于区分宿主命令与技能 token(/skill-name 走普通 prompt,由宿主 pre-step 注入)。
-   * 同时探测 commands/execute 的 images 能力:rc.8 起命令描述符含 input.images(布尔),
-   * 该参数缺失时网关按 arguments-invalid 拒绝(rc.7 则拒绝多余字段)。
-   */
+  /** 列出某会话可用的宿主命令;同时探测 commands/execute 的 images 能力。 */
   async listCommands(sessionId: string): Promise<{ names: string[]; imagesSupported: boolean }> {
     const endpoint = "commands/list";
     const message: ClientRequest = {
@@ -315,7 +494,7 @@ export class DshApiClient {
     };
     const res = await fetch(`${this.baseUrl}/api/${endpoint}`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: this.headers(),
       body: JSON.stringify(message),
       signal: AbortSignal.timeout(30_000),
     });
@@ -334,53 +513,42 @@ export class DshApiClient {
     this.commandImagesCapability = imagesSupported;
     return { names: rows.map((d) => String(d.name ?? "")).filter(Boolean), imagesSupported };
   }
+
   cancelSession(sessionId: string) {
-    return this.post<{ accepted: true }>("session.cancel", { sessionId });
+    return this.request<{ accepted: true }>("session/cancel", { sessionId });
   }
   updateQueue(sessionId: string, itemId: string, action: { kind: "edit"; content: unknown[] } | { kind: "remove" } | { kind: "steer" }) {
-    return this.post<{ accepted: true }>("session.updateQueue", { sessionId, itemId, action });
+    return this.request<{ accepted: true }>("session/updateQueue", { sessionId, itemId, action });
   }
   renameSession(sessionId: string, title: string) {
-    return this.post<{ title: string; seq: number }>("session.rename", { sessionId, title });
+    return this.request<{ title: string; seq: number }>("session/rename", { sessionId, title });
   }
   forkSession(sessionId: string, atSeq?: number) {
-    return this.post<{ sessionId: string }>("session.fork", { sessionId, ...(atSeq === undefined ? {} : { atSeq }) });
+    return this.request<{ sessionId: string }>("session/fork", { sessionId, ...(atSeq === undefined ? {} : { atSeq }) });
   }
   archiveSession(sessionId: string) {
-    return this.post<{ archivedSessionIds: string[] }>("workspace.archiveSession", { sessionId });
+    return this.request<{ archivedSessionIds: string[] }>("workspace/archiveSession", { sessionId });
   }
 
-  // 工作区管理
-  listWorkspaces() {
-    return this.post<WorkspaceListValue>("workspace.list", {});
+  /** 0.1.2 起模型目录统一在 session/modelCatalog(= 旧 session.models + llm.models);
+   *  服务器返回 {default, routableProviders, groups, failures},映射回扩展的 {current, routable,…} 视图。 */
+  async sessionModels(_sessionId: string) {
+    const catalog = await this.request<{
+      default: { provider: string; model: string; reasoningEffort?: string };
+      routableProviders: string[];
+      groups: SessionModelsValue["groups"];
+      failures: SessionModelsValue["failures"];
+    }>("session/modelCatalog", {});
+    return {
+      current: catalog.default,
+      routable: catalog.routableProviders.length > 0,
+      groups: catalog.groups,
+      failures: catalog.failures,
+    } as SessionModelsValue;
   }
-  createWorkspace(path: string) {
-    return this.post<{ workspace: WorkspaceItem; created: boolean }>("workspace.create", { path });
-  }
-  renameWorkspace(workspaceId: string, title: string) {
-    return this.post<{ workspace: WorkspaceItem }>("workspace.rename", { workspaceId, title });
-  }
-  deleteWorkspace(workspaceId: string) {
-    return this.post<{ deleted: true }>("workspace.delete", { workspaceId });
-  }
-  moveWorkspace(workspaceId: string, beforeWorkspaceId?: string) {
-    return this.post<{ workspaceIds: string[] }>("workspace.insertBefore", {
-      workspaceId,
-      ...(beforeWorkspaceId ? { beforeWorkspaceId } : {}),
-    });
-  }
-  moveSessionInWorkspace(workspaceId: string, sessionId: string, beforeSessionId?: string) {
-    return this.post<{ workspace: WorkspaceItem }>("workspace.insertSessionBefore", {
-      workspaceId,
-      sessionId,
-      ...(beforeSessionId ? { beforeSessionId } : {}),
-    });
-  }
-  sessionModels(sessionId: string) {
-    return this.post<SessionModelsValue>("session.models", { sessionId });
-  }
+
   selectModel(sessionId: string, provider: string, model: string, reasoningEffort?: string) {
-    return this.post<{ selected: unknown }>("session.selectModel", {
+    return this.request<{ selected: { provider: string; model: string; reasoningEffort?: string } }>("session/selectModel", {
       sessionId,
       provider,
       model,
@@ -388,71 +556,106 @@ export class DshApiClient {
     });
   }
 
-  listAgentPresets() {
-    return this.post<AgentPresetListValue>("agentPreset.list", {});
-  }
-  selectAgentPreset(sessionId: string, agentPreset: string) {
-    return this.post<{ agentPreset: string }>("agentPreset.select", { sessionId, agentPreset });
-  }
-  // 预设作者:读取组合 / 复制 / 打开目录 / 删除
-  readAgentPreset(agentPreset: string) {
-    return this.post<AgentPresetReadValue>("agentPreset.read", { agentPreset });
-  }
-  copyAgentPreset(from: string, agentPreset: string, name?: string) {
-    return this.post<{ agentPreset: string }>("agentPreset.copy", { from, agentPreset, ...(name ? { name } : {}) });
-  }
-  openAgentPresetDocument(agentPreset: string) {
-    return this.post<AgentPresetOpenDocumentValue>("agentPreset.openDocument", { agentPreset });
-  }
-  removeAgentPreset(agentPreset: string) {
-    return this.post<Record<string, never>>("agentPreset.remove", { agentPreset });
-  }
+  // ---------- 工作区(列表改由 workspace/follow 流;此处仅保留变更类端点) ----------
 
-  // goals
-  goalCreate(sessionId: string, objective: string, maxGoalRounds?: number) {
-    return this.post<{ ref: { id: string; revision: number } }>("goal.create", {
-      sessionId,
-      objective,
-      ...(maxGoalRounds !== undefined ? { maxGoalRounds } : {}),
+  createWorkspace(path: string) {
+    return this.request<{ workspace: WorkspaceItem; created: boolean }>("workspace/create", { path });
+  }
+  renameWorkspace(workspaceId: string, title: string) {
+    return this.request<{ workspace: WorkspaceItem }>("workspace/rename", { workspaceId, title });
+  }
+  deleteWorkspace(workspaceId: string) {
+    return this.request<{ deleted: true }>("workspace/delete", { workspaceId });
+  }
+  moveWorkspace(workspaceId: string, beforeWorkspaceId?: string) {
+    return this.request<{ workspaceIds: string[] }>("workspace/insertBefore", {
+      workspaceId,
+      ...(beforeWorkspaceId ? { beforeWorkspaceId } : {}),
     });
   }
-  goalEdit(sessionId: string, ref: { id: string; revision: number }, objective?: string) {
-    return this.post<unknown>("goal.edit", { sessionId, ref, ...(objective !== undefined ? { objective } : {}) });
-  }
-  goalResume(sessionId: string, ref: { id: string; revision: number }) {
-    return this.post<unknown>("goal.resume", { sessionId, ref });
-  }
-  goalPause(sessionId: string, ref: { id: string; revision: number }) {
-    return this.post<unknown>("goal.pause", { sessionId, ref });
-  }
-  goalComplete(sessionId: string, ref: { id: string; revision: number }) {
-    return this.post<unknown>("goal.complete", { sessionId, ref });
-  }
-  goalClear(sessionId: string, ref: { id: string; revision: number }) {
-    return this.post<{ cleared: true }>("goal.clear", { sessionId, ref });
+  moveSessionInWorkspace(workspaceId: string, sessionId: string, beforeSessionId?: string) {
+    return this.request<{ workspace: WorkspaceItem }>("workspace/insertSessionBefore", {
+      workspaceId,
+      sessionId,
+      ...(beforeSessionId ? { beforeSessionId } : {}),
+    });
   }
 
-  // skills / subagents
+  // ---------- 预设作者(agentPresets.*:0.1.2 端点改名 + 返回类型调整) ----------
+
+  listAgentPresets() {
+    return this.request<AgentPresetListValue>("agentPresets/list", {});
+  }
+  async selectAgentPreset(sessionId: string, agentPreset: string) {
+    const picked = await this.request<string>("agentPresets/select", { agentId: sessionId, agentPreset });
+    return { agentPreset: picked };
+  }
+  readAgentPreset(agentPreset: string) {
+    return this.request<AgentPresetReadValue>("agentPresets/read", { agentPreset });
+  }
+  async copyAgentPreset(from: string, agentPreset: string, name?: string) {
+    await this.request<void>("agentPresets/copy", { from, id: agentPreset, ...(name ? { name } : {}) });
+    return { agentPreset };
+  }
+  async openAgentPresetDocument(agentPreset: string) {
+    return this.request<{ opened: boolean; path?: string }>("settings/openAgentPresetDirectory", { agentPreset });
+  }
+  async removeAgentPreset(agentPreset: string) {
+    await this.request<void>("agentPresets/deletePreset", { id: agentPreset });
+    return {};
+  }
+
+  // ---------- goals(0.1.2:goals/*,payload {agentId, ref, request}) ----------
+
+  goalCreate(sessionId: string, objective: string, maxGoalRounds?: number) {
+    return this.request<CreateGoalResult>("goals/create", {
+      agentId: sessionId,
+      request: { objective, ...(maxGoalRounds !== undefined ? { maxGoalRounds } : {}) },
+    });
+  }
+  goalEdit(sessionId: string, ref: GoalRef, objective?: string) {
+    return this.request<unknown>("goals/edit", {
+      agentId: sessionId,
+      ref,
+      request: { ...(objective !== undefined ? { objective } : {}) },
+    });
+  }
+  goalResume(sessionId: string, ref: GoalRef) {
+    return this.request<unknown>("goals/resume", { agentId: sessionId, ref });
+  }
+  goalPause(sessionId: string, ref: GoalRef) {
+    return this.request<unknown>("goals/pause", { agentId: sessionId, ref });
+  }
+  goalComplete(sessionId: string, ref: GoalRef) {
+    return this.request<unknown>("goals/complete", { agentId: sessionId, ref });
+  }
+  goalClear(sessionId: string, ref: GoalRef) {
+    return this.request<{ ref: GoalRef }>("goals/clear", { agentId: sessionId, ref });
+  }
+
+  // ---------- skills / subagents(0.1.2 端点改名;history 并入 session/page) ----------
+
   listSkills(sessionId: string) {
-    return this.post<{ skills: { name: string; description: string; whenToUse?: string; modelInvocable: boolean; source?: string }[] }>("skill.list", { sessionId });
-  }
-  listSubagents(parentSessionId: string) {
-    return this.post<{ entries: SubagentEntry[]; parentAvailable: boolean }>("subagent.list", { parentSessionId });
-  }
-  subagentHistory(parentSessionId: string, childSessionId: string, mode: "one-shot" | "continuable", beforeSeq?: number, maxMessages?: number) {
-    return this.post<{ events: { event: { type: string; seq: number; time: number; data: any }; view?: unknown }[]; hasMore: boolean }>(
-      "subagent.history",
-      {
-        parentSessionId,
-        childSessionId,
-        mode,
-        ...(beforeSeq !== undefined ? { beforeSeq } : {}),
-        ...(maxMessages !== undefined ? { maxMessages } : {}),
-      },
+    return this.request<{ skills: { name: string; description: string; whenToUse?: string; modelInvocable: boolean; source?: string }[] }>(
+      "skills/list",
+      { sessionId },
     );
   }
+  listSubagents(parentSessionId: string) {
+    return this.request<{ entries: SubagentEntry[]; parentAvailable: boolean }>("subagents/list", { parentSessionId });
+  }
+  /** 0.1.2 起子代理历史 = session/page + subagent 地址。 */
+  subagentHistory(parentSessionId: string, childSessionId: string, mode: "one-shot" | "continuable", throughSeq: number, beforeSeq?: number, maxMessages?: number) {
+    return this.request<SessionHistoryValue>("session/page", {
+      address: { kind: "subagent", parentSessionId, childSessionId, mode },
+      throughSeq,
+      ...(beforeSeq !== undefined ? { beforeSeq } : {}),
+      ...(maxMessages !== undefined ? { maxMessages } : {}),
+    });
+  }
   subagentPrompt(parentSessionId: string, childSessionId: string, text: string) {
-    return this.post<SubagentPromptReceipt>("subagent.prompt", {
+    return this.request<SubagentPromptReceipt>("subagents/prompt", {
+      requestId: randomUUID(),
       parentSessionId,
       childSessionId,
       mode: "continuable",
@@ -460,9 +663,9 @@ export class DshApiClient {
     });
   }
   subagentInterrupt(parentSessionId: string, childSessionId: string) {
-    return this.post<{ accepted: true }>("subagent.interrupt", {
-      parentSessionId,
+    return this.request<{ accepted: true }>("subagents/interruptByParent", {
       childSessionId,
+      parentSessionId,
       mode: "continuable",
     });
   }
@@ -470,162 +673,119 @@ export class DshApiClient {
   // ---------- 设置 / 凭据 / LLM 目录 ----------
 
   settingsDescribe() {
-    return this.post<SettingsDescribeValue>("settings.describe", {}, 60_000);
+    return this.request<SettingsDescribeValue>("settings/describe", {}, 60_000);
   }
-  settingsOpenDocument() {
-    return this.post<{ opened: true }>("settings.openDocument", {});
+  async settingsOpenDocument() {
+    await this.request<{ opened: true }>("settings/openSettingsDocument", {}, 60_000);
+    return { opened: true as const };
   }
   settingsUpdate(ns: string, patch: object, expectedRevision?: number) {
-    return this.post<SettingsNamespaceView>("settings.update", { ns, patch, ...(expectedRevision !== undefined ? { expectedRevision } : {}) }, 60_000);
+    return this.request<SettingsNamespaceView>("settings/update", { ns, patch, ...(expectedRevision !== undefined ? { expectedRevision } : {}) }, 60_000);
   }
   settingsReplace(ns: string, section: object, expectedRevision?: number) {
-    return this.post<SettingsNamespaceView>("settings.replace", { ns, section, ...(expectedRevision !== undefined ? { expectedRevision } : {}) }, 60_000);
+    return this.request<SettingsNamespaceView>("settings/replace", { ns, section, ...(expectedRevision !== undefined ? { expectedRevision } : {}) }, 60_000);
   }
   settingsMutate(ns: string, ops: SettingsPathOpView[], expectedRevision?: number) {
-    return this.post<SettingsNamespaceView>("settings.mutate", { ns, ops, ...(expectedRevision !== undefined ? { expectedRevision } : {}) }, 60_000);
+    return this.request<SettingsNamespaceView>("settings/mutate", { ns, ops, ...(expectedRevision !== undefined ? { expectedRevision } : {}) }, 60_000);
   }
   credentialsDescribe(refs: string[]) {
-    return this.post<{ credentials: Record<string, CredentialView> }>("credentials.describe", { refs });
+    return this.request<{ credentials: Record<string, CredentialView> }>("credentials/describe", { refs });
   }
-  credentialsSet(ref: string, value: string) {
-    return this.post<Record<string, never>>("credentials.set", { ref, value });
+  async credentialsSet(ref: string, value: string) {
+    await this.request<void>("credentials/set", { ref, value });
+    return {};
   }
-  credentialsUnset(ref: string) {
-    return this.post<Record<string, never>>("credentials.unset", { ref });
+  async credentialsUnset(ref: string) {
+    await this.request<void>("credentials/unset", { ref });
+    return {};
   }
-  llmProviders() {
-    return this.post<{ providers: ConfigurableProviderView[] }>("llm.providers", {}, 60_000);
+  /** 0.1.2 llm.providers → llm/listProviders(仅活跃路由: {id,name})。 */
+  async llmProviders() {
+    const rows = await this.request<{ id: string; name: string }[]>("llm/listProviders", {}, 60_000);
+    return { providers: rows.map((r) => ({ provider: r.id, displayName: r.name, settingsNs: "", settingsPath: [], active: true } as ConfigurableProviderView)) };
   }
+  /** 0.1.2 起 llm.models 并入 session/modelCatalog。 */
   llmModels() {
-    return this.post<{ groups: SessionModelsValue["groups"]; failures: SessionModelsValue["failures"] }>("llm.models", {}, 60_000);
+    return this.request<{ groups: SessionModelsValue["groups"]; failures: SessionModelsValue["failures"] }>("session/modelCatalog", {}, 60_000);
   }
   llmDiscoverModels(payload: { settingsNs: string; provider?: string; baseURL?: string; api?: string; apiKey?: string }) {
-    return this.post<{ models: DiscoveredModelView[] }>("llm.discoverModels", payload, 60_000);
+    const { settingsNs, ...request } = payload;
+    return this.request<{ models: DiscoveredModelView[] }>(
+      "llm/discoverModels",
+      { settingsNs, request: { ...(request.provider !== undefined ? { provider: request.provider } : {}), ...(request.baseURL !== undefined ? { baseURL: request.baseURL } : {}), ...(request.api !== undefined ? { api: request.api } : {}), ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}) } },
+      60_000,
+    );
   }
 
-  // ---------- /api/respond ----------
+  // ---------- @ 引用(rc.8 网页端 @ 菜单同款;0.1.2 契约不变) ----------
 
-  async respond(answer: ApprovalAnswer | QuestionAnswer, frameRpcId: string): Promise<{ accepted: boolean }> {
-    const res = await fetch(`${this.baseUrl}/api/respond`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        type: "client-response",
-        rpcId: frameRpcId,
-        result: { ok: true, value: answer },
-      }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!res.ok) throw new Error(`DSH transport failure for /api/respond: HTTP ${res.status}`);
-    const receipt = (await res.json()) as { accepted: boolean; reason?: string };
-    if (!receipt.accepted) throw new Error(`DSH respond rejected: ${receipt.reason ?? "unknown"}`);
-    return receipt;
+  /** @ 文件/文件夹候选(相对会话 cwd;kind: file | directory)。 */
+  fileReferenceList(agentId: string, query: string) {
+    return this.request<{ path: string; kind: "file" | "directory" }[]>("fileReferences/list", { agentId, query });
   }
 
-  respondApproval(sessionId: string, approvalId: string, outcome: "allowed-once" | "rejected", frameRpcId: string) {
-    return this.respond({ sessionId, approvalId, outcome }, frameRpcId);
+  /** @ Session 候选(含可直接插入草稿的 markdown 提及)。 */
+  sessionReferenceCandidates(agentId: string, query: string) {
+    return this.request<
+      { sessionId: string; label: string; cwd?: string; createdAt: number; mention: string }[]
+    >("sessionReferenceResolver/candidates", { agentId, query });
   }
 
-  respondQuestion(sessionId: string, answer: QuestionAnswer["answer"], frameRpcId: string) {
-    return this.respond({ sessionId, answer }, frameRpcId);
+  // ---------- Cordis 动态插件(dynamicCordisRunner remote;端点与参数名 0.1.2 不变) ----------
+
+  cordisInventory() {
+    return this.request<CordisPluginRow[]>("dynamicCordisRunner/inventory", {});
   }
 
-  /** 取消提问/计划审批(网页端 pending.cancel 同款:错误信封 code=cancelled)。 */
-  async cancelQuestion(frameRpcId: string): Promise<{ accepted: boolean }> {
-    const res = await fetch(`${this.baseUrl}/api/respond`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        type: "client-response",
-        rpcId: frameRpcId,
-        result: { ok: false, error: { code: "cancelled", message: "user cancelled the question" } },
-      }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!res.ok) throw new Error(`DSH transport failure for /api/respond: HTTP ${res.status}`);
-    const receipt = (await res.json()) as { accepted: boolean; reason?: string };
-    if (!receipt.accepted) throw new Error(`DSH respond rejected: ${receipt.reason ?? "unknown"}`);
-    return receipt;
+  cordisRunHostHalf(args: {
+    agentId: string;
+    pluginId: string;
+    packageId: string;
+    mode: "run" | "update";
+    requestId: string | null;
+    approveFutureVersions: boolean;
+  }) {
+    return this.request<CordisRunHostHalfResult>("dynamicCordisRunner/runHostHalf", args, 60_000);
   }
 
-  // ---------- WebSocket 事件流 ----------
-
-  private wsUrl(path: string): string {
-    const u = new URL(this.baseUrl);
-    u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
-    u.pathname = path;
-    return u.toString();
+  cordisResolveRequestRun(requestId: string, resolution: CordisRunResolution) {
+    return this.request<{ accepted: boolean }>("dynamicCordisRunner/resolveRequestRun", { requestId, resolution });
   }
 
-  private connectMux() {
-    if (this.disposed || this.wsMux !== undefined || !this.muxOnFrame) return;
-    this.onState?.("mux", "connecting");
-    const ws = new WebSocket(this.wsUrl("/api/events.mux"), { handshakeTimeout: 5000 });
-    this.wsMux = ws;
-    ws.on("open", () => {
-      this.retryDelayMux = 1000;
-      this.onState?.("mux", "connected");
-    });
-    ws.on("message", (data) => {
-      try {
-        const full = JSON.parse(data.toString()) as ServerRequest;
-        if (full.type === "server-request") this.muxOnFrame?.({ rpcId: full.rpcId, frame: full.payload as MuxFrame });
-      } catch {
-        // 丢弃损坏帧(与官方客户端行为一致)
-      }
-    });
-    ws.on("error", () => {});
-    ws.on("close", () => {
-      if (this.wsMux === ws) this.wsMux = undefined;
-      if (this.disposed) return;
-      this.onState?.("mux", "disconnected");
-      const delay = this.retryDelayMux;
-      this.retryDelayMux = Math.min(delay * 2, 15_000);
-      this.reconnectTimerMux = setTimeout(() => this.connectMux(), delay);
-    });
+  cordisSettleUserRun(agentId: string, pluginId: string, resolution: CordisRunResolution) {
+    return this.request<CordisRunHostHalfResult>("dynamicCordisRunner/settleUserRun", { agentId, pluginId, resolution });
   }
 
-  private connectHost() {
-    if (this.disposed || this.wsHost !== undefined || !this.hostOnFrame) return;
-    this.onState?.("host", "connecting");
-    const ws = new WebSocket(this.wsUrl("/api/events.host"), { handshakeTimeout: 5000 });
-    this.wsHost = ws;
-    ws.on("open", () => {
-      this.retryDelayHost = 1000;
-      this.onState?.("host", "connected");
-    });
-    ws.on("message", (data) => {
-      try {
-        const full = JSON.parse(data.toString()) as ServerRequest;
-        if (full.type === "server-request") this.hostOnFrame?.({ rpcId: full.rpcId, frame: full.payload as HostFrame });
-      } catch {
-        // 丢弃损坏帧
-      }
-    });
-    ws.on("error", () => {});
-    ws.on("close", () => {
-      if (this.wsHost === ws) this.wsHost = undefined;
-      if (this.disposed) return;
-      this.onState?.("host", "disconnected");
-      const delay = this.retryDelayHost;
-      this.retryDelayHost = Math.min(delay * 2, 15_000);
-      this.reconnectTimerHost = setTimeout(() => this.connectHost(), delay);
-    });
+  cordisStopFromPanel(agentId: string, pluginId: string) {
+    return this.request<CordisStopResult>("dynamicCordisRunner/stopFromPanel", { agentId, pluginId });
+  }
+
+  cordisUndefineFromPanel(agentId: string, pluginId: string) {
+    return this.request<CordisUndefineResult>("dynamicCordisRunner/undefineFromPanel", { agentId, pluginId });
+  }
+
+  // ---------- 旧版帧入口保留(兼容外部调用;0.1.2 不再有 events.mux/host,由 hub 改为新流) ----------
+
+  private headers(): Record<string, string> {
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (this.cookie) headers.cookie = this.cookie;
+    return headers;
+  }
+
+  connectLegacyMux() {
+    // 0.1.2 起不存在 events.mux:直接启动 remote.mux 以提供等价流
+    this.connectMux();
   }
 
   dispose() {
     this.disposed = true;
-    if (this.reconnectTimerMux) clearTimeout(this.reconnectTimerMux);
-    if (this.reconnectTimerHost) clearTimeout(this.reconnectTimerHost);
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     try {
-      this.wsMux?.removeAllListeners();
-      this.wsMux?.close();
+      const ws = this.ws;
+      this.ws = undefined;
+      ws?.removeAllListeners();
+      ws?.close();
     } catch {}
-    try {
-      this.wsHost?.removeAllListeners();
-      this.wsHost?.close();
-    } catch {}
-    this.wsMux = undefined;
-    this.wsHost = undefined;
+    this.streams.clear();
   }
 }

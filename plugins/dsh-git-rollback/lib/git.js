@@ -24,7 +24,8 @@ export function gitExec(gitBin, cwd, args, opts = {}) {
         // 避免与用户自己的 `git add`/`git commit`/同步流程互踩;
         // opts.indexFile → GIT_INDEX_FILE:快照用独立临时索引,完全绕开真实 .git/index。
         const env = { ...process.env, GIT_OPTIONAL_LOCKS: "0" };
-        if (typeof opts.indexFile === "string" && opts.indexFile) env.GIT_INDEX_FILE = opts.indexFile;
+        if (typeof opts.indexFile === "string" && opts.indexFile)
+            env.GIT_INDEX_FILE = opts.indexFile;
         let attempt = 0;
         const run = () => {
             // core.quotepath=false:非 ASCII 路径(中文等)在 diff/status/ls-files 输出中

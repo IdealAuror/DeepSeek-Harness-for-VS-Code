@@ -1,4 +1,4 @@
-import { type RollbackRecord } from "./types.js";
+import type { RollbackRecord } from "./types.js";
 export interface GitResult {
     ok: boolean;
     stdout: string;
@@ -14,6 +14,10 @@ export interface GitExecOptions {
      * trim 会删掉末尾换行导致 `git apply` 报 "corrupt patch"。
      */
     trim?: boolean;
+    /** GIT_INDEX_FILE:快照用独立临时索引,完全绕开真实 .git/index。 */
+    indexFile?: string;
+    /** index.lock 争用时自动等待重试(写索引命令如 read-tree/reset 开启)。 */
+    retryLock?: boolean;
 }
 export declare function gitExec(gitBin: string, cwd: string, args: string[], opts?: GitExecOptions): Promise<GitResult>;
 /** commit-tree 的身份兜底:缺失 user.name/email 时以插件身份重试。(-c 必须在子命令之前) */

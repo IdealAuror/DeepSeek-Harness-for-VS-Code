@@ -1,10 +1,15 @@
-import { type CheckpointEntry } from "./types.js";
+import type { CheckpointEntry } from "./types.js";
 export interface CheckpointOptions {
     gitBin: string;
     refPrefix: string;
     commitPrefix: string;
 }
-/** 全量快照提交:返回新提交;无改动(树与父一致)时返回 {ok, unchanged}。 */
+/**
+ * 全量快照提交:返回新提交;无改动(树与父一致)时返回 {ok, unchanged}。
+ * 整个快照用独立的 GIT_INDEX_FILE 临时索引完成 —— git add/write-tree/read-tree
+ * 都只读写该临时索引,绝不触碰真实的 .git/index,因此不会产生/争用 index.lock,
+ * 与用户自己的 `git add`/`git commit`/同步流程互不干扰。
+ */
 export declare function snapshotCommit(gitBin: string, cwd: string, parent: string | undefined, message: string): Promise<{
     ok: boolean;
     commit?: string;

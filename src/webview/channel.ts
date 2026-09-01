@@ -858,6 +858,8 @@ export class ChatChannel {
         const cwd = folderCwd();
         try {
           const sessionId = await this.hub.createSession(cwd);
+          // 0.1.2:会话事件只随 session/follow 流推送,新建后立即跟随
+          void this.hub.openSession(sessionId);
           void this.hub.applyDefaultReasoningEffort(sessionId);
           void this.hub.updateCurrentModel(sessionId);
           await this.pushFullState();

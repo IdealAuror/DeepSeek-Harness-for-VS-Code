@@ -7,6 +7,10 @@
  *   (unborn 分支为根提交);链保证所有检查点从一个 ref 可达,git gc 不回收。
  * - 记录文件是回合号等元数据的权威来源;提交信息也嵌入回合号,
  *   记录丢失时可从链上提交信息重建(foldCheckpoints)。
+ *
+ * 0.1.10 起快照改用独立临时索引(GIT_INDEX_FILE):快照全部 git 操作只读写临时
+ * 索引,不触碰真实 .git/index,因此不产生/争用 index.lock,与用户自己的
+ * `git add`/`git commit`/同步流程互不干扰。
  */
 import { commitTree, checkpointRef, gitExec, readRecord, untrackedList, writeRecord } from "./git.js";
 import { MAX_CHECKPOINTS, } from "./types.js";

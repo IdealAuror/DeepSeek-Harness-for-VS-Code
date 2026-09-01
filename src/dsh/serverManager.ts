@@ -39,14 +39,20 @@ export interface ServerStatus {
   message?: string;
 }
 
+/** 从启动器日志解析 $events 授权 URL 的启动 token(0.1.2 起 /api 需要 cookie)。 */
+const AUTH_URL_PATTERN = /token=([A-Za-z0-9_-]+)/;
+
 /**
  * DSH Web 服务器生命周期管理:探测、按需自动启动(`dsh web`,回退 npx)、停止(仅限由本扩展启动的进程)。
+ * 0.1.2 起:服务器会打印带 token 的授权 URL;探测以"收到任意 HTTP 响应"为存活判据。
  */
 export class ServerManager {
   private child: ChildProcess | undefined;
   private startedByUs = false;
   private starting = false;
   private lastStatus: ServerStatus;
+  /** 0.1.2 授权 token(从启动日志的授权 URL 解析;外部启动的服务器无此值)。 */
+  private authToken: string | undefined;
 
   constructor(
     private readonly cfg: ServerManagerConfig,
@@ -59,19 +65,25 @@ export class ServerManager {
     return this.lastStatus;
   }
 
+  /** 0.1.2 授权 token(启动时从日志解析;外部启动时为 undefined)。 */
+  get launchToken(): string | undefined {
+    return this.authToken;
+  }
+
   private setStatus(patch: Partial<ServerStatus>) {
     this.lastStatus = { ...this.lastStatus, ...patch };
     this.onStatus(this.lastStatus);
   }
 
-  /** 探测服务器是否在运行(2 秒超时)。 */
+  /** 探测服务器是否在运行(2 秒超时);收到任意 HTTP 响应即视为存活(0.1.2 的 401 认证响应也算)。 */
   async isUp(timeoutMs = 2500): Promise<boolean> {
     try {
       const res = await fetch(this.cfg.url + "/", {
         signal: AbortSignal.timeout(timeoutMs),
         headers: { accept: "text/html" },
       });
-      return res.ok;
+      // 200(旧版)/401(新版未授权)/303(带 token 时)均表示服务器在
+      return res.status >= 200 && res.status < 600;
     } catch {
       return false;
     }
@@ -208,6 +220,12 @@ export class ServerManager {
     const deadline = Date.now() + this.cfg.timeoutSec * 1000;
     while (Date.now() < deadline) {
       if (await this.isUp(800)) {
+        // 解析启动日志中的授权 URL(0.1.2 起打印 dsh web: http://…/?token=…);
+        // 首次安装时 URL 行出现较晚,轮询几秒
+        for (let attempt = 0; attempt < 8 && !this.authToken; attempt++) {
+          this.captureLaunchToken(logFile);
+          if (!this.authToken) await sleep(500);
+        }
         this.log("服务器已就绪");
         return { ok: true };
       }
@@ -251,6 +269,21 @@ export class ServerManager {
     }
   }
 
+  /** 从启动日志抓取授权 URL 的 token(0.1.2 起 /api 需要签名 cookie)。 */
+  private captureLaunchToken(logFile: string): void {
+    if (this.authToken) return;
+    try {
+      const text = readFileSync(logFile, "utf8");
+      const match = text.match(AUTH_URL_PATTERN);
+      if (match?.[1]) {
+        this.authToken = match[1];
+        this.log(`已解析授权 token(0.1.2 浏览器认证)`);
+      }
+    } catch {
+      // 日志尚不可读:首次安装输出较慢,后续请求 401 时会重试解析
+    }
+  }
+
   /**
    * 找到可用的启动器,按可靠性排序:
    * 1. 用户配置的 dsh.command;
@@ -279,7 +312,7 @@ export class ServerManager {
       const r = await this.canRun(npx);
       if (r.ok) {
         this.log(`npx 可用: ${npx}`);
-        return { launcher: { kind: "shell", command: `${npx} --yes @deepseek-ai/dsh@latest`, label: `npx ${npx}` } };
+        return { launcher: { kind: "shell", command: `${npx} --yes @deepseek-ai/dsh@alpha`, label: `npx ${npx}` } };
       }
       failures.push(`${npx}:${r.detail}`);
     }
@@ -287,7 +320,7 @@ export class ServerManager {
       const r = await this.canRun(npm);
       if (r.ok) {
         this.log(`npm 可用: ${npm}`);
-        return { launcher: { kind: "shell", command: `${npm} exec --yes @deepseek-ai/dsh@latest`, label: `npm exec ${npm}` } };
+        return { launcher: { kind: "shell", command: `${npm} exec --yes @deepseek-ai/dsh@alpha`, label: `npm exec ${npm}` } };
       }
       failures.push(`${npm}:${r.detail}`);
     }
@@ -369,7 +402,7 @@ export class ServerManager {
       return Promise.resolve(true);
     }
     mkdirSync(l.installDir, { recursive: true });
-    this.log(`首次直接安装 @deepseek-ai/dsh@latest → ${l.installDir}(下载依赖,可能较慢)`);
+    this.log(`首次直接安装 @deepseek-ai/dsh@alpha → ${l.installDir}(下载依赖,可能较慢)`);
     return new Promise((resolve) => {
       let settled = false;
       const finish = (ok: boolean) => {
@@ -392,7 +425,7 @@ export class ServerManager {
       try {
         child = spawn(
           l.node,
-          [l.npmCli, "install", "--prefix", l.installDir, "--no-fund", "--no-audit", "--no-update-notifier", "@deepseek-ai/dsh@latest"],
+          [l.npmCli, "install", "--prefix", l.installDir, "--no-fund", "--no-audit", "--no-update-notifier", "@deepseek-ai/dsh@alpha"],
           { shell: false, stdio: ["ignore", fd, fd], windowsHide: true },
         );
         child.once("error", (error) => {
@@ -415,8 +448,8 @@ export class ServerManager {
   }
 
   /**
-   * 升级扩展自有目录的直接安装(@deepseek-ai/dsh@latest 强制重装)。
-   * 用于服务器版本落后(如旧 rc 缺少新功能:low 推理强度 / 新线协议)时手动升级;
+   * 升级扩展自有目录的直接安装(@deepseek-ai/dsh@alpha 强制重装)。
+   * 用于服务器版本落后(alpha 通道 = 最新已发布版本,0.1.2-alpha.4)时手动升级;
    * 返回是否成功。调用方负责停服/重启编排。
    */
   async updateDirectInstall(): Promise<boolean> {
@@ -428,7 +461,7 @@ export class ServerManager {
     } catch {
       // 无旧日志,忽略
     }
-    this.log(`升级直接安装 @deepseek-ai/dsh@latest → ${l.installDir}(日志 ${logFile})`);
+    this.log(`升级直接安装 @deepseek-ai/dsh@alpha → ${l.installDir}(日志 ${logFile})`);
     const fd = openSync(logFile, "a");
     try {
       return await this.ensureDirectInstall(l, fd, true);
