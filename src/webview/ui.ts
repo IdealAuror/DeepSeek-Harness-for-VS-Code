@@ -421,6 +421,10 @@ const ICONS = {
   check: "M20 6 9 17l-5-5",
   // 信息(圆圈 i,系统提示词卡片)
   info: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z|M12 16v-4|M12 8h.01",
+  // 闪电(模型+思考胶囊)
+  bolt: "M13 2 3 14h7l-1 8 10-12h-7z",
+  // 右箭头(胶囊展开指示)
+  chevronRight: "M9 18 15 12 9 6",
 };
 
 /** 创建简约线条 SVG 图标;paths 用 | 分隔多个 path d。 */
@@ -540,6 +544,7 @@ const EN_TEXT: Record<string, string> = {
   "在浏览器中打开": "Open in browser",
   "— 选择会话 —": "— Select session —",
   "思考深度(推理强度)": "Thinking depth (reasoning effort)",
+  "模型与思考(推理强度)": "Model & thinking effort",
   "模型": "Model",
   "Agent 预设": "Agent preset",
   "读写权限(沙箱模式 + 审批策略)": "Read/write permission (sandbox + approval policy)",
@@ -1611,15 +1616,26 @@ function toolSelect(label: string, title: string): { wrap: HTMLElement; select: 
   return { wrap, select, label: labelEl };
 }
 
-// 思考:位于输入框右上角;模型:位于输入框右下角;预设:位于输入框右上角(仅新会话)
-const thinkingTool = toolSelect(t("思考"), t("思考深度(推理强度)"));
-const thinkingSelect = thinkingTool.select;
-const modelTool = toolSelect(t("模型"), t("模型"));
-const modelSelect = modelTool.select;
+// 预设:输入框右上角(仅新会话)
 const presetTool = toolSelect(t("预设"), t("Agent 预设"));
 const presetSelect = presetTool.select;
-const composerRight = el("div", "composer-right");
-composerRight.append(modelTool.wrap);
+
+// 模型 + 思考整合为一个胶囊(参考截图:⚡ 模型名 · 思考名 + 分段思考滑块 + 模型列表弹层)
+const modelPill = el("div", "model-pill");
+const modelPillHead = el("button", "model-pill-head");
+modelPillHead.type = "button";
+modelPillHead.title = t("模型与思考(推理强度)");
+const modelPillSpark = el("span", "model-pill-spark");
+modelPillSpark.append(lineIcon(ICONS.bolt, 13));
+const modelPillLabel = el("span", "model-pill-label");
+const modelPillChevron = el("span", "model-pill-chevron");
+modelPillChevron.append(lineIcon(ICONS.chevronRight, 12));
+modelPillHead.append(modelPillSpark, modelPillLabel, modelPillChevron);
+const thinkSeg = el("div", "think-seg");
+thinkSeg.title = t("思考深度(推理强度)");
+const modelPillPop = el("div", "model-pill-pop");
+modelPillPop.hidden = true;
+modelPill.append(modelPillHead, thinkSeg, modelPillPop);
 
 const inputWrap = el("div", "input-wrap");
 const input = el("textarea", "input");
@@ -1662,16 +1678,16 @@ btnAddAttach.title = t("添加文件或文件夹到对话");
 btnAddAttach.append(lineIcon(ICONS.plus, 12));
 const permissionTool = toolSelect(t("权限"), t("读写权限(沙箱模式 + 审批策略)"));
 const permissionSelect = permissionTool.select;
-// 底部行:左下角 / 命令菜单、权限选择;右下角 模型
-composerBottom.append(btnPlus, permissionTool.wrap, composerRight);
+// 底部行:左下角 / 命令菜单、权限选择
+composerBottom.append(btnPlus, permissionTool.wrap);
 // 发送提示:独占一行,位于输入框左下角
 const hint = el("div", "hint", t("Enter 发送 · Shift+Enter 换行"));
 const hintRow = el("div", "hint-row");
 hintRow.append(hint);
-// 对话框顶部行:左上角 ＋ 添加文件 + 附件芯片;右上角 预设胶囊(仅新会话) + 思考
+// 对话框顶部行:左上角 ＋ 添加文件 + 附件芯片;右上角 预设胶囊(仅新会话) + 模型/思考胶囊
 const composerTop = el("div", "composer-top");
 attachmentsRow.append(btnAddAttach);
-composerTop.append(attachmentsRow, presetTool.wrap, thinkingTool.wrap);
+composerTop.append(attachmentsRow, presetTool.wrap, modelPill);
 composer.append(composerTop, inputWrap, composerBottom, hintRow);
 
 // 添加文件/文件夹选择菜单(挂在 composer 内)
@@ -2211,15 +2227,14 @@ sessionBtn.addEventListener("click", (e) => {
 document.addEventListener("click", (e) => {
   if (!sessionList.hidden && !sessionSelectWrap.contains(e.target as Node)) sessionList.hidden = true;
 });
-thinkingSelect.addEventListener("change", () => {
-  const m = state.models?.current;
-  if (!m) return;
-  vscode.postMessage({ kind: "selectModel", provider: m.provider, model: m.model, effort: thinkingSelect.value });
+modelPillHead.addEventListener("click", (e) => {
+  e.stopPropagation();
+  renderModelPill();
+  modelPillPop.hidden = !modelPillPop.hidden;
 });
-modelSelect.addEventListener("change", () => {
-  const [provider, model] = modelSelect.value.split("|");
-  if (!provider || !model) return;
-  vscode.postMessage({ kind: "selectModel", provider, model, effort: state.models?.current?.reasoningEffort });
+// 点击弹层外部关闭
+document.addEventListener("click", (e) => {
+  if (!modelPillPop.hidden && !modelPill.contains(e.target as Node)) modelPillPop.hidden = true;
 });
 presetSelect.addEventListener("change", () => {
   if (presetSelect.value) vscode.postMessage({ kind: "selectPreset", preset: presetSelect.value });
@@ -3624,52 +3639,95 @@ function toolIcon(name?: string): string {
   return "🔧";
 }
 
-function renderThinkingSelect() {
+/** 本地即时更新当前模型的推理强度(乐观显示;服务器 projection 到达后再次校准)。 */
+function setLocalModelEffort(effort: string | undefined) {
+  const m = state.models?.current;
+  if (!m) return;
+  const next = { ...m };
+  if (effort) next.reasoningEffort = effort;
+  else delete next.reasoningEffort;
+  state.models = { ...state.models!, current: next };
+  renderThinkingSeg();
+  renderModelPill();
+}
+
+function renderThinkingSeg() {
+  thinkSeg.innerHTML = "";
   const m = state.models?.current;
   const modelInfo = m ? findModel(m.provider, m.model) : undefined;
   const efforts = modelInfo?.reasoning?.efforts ?? [];
-  thinkingSelect.innerHTML = "";
-  const def = el("option", undefined, t("默认"));
-  def.value = "";
-  thinkingSelect.append(def);
-  for (const effort of efforts) {
-    const option = el("option", undefined, effort.name || effort.id);
-    option.value = effort.id;
-    if (m?.reasoningEffort === effort.id) option.selected = true;
-    thinkingSelect.append(option);
+  if (efforts.length === 0) {
+    thinkSeg.hidden = true;
+    return;
   }
-  thinkingSelect.disabled = efforts.length === 0;
+  thinkSeg.hidden = false;
+  // 默认(不指定推理强度)作为第一个圆点
+  const def = el("button", "think-seg-dot" + (m && !m.reasoningEffort ? " active" : ""));
+  def.type = "button";
+  def.title = t("默认");
+  def.addEventListener("click", () => {
+    if (!m) return;
+    setLocalModelEffort(undefined);
+    vscode.postMessage({ kind: "selectModel", provider: m.provider, model: m.model });
+  });
+  thinkSeg.append(def);
+  for (const effort of efforts) {
+    const dot = el("button", "think-seg-dot" + (m?.reasoningEffort === effort.id ? " active" : ""));
+    dot.type = "button";
+    dot.title = effort.name || effort.id;
+    dot.addEventListener("click", () => {
+      if (!m) return;
+      setLocalModelEffort(effort.id);
+      vscode.postMessage({ kind: "selectModel", provider: m.provider, model: m.model, effort: effort.id });
+    });
+    thinkSeg.append(dot);
+  }
 }
 
 function findModel(provider: string, model: string): ModelInfo | undefined {
   return state.models?.groups.find((g) => g.id === provider)?.models.find((m) => m.id === model);
 }
 
-function renderModelSelect() {
+function renderModelPill() {
   const m = state.models?.current;
+  const modelInfo = m ? findModel(m.provider, m.model) : undefined;
+  const effortName = m?.reasoningEffort
+    ? (modelInfo?.reasoning?.efforts.find((e) => e.id === m.reasoningEffort)?.name ?? m.reasoningEffort)
+    : t("默认");
+  modelPillLabel.textContent = m ? `${modelName(m.provider, m.model)} · ${effortName}` : t("模型");
+  modelPillHead.disabled = (state.models?.groups?.length ?? 0) === 0;
+  if (modelPillPop.hidden) return;
+  modelPillPop.innerHTML = "";
   const groups = state.models?.groups ?? [];
   const multiGroup = groups.length > 1;
-  modelSelect.innerHTML = "";
   let currentInList = false;
   for (const g of groups) {
     for (const model of g.models) {
-      const option = el("option", undefined, multiGroup ? `${g.name} / ${model.name}` : model.name);
-      option.value = `${g.id}|${model.id}`;
+      const row = el("button", "model-pill-item");
+      row.type = "button";
+      row.append(el("span", "model-pill-item-name", multiGroup ? `${g.name} / ${model.name}` : model.name));
       if (m && m.provider === g.id && m.model === model.id) {
-        option.selected = true;
         currentInList = true;
+        row.append(el("span", "model-pill-item-check", "✓"));
       }
-      modelSelect.append(option);
+      row.addEventListener("click", () => {
+        modelPillPop.hidden = true;
+        vscode.postMessage({ kind: "selectModel", provider: g.id, model: model.id, effort: state.models?.current?.reasoningEffort });
+      });
+      modelPillPop.append(row);
     }
   }
   // 当前模型不在目录(例如临时模型)时,补一个只读占位项
   if (m && !currentInList) {
-    const option = el("option", undefined, modelName(m.provider, m.model));
-    option.value = `${m.provider}|${m.model}`;
-    option.selected = true;
-    modelSelect.prepend(option);
+    const row = el("button", "model-pill-item current-missing");
+    row.type = "button";
+    row.append(el("span", "model-pill-item-name", modelName(m.provider, m.model)));
+    row.append(el("span", "model-pill-item-check", "✓"));
+    row.addEventListener("click", () => {
+      modelPillPop.hidden = true;
+    });
+    modelPillPop.prepend(row);
   }
-  modelSelect.disabled = groups.length === 0;
 }
 
 function groupName(id: string): string {
@@ -4642,10 +4700,8 @@ function applyStaticLabels() {
   btnAddAttach.title = t("添加文件或文件夹到对话");
   btnBackToMain.title = t("回到主线(父会话)");
   input.placeholder = t("向 DeepSeek Harness 发送消息…");
-  thinkingTool.label.textContent = t("思考");
-  thinkingTool.wrap.title = t("思考深度(推理强度)");
-  modelTool.label.textContent = t("模型");
-  modelTool.wrap.title = t("模型");
+  modelPillHead.title = t("模型与思考(推理强度)");
+  thinkSeg.title = t("思考深度(推理强度)");
   presetTool.label.textContent = t("预设");
   presetTool.wrap.title = t("Agent 预设");
   permissionTool.label.textContent = t("权限");
@@ -4686,8 +4742,8 @@ function applyLanguage() {
   state.replaying = false;
   chipsSignature = "";
   renderSessions();
-  renderThinkingSelect();
-  renderModelSelect();
+  renderThinkingSeg();
+  renderModelPill();
   renderPresetSelect();
   renderPermissionsSelect();
   renderGoal();
@@ -4772,8 +4828,8 @@ function handleMessage(msg: any) {
       renderSessions();
       renderPending();
       renderGoal();
-      renderThinkingSelect();
-      renderModelSelect();
+      renderThinkingSeg();
+      renderModelPill();
       renderPresetSelect();
       renderPermissionsSelect();
       renderContextBar();
@@ -4884,8 +4940,8 @@ function handleMessage(msg: any) {
     case "models": {
       if (msg.sessionId && msg.sessionId !== state.current) break;
       state.models = msg.value;
-      renderThinkingSelect();
-      renderModelSelect();
+      renderThinkingSeg();
+      renderModelPill();
       // 模型信息到达后,回填所有已渲染回答头部的模型名(保留思考耗时与 token 消耗)
       const modelName = state.models?.current?.model ?? "DeepSeek";
       for (const n of state.nodes) {
