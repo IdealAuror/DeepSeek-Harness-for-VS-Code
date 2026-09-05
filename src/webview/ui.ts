@@ -1598,12 +1598,8 @@ turnStatus.append(turnStatusDot, turnStatusText);
 // 输入区(Codex 风格:左上角添加文件 + 大输入框 + 底部操作行)
 const composer = el("div", "composer");
 
-// 附件行:左上角 + 添加文件按钮 + 附件芯片(自动附加激活文件 / 手动选择)
+// 附件行:左上角 + 添加文件/图片按钮 + 附件芯片(自动附加激活文件 / 手动选择 / 图片,均在同一行,+ 号右侧)
 const attachmentsRow = el("div", "attachments-row");
-
-// 图片附件行(官方 image 内容块,独立于文本附件)
-const imagesRow = el("div", "images-row");
-imagesRow.hidden = true;
 
 function toolSelect(label: string, title: string): { wrap: HTMLElement; select: HTMLSelectElement; label: HTMLElement } {
   const wrap = el("label", "tool-item");
@@ -1676,7 +1672,7 @@ hintRow.append(hint);
 const composerTop = el("div", "composer-top");
 attachmentsRow.append(btnAddAttach);
 composerTop.append(attachmentsRow, presetTool.wrap, thinkingTool.wrap);
-composer.append(imagesRow, composerTop, inputWrap, composerBottom, hintRow);
+composer.append(composerTop, inputWrap, composerBottom, hintRow);
 
 // 添加文件/文件夹选择菜单(挂在 composer 内)
 const attachMenu = el("div", "plus-menu attach-menu");
@@ -3833,6 +3829,8 @@ function renderAttachments() {
     });
     attachmentsRow.append(chip);
   }
+  // 图片附件与文件/文件夹附件同行(+ 号右侧):统一渲染,避免图片单独出现在输入区顶部
+  renderImageChips();
 }
 
 /** 同步自动附加的激活文件。 */
@@ -3852,10 +3850,9 @@ function syncActiveFileAttachment() {
   renderAttachments();
 }
 
-// ---------- 图片附件(官方 image 内容块) ----------
+// ---------- 图片附件(官方 image 内容块,与文件附件同排显示) ----------
 
 function renderImageChips() {
-  imagesRow.innerHTML = "";
   for (const img of state.images) {
     const chip = el("span", "attachment-chip image-chip");
     chip.title = img.name;
@@ -3865,12 +3862,11 @@ function renderImageChips() {
     close.addEventListener("click", (e) => {
       e.stopPropagation();
       state.images = state.images.filter((x) => x !== img);
-      renderImageChips();
+      renderAttachments();
     });
     chip.append(close);
-    imagesRow.append(chip);
+    attachmentsRow.append(chip);
   }
-  imagesRow.hidden = state.images.length === 0;
 }
 
 function applyAttachmentData(msg: { attachmentId: string; data?: string; mediaType?: string; error?: string }) {
@@ -4594,7 +4590,6 @@ function applyLanguage() {
   renderStatsLine();
   renderTodos();
   renderAttachments();
-  renderImageChips();
   updateSubagentButton();
   renderPending();
   renderLoadMoreButton();
@@ -5030,7 +5025,7 @@ function handleMessage(msg: any) {
         if (state.images.length >= 8) break;
         state.images.push({ data: img.data, mediaType: img.mediaType ?? "image/png", name: img.name ?? "image" });
       }
-      renderImageChips();
+      renderAttachments();
       break;
     }
     case "attachmentData":
@@ -5091,7 +5086,7 @@ function sendCurrent() {
     attachments: state.attachments.map(({ kind, path }) => ({ kind, path })),
   });
   state.images = [];
-  renderImageChips();
+  renderAttachments();
   input.value = "";
   autoResize();
   updateSendButton();

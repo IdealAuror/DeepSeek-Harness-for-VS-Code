@@ -3806,14 +3806,7 @@ body {
 
 .msg-image-error { font-size: 10.5px; color: var(--vscode-errorForeground, #f48771); }
 
-/* 图片附件芯片行 */
-
-.images-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 4px 10px 0;
-}
+/* 图片附件芯片(与文件/文件夹附件同排显示,+ 号右侧;虚线与文件附件区分) */
 
 .image-chip { border-style: dashed; }
 
