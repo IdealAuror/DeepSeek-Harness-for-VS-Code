@@ -1335,9 +1335,10 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+  height: 26px;
   min-width: 0;
   max-width: 100%;
-  padding: 2px 8px;
+  padding: 0 8px;
   border: 1px solid var(--dsh-border);
   border-radius: 999px;
   background: var(--dsh-bg);
@@ -2688,8 +2689,8 @@ body {
 }
 
 .plus-btn {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   border: 1px dashed var(--dsh-muted);
   background: transparent;
@@ -2702,6 +2703,198 @@ body {
 .plus-btn:hover {
   border-color: var(--dsh-accent);
   color: var(--dsh-accent);
+}
+
+/* ---------- 权限:收起为「⚠ 图标 + 名称 ▾」胶囊,弹层:标题 + 选项(名称/说明/✓,参考截图样式) ---------- */
+.permission-pill {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.permission-pill-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 8px;
+  border: 1px solid var(--dsh-border);
+  border-radius: 999px;
+  background: var(--dsh-bg);
+  color: var(--dsh-fg);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.permission-pill-head:hover {
+  border-color: var(--dsh-accent);
+}
+
+.permission-pill-head:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.permission-pill-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.permission-pill-text {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.permission-pill-chevron {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--dsh-muted);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.permission-pill.open .permission-pill-chevron {
+  transform: rotate(180deg);
+}
+
+.permission-pill-head:hover .permission-pill-chevron {
+  color: var(--dsh-accent);
+}
+
+/* 危险(完全访问):黄色警告图标 + 黄色文字(参考截图高亮样式) */
+.permission-pill.danger .permission-pill-icon,
+.permission-pill.danger .permission-pill-text {
+  color: #e2b93d;
+}
+
+/* 弹层:位于按钮上方,标题行 + 选项列表 */
+.permission-pill-pop {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  width: min(92vw, 340px);
+  padding: 4px;
+  border: 1px solid var(--dsh-border);
+  border-radius: 10px;
+  background: var(--vscode-menu-background, #252526);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.permission-pill-pop[hidden] {
+  display: none;
+}
+
+.pp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px 5px;
+}
+
+.pp-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--dsh-fg);
+}
+
+.pp-more {
+  border: 0;
+  background: transparent;
+  color: var(--dsh-muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.pp-more:hover {
+  color: var(--dsh-accent);
+}
+
+.permission-pill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 48vh;
+  overflow-y: auto;
+}
+
+.pp-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsh-fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pp-opt:hover {
+  background: var(--vscode-menu-selectionBackground, #04395e);
+  color: var(--vscode-menu-selectionForeground, #ffffff);
+}
+
+.pp-opt-icon {
+  width: 20px;
+  display: flex;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.pp-opt-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pp-opt-name {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pp-opt-desc {
+  font-size: 11px;
+  color: var(--dsh-muted);
+}
+
+.pp-opt-check {
+  flex-shrink: 0;
+  align-self: center;
+  color: var(--dsh-accent);
+  font-weight: 700;
+}
+
+.pp-opt.danger .pp-opt-icon,
+.pp-opt.danger .pp-opt-name,
+.pp-opt.danger .pp-opt-check {
+  color: #e2b93d;
+}
+
+.pp-opt.current .pp-opt-name {
+  color: var(--dsh-accent);
+}
+
+.pp-opt.danger.current .pp-opt-name {
+  color: #e2b93d;
 }
 
 .plus-menu {

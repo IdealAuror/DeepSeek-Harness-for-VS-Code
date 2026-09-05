@@ -546,6 +546,12 @@ const EN_TEXT: Record<string, string> = {
   "思考深度(推理强度)": "Thinking depth (reasoning effort)",
   "模型与思考(推理强度)": "Model & thinking effort",
   "模型": "Model",
+  "应如何批准操作?": "How should operations be approved?",
+  "了解更多": "Learn more",
+  "只读访问:不能修改文件或执行命令;外部文件与网络访问按策略询问": "Read-only: cannot modify files or run commands; external files and network access are asked per policy",
+  "可修改工作区内的文件;外部文件与网络访问按策略询问": "Can modify files inside the workspace; external files and network access are asked per policy",
+  "可不受限制地访问互联网和你电脑上的任何文件": "Unrestricted access to the internet and any file on your computer",
+  "自定义组合(在设置中编辑)": "Custom combination (edit in settings)",
   "Agent 预设": "Agent preset",
   "读写权限(沙箱模式 + 审批策略)": "Read/write permission (sandbox + approval policy)",
   "输入命令(/plan、/compact、.claude 命令…)": "Enter command (/plan, /compact, .claude commands…)",
@@ -1681,18 +1687,37 @@ conversationBottom.append(btnBackToMain, todoPanel, contextBar);
 const statusRow = el("div", "status-row");
 statusRow.append(turnStatus, modeChips);
 
-// 输入框底部行:左下角 / 命令菜单、权限选择;右下角 模型
+// 输入框底部行:左下角 / 命令菜单、权限;右下角 模型 + 思考按钮
 const composerBottom = el("div", "composer-bottom");
 const btnPlus = el("button", "btn-icon-btn plus-btn");
 btnPlus.title = t("输入命令(/plan、/compact、.claude 命令…)");
-btnPlus.append(lineIcon(ICONS.slash, 15));
+btnPlus.append(lineIcon(ICONS.slash, 13));
 const btnAddAttach = el("button", "attach-add-btn");
 btnAddAttach.title = t("添加文件或文件夹到对话");
 btnAddAttach.append(lineIcon(ICONS.plus, 12));
-const permissionTool = toolSelect(t("权限"), t("读写权限(沙箱模式 + 审批策略)"));
-const permissionSelect = permissionTool.select;
-// 底部行:左下角 / 命令菜单、权限选择;右下角 模型 + 思考按钮
-composerBottom.append(btnPlus, permissionTool.wrap, modelPill);
+// 权限:收起为「⚠ 图标 + 名称 ▾」胶囊(参考截图样式);点开弹层:标题 + 了解更多 + 选项(名称/说明/✓)
+const permissionPill = el("div", "permission-pill");
+const permissionPillHead = el("button", "permission-pill-head");
+permissionPillHead.type = "button";
+permissionPillHead.title = t("读写权限(沙箱模式 + 审批策略)");
+const permissionPillIcon = el("span", "permission-pill-icon");
+const permissionPillText = el("span", "permission-pill-text");
+const permissionPillChevron = el("span", "permission-pill-chevron");
+permissionPillChevron.append(lineIcon(ICONS.down2, 12));
+permissionPillHead.append(permissionPillIcon, permissionPillText, permissionPillChevron);
+const permissionPillPop = el("div", "permission-pill-pop");
+permissionPillPop.hidden = true;
+const ppHeader = el("div", "pp-header");
+const ppTitle = el("span", "pp-title", t("应如何批准操作?"));
+const ppMore = el("button", "pp-more");
+ppMore.type = "button";
+ppMore.textContent = t("了解更多");
+const permissionPillList = el("div", "permission-pill-list");
+ppHeader.append(ppTitle, ppMore);
+permissionPillPop.append(ppHeader, permissionPillList);
+permissionPill.append(permissionPillHead, permissionPillPop);
+// 底部行:左下角 / 命令菜单、权限;右下角 模型 + 思考按钮
+composerBottom.append(btnPlus, permissionPill, modelPill);
 // 发送提示:独占一行,位于输入框左下角
 const hint = el("div", "hint", t("Enter 发送 · Shift+Enter 换行"));
 const hintRow = el("div", "hint-row");
@@ -2264,14 +2289,31 @@ document.addEventListener("keydown", (e) => {
 presetSelect.addEventListener("change", () => {
   if (presetSelect.value) vscode.postMessage({ kind: "selectPreset", preset: presetSelect.value });
 });
-permissionSelect.addEventListener("change", () => {
-  // 直接应用:通过官方 /permission 命令切换(新回合即按该权限执行),命令消息以系统提示折叠显示,不进入输入框
-  if (!permissionSelect.value) return;
-  const preset = permissionSelect.value;
-  // 乐观更新:立即显示所选值,服务器 projection 到达后再次校准
-  state.permissions = { ...(state.permissions ?? { options: [], currentValue: "" }), currentValue: preset };
-  renderPermissionsSelect();
-  vscode.postMessage({ kind: "permission", preset });
+permissionPillHead.addEventListener("click", (e) => {
+  e.stopPropagation();
+  renderPermissionPill();
+  const opening = permissionPillPop.hidden;
+  permissionPillPop.hidden = !opening;
+  permissionPill.classList.toggle("open", opening);
+});
+ppMore.addEventListener("click", (e) => {
+  e.stopPropagation();
+  permissionPillPop.hidden = true;
+  permissionPill.classList.remove("open");
+  panels.openSettings();
+});
+// 点击弹层外部或 Esc 关闭
+document.addEventListener("click", (e) => {
+  if (!permissionPillPop.hidden && !permissionPill.contains(e.target as Node)) {
+    permissionPillPop.hidden = true;
+    permissionPill.classList.remove("open");
+  }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !permissionPillPop.hidden) {
+    permissionPillPop.hidden = true;
+    permissionPill.classList.remove("open");
+  }
 });
 
 // 底部回退 / 分支操作
@@ -2341,7 +2383,7 @@ function renderPlusMenu() {
         permissionLabel(option.value, option.name),
         () => {
           state.permissions = { ...(state.permissions ?? { options: [], currentValue: "" }), currentValue: option.value };
-          renderPermissionsSelect();
+          renderPermissionPill();
           vscode.postMessage({ kind: "permission", preset: option.value });
         },
         (option.description ?? "") + (danger ? (option.description ? " · " : "") + t("危险:放开全部沙箱与审批限制") : ""),
@@ -3786,29 +3828,59 @@ function presetLabel(id: string): string {
   return presetName(id);
 }
 
-function renderPermissionsSelect() {
+/** 权限预设说明(服务器未提供时用本地文案;参考截图:名称 + 灰色说明行)。 */
+const PERMISSION_DESCRIPTIONS: Record<string, string> = {
+  "read-only": "只读访问:不能修改文件或执行命令;外部文件与网络访问按策略询问",
+  "workspace-write": "可修改工作区内的文件;外部文件与网络访问按策略询问",
+  "danger-full-access": "可不受限制地访问互联网和你电脑上的任何文件",
+  custom: "自定义组合(在设置中编辑)",
+};
+
+function permissionDescription(value: string): string {
+  return t(PERMISSION_DESCRIPTIONS[value] ?? "");
+}
+
+/** 权限胶囊 = 收起态(⚠ 图标 + 名称 + ▾)+ 弹层(标题/了解更多 + 选项列表:图标/名称/说明/✓)。 */
+function renderPermissionPill() {
   const options = state.permissions?.options ?? [];
-  permissionSelect.innerHTML = "";
-  const current = state.permissions?.currentValue;
-  let currentInList = false;
+  const current = state.permissions?.currentValue ?? "";
+  const currentOpt = options.find((o) => o.value === current);
+  permissionPillIcon.textContent = permissionIcon(current);
+  permissionPillText.textContent = permissionLabel(current, currentOpt?.name);
+  permissionPill.classList.toggle("danger", PERMISSION_ICONS[current]?.danger === true);
+  permissionPillHead.disabled = options.length === 0;
+  if (permissionPillPop.hidden) return;
+  permissionPillList.innerHTML = "";
   for (const option of options) {
-    // 选项文本带权限图标:完全访问(危险)使用红色 ⚠️ 警告标识
-    const item = el("option", undefined, `${permissionIcon(option.value)} ${permissionLabel(option.value, option.name)}`);
-    item.value = option.value;
-    if (current === option.value) {
-      item.selected = true;
-      currentInList = true;
-    }
-    permissionSelect.append(item);
+    const danger = PERMISSION_ICONS[option.value]?.danger === true;
+    const row = el("button", "pp-opt" + (danger ? " danger" : "") + (current === option.value ? " current" : ""));
+    row.type = "button";
+    row.append(el("span", "pp-opt-icon", permissionIcon(option.value)));
+    const body = el("span", "pp-opt-body");
+    body.append(el("span", "pp-opt-name", permissionLabel(option.value, option.name)));
+    const desc = option.description ?? permissionDescription(option.value);
+    if (desc) body.append(el("span", "pp-opt-desc", desc));
+    row.append(body);
+    if (current === option.value) row.append(el("span", "pp-opt-check", "✓"));
+    row.addEventListener("click", () => {
+      state.permissions = { ...(state.permissions ?? { options: [], currentValue: "" }), currentValue: option.value };
+      renderPermissionPill();
+      permissionPillPop.hidden = true;
+      permissionPill.classList.remove("open");
+      vscode.postMessage({ kind: "permission", preset: option.value });
+    });
+    permissionPillList.append(row);
   }
   // 当前权限不在预设列表(自定义组合)时,补一个只读占位项
-  if (current && !currentInList) {
-    const item = el("option", undefined, `${permissionIcon(current)} ${permissionLabel(current)}`);
-    item.value = current;
-    item.selected = true;
-    permissionSelect.prepend(item);
+  if (current && !currentOpt) {
+    const row = el("button", "pp-opt current");
+    row.type = "button";
+    row.append(el("span", "pp-opt-icon", permissionIcon(current)));
+    const body = el("span", "pp-opt-body");
+    body.append(el("span", "pp-opt-name", permissionLabel(current)));
+    row.append(body, el("span", "pp-opt-check", "✓"));
+    permissionPillList.prepend(row);
   }
-  permissionSelect.disabled = options.length === 0;
 }
 
 function renderContextBar() {
@@ -4721,8 +4793,9 @@ function applyStaticLabels() {
   mppThinkLabel.textContent = t("思考深度(推理强度)");
   presetTool.label.textContent = t("预设");
   presetTool.wrap.title = t("Agent 预设");
-  permissionTool.label.textContent = t("权限");
-  permissionTool.wrap.title = t("读写权限(沙箱模式 + 审批策略)");
+  permissionPillHead.title = t("读写权限(沙箱模式 + 审批策略)");
+  ppTitle.textContent = t("应如何批准操作?");
+  ppMore.textContent = t("了解更多");
   menuRename.textContent = t("✏️ 重命名会话");
   menuFork.textContent = t("🔀 分叉会话");
   menuArchive.textContent = t("🗄️ 归档会话");
@@ -4762,7 +4835,7 @@ function applyLanguage() {
   renderThinkingSeg();
   renderModelPill();
   renderPresetSelect();
-  renderPermissionsSelect();
+  renderPermissionPill();
   renderGoal();
   renderModeChips();
   renderContextBar();
@@ -4848,7 +4921,7 @@ function handleMessage(msg: any) {
       renderThinkingSeg();
       renderModelPill();
       renderPresetSelect();
-      renderPermissionsSelect();
+      renderPermissionPill();
       renderContextBar();
       renderStatsLine();
       renderTodos();
@@ -5081,7 +5154,7 @@ function handleMessage(msg: any) {
     case "permissions": {
       if (msg.sessionId && msg.sessionId !== state.current) break;
       state.permissions = msg.value;
-      renderPermissionsSelect();
+      renderPermissionPill();
       break;
     }
     case "approval": {
