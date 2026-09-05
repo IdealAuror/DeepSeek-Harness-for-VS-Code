@@ -1,7 +1,8 @@
 /**
- * DSH Web API 的 wire 类型(对齐 @deepseek-ai/dsh 0.1.2-alpha.4 的 Typert Remote 契约)。
+ * DSH Web API 的 wire 类型(对齐 @deepseek-ai/dsh 0.1.2-rc.1 的 Typert Remote 契约)。
  *
- * 0.1.1-rc.2 → 0.1.2-alpha.4 协议变更:
+ * 0.1.1-rc.2 → 0.1.2-rc.1 协议变更(alpha.4 → rc.1 无线协议变化,已按发布的
+ * rc.1(0.1.2-rc.1)核对全部端点/流/认证契约):
  * - 一元端点为斜杠形式 <namespace>/<method>(session.list → session/list),
  *   载荷信封 payload 必须是恰好一个字段的 { args: {...} };
  * - host.describe 已移除(版本/主机信息改由 $events 打开帧 + session/modelCatalog 提供);

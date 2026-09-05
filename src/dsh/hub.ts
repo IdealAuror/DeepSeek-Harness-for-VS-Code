@@ -41,7 +41,7 @@ export interface HubDeps {
 
 const HISTORY_PAGE_MESSAGES = 60;
 
-/** 中枢:服务器 + API 客户端 + 会话存储的统一入口(0.1.2-alpha.4 线协议)。 */
+/** 中枢:服务器 + API 客户端 + 会话存储的统一入口(0.1.2-rc.1 线协议)。 */
 export class DshHub {
   readonly store = new SessionStore();
   readonly client: DshApiClient;
@@ -173,10 +173,10 @@ export class DshHub {
     try {
       describe = await this.client.ping();
     } catch (error) {
-      if (error instanceof DshAuthError) {
-        // 服务器在,但外部启动且未授权:明确提示
+      if (error instanceof DshAuthError || this.isLegacyError(error)) {
+        // 服务器在,但未授权(外部启动)或仍是旧版服务器:明确提示
         this.statusState.serverUp = true;
-        this.statusState.message = error.message;
+        this.statusState.message = this.errorMessage(error);
         this.emitStatus();
         return false;
       }
@@ -205,16 +205,26 @@ export class DshHub {
       this.deps.onNotice?.(ensured.message ?? this.deps.t?.("hub.serverUnavailable") ?? "DSH server unavailable", "error");
       return { ok: false, message: ensured.message };
     }
-    // 从启动器日志解析的授权 URL 获取启动 token(0.1.2 起 /api 需要 cookie)
-    const token = this.server.launchToken;
-    if (token) this.client.setLaunchToken(token);
+    this.syncLaunchTokenFromServer();
     let describe;
     try {
       describe = await this.client.ping();
     } catch (error) {
-      const msg = error instanceof DshAuthError ? error.message : `DSH server at ${this.deps.url} is not responding`;
-      this.deps.onNotice?.(msg, "error");
-      return { ok: false, message: msg };
+      if (error instanceof DshAuthError && this.server.refreshLaunchToken()) {
+        // 服务器由上一个扩展实例(或终端)启动:从常见日志补取授权 token 后再试一次
+        this.syncLaunchTokenFromServer();
+        try {
+          describe = await this.client.ping();
+        } catch (retryError) {
+          const msg = this.errorMessage(retryError);
+          this.deps.onNotice?.(msg, "error");
+          return { ok: false, message: msg };
+        }
+      } else {
+        const msg = this.errorMessage(error);
+        this.deps.onNotice?.(msg, "error");
+        return { ok: false, message: msg };
+      }
     }
     if (describe === undefined) {
       const msg = this.deps.t?.("hub.serverNoResponse", { url: this.deps.url }) ?? `DSH server at ${this.deps.url} is not responding`;
@@ -228,6 +238,24 @@ export class DshHub {
     this.client.startStreams();
     await this.refreshSessions();
     return { ok: true };
+  }
+
+  /** 把服务器管理器已解析的授权 token 同步给 API 客户端。 */
+  private syncLaunchTokenFromServer() {
+    const token = this.server.launchToken;
+    if (token) this.client.setLaunchToken(token);
+  }
+
+  /** 旧版服务器(0.1.1-及更早)探测结果。 */
+  private isLegacyError(error: unknown): boolean {
+    return error instanceof DshApiError && error.code === "server-old-version";
+  }
+
+  /** 把 ping 失败转换为面向用户的提示文案。 */
+  private errorMessage(error: unknown): string {
+    if (error instanceof DshApiError && error.code === "server-old-version") return error.message;
+    if (error instanceof DshAuthError) return error.message;
+    return this.deps.t?.("hub.serverNoResponse", { url: this.deps.url }) ?? `DSH server at ${this.deps.url} is not responding`;
   }
 
   /** 刷新会话列表(合并 host 帧之外的信息:标题、running、更新顺序)。 */
@@ -292,7 +320,7 @@ export class DshHub {
     if (this.followedSession === sessionId && this.followHandle) return;
     this.followHandle?.cancel();
     this.followedSession = sessionId;
-    this.followHandle = this.client.openStream("session/follow", { address: { kind: "session", sessionId }, maxMessages: HISTORY_PAGE_MESSAGES }, {
+    this.followHandle = this.client.openStream("session/follow", { request: { address: { kind: "session", sessionId }, maxMessages: HISTORY_PAGE_MESSAGES } }, {
       onItem: (value) => {
         const frame = value as SessionFollowFrame;
         if (frame.type === "snapshot") {
@@ -334,7 +362,7 @@ export class DshHub {
           resolve({ events: [], hasMore: false });
         }
       }, 10_000);
-      const handle = this.client.openStream("session/follow", { address: { kind: "subagent", parentSessionId, childSessionId, mode }, maxMessages: HISTORY_PAGE_MESSAGES }, {
+      const handle = this.client.openStream("session/follow", { request: { address: { kind: "subagent", parentSessionId, childSessionId, mode }, maxMessages: HISTORY_PAGE_MESSAGES } }, {
         onItem: (value) => {
           const frame = value as SessionFollowFrame;
           if (frame.type === "snapshot") {

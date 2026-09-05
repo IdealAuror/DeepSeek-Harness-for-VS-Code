@@ -70,6 +70,16 @@ export class ServerManager {
     return this.authToken;
   }
 
+  /** 从扩展常用日志位置补取授权 token(服务器由上一个扩展实例或终端启动的场景)。返回是否补全。 */
+  refreshLaunchToken(): boolean {
+    if (this.authToken) return true;
+    for (const file of [join(tmpdir(), "dsh-vscode-server.log"), join(tmpdir(), "dsh-vscode-server-install.log")]) {
+      this.captureLaunchToken(file);
+      if (this.authToken) return true;
+    }
+    return false;
+  }
+
   private setStatus(patch: Partial<ServerStatus>) {
     this.lastStatus = { ...this.lastStatus, ...patch };
     this.onStatus(this.lastStatus);
@@ -92,6 +102,8 @@ export class ServerManager {
   /** 确保服务器在运行;必要时按配置自动启动。返回是否可用。 */
   async ensure(): Promise<{ up: boolean; message?: string }> {
     if (await this.isUp()) {
+      // 服务器已在线(可能是旧版或外部启动):顺手从常见日志补取授权 token
+      this.refreshLaunchToken();
       this.setStatus({ up: true, starting: false });
       return { up: true };
     }
@@ -312,7 +324,7 @@ export class ServerManager {
       const r = await this.canRun(npx);
       if (r.ok) {
         this.log(`npx 可用: ${npx}`);
-        return { launcher: { kind: "shell", command: `${npx} --yes @deepseek-ai/dsh@alpha`, label: `npx ${npx}` } };
+        return { launcher: { kind: "shell", command: `${npx} --yes @deepseek-ai/dsh@latest`, label: `npx ${npx}` } };
       }
       failures.push(`${npx}:${r.detail}`);
     }
@@ -320,7 +332,7 @@ export class ServerManager {
       const r = await this.canRun(npm);
       if (r.ok) {
         this.log(`npm 可用: ${npm}`);
-        return { launcher: { kind: "shell", command: `${npm} exec --yes @deepseek-ai/dsh@alpha`, label: `npm exec ${npm}` } };
+        return { launcher: { kind: "shell", command: `${npm} exec --yes @deepseek-ai/dsh@latest`, label: `npm exec ${npm}` } };
       }
       failures.push(`${npm}:${r.detail}`);
     }
@@ -402,7 +414,7 @@ export class ServerManager {
       return Promise.resolve(true);
     }
     mkdirSync(l.installDir, { recursive: true });
-    this.log(`首次直接安装 @deepseek-ai/dsh@alpha → ${l.installDir}(下载依赖,可能较慢)`);
+    this.log(`首次直接安装 @deepseek-ai/dsh@latest → ${l.installDir}(下载依赖,可能较慢)`);
     return new Promise((resolve) => {
       let settled = false;
       const finish = (ok: boolean) => {
@@ -425,7 +437,7 @@ export class ServerManager {
       try {
         child = spawn(
           l.node,
-          [l.npmCli, "install", "--prefix", l.installDir, "--no-fund", "--no-audit", "--no-update-notifier", "@deepseek-ai/dsh@alpha"],
+          [l.npmCli, "install", "--prefix", l.installDir, "--no-fund", "--no-audit", "--no-update-notifier", "@deepseek-ai/dsh@latest"],
           { shell: false, stdio: ["ignore", fd, fd], windowsHide: true },
         );
         child.once("error", (error) => {
@@ -448,8 +460,8 @@ export class ServerManager {
   }
 
   /**
-   * 升级扩展自有目录的直接安装(@deepseek-ai/dsh@alpha 强制重装)。
-   * 用于服务器版本落后(alpha 通道 = 最新已发布版本,0.1.2-alpha.4)时手动升级;
+   * 升级扩展自有目录的直接安装(@deepseek-ai/dsh@latest 强制重装)。
+   * 用于服务器版本落后(latest 通道 = 最新已发布版本,0.1.2-rc.1)时手动升级;
    * 返回是否成功。调用方负责停服/重启编排。
    */
   async updateDirectInstall(): Promise<boolean> {
@@ -461,7 +473,7 @@ export class ServerManager {
     } catch {
       // 无旧日志,忽略
     }
-    this.log(`升级直接安装 @deepseek-ai/dsh@alpha → ${l.installDir}(日志 ${logFile})`);
+    this.log(`升级直接安装 @deepseek-ai/dsh@latest → ${l.installDir}(日志 ${logFile})`);
     const fd = openSync(logFile, "a");
     try {
       return await this.ensureDirectInstall(l, fd, true);

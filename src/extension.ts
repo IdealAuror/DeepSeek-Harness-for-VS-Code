@@ -382,8 +382,10 @@ export function activate(ctx: vscode.ExtensionContext) {
     if (watchTimer !== undefined) return;
     output.appendLine("[activate] 服务器离线,每 15 秒重新探测,上线后自动连接");
     watchTimer = setInterval(() => {
-      void hub.probe().then((ok) => {
-        if (ok) {
+      // 0.1.2:服务器下线(如用户停了旧版服务器)后自动用本扩展启动器拉起新服务器,
+      // 从而拿到授权 token(ensureReady 内部遵循 dsh.autoStart 配置)
+      void hub.ensureReady().then((result) => {
+        if (result.ok) {
           output.appendLine("[activate] 服务器已上线,停止探测");
           stopWatcher();
         }

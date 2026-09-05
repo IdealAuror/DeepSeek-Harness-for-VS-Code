@@ -74,7 +74,7 @@ export interface RemoteStreamHandle {
 }
 
 /**
- * DSH Web API 客户端(0.1.2-alpha.4 线协议):
+ * DSH Web API 客户端(0.1.2-rc.1 线协议):
  * - 一元:POST /api/<namespace>/<method>,信封 payload 为 {args:{...}};
  * - 流:/api/remote.mux 单 WebSocket 多路(session/follow、session/control、workspace/follow、$events);
  * - 认证:GET /?token=<启动 token> 交换签名 cookie,所有请求携带。
@@ -131,9 +131,9 @@ export class DshApiClient {
   private async doEnsureAuth(force: boolean): Promise<void> {
     const token = this.launchToken;
     if (!token) {
-      // 外部启动的服务器:无 token 可交换;等待 setLaunchToken/重试
-      if (!force) throw new DshAuthError("授权数据缺失(服务器由外部启动):请通过本扩展启动服务器,或重启后重试");
-      return;
+      throw new DshAuthError(
+        "服务器要求授权(0.1.2 起 /api 需要签名 cookie),但未取得启动 token:请先停止本机运行中的 dsh 服务器,再由本扩展重新启动(会自动获取授权)。",
+      );
     }
     const authUrl = new URL("/", new URL(this.baseUrl));
     authUrl.searchParams.set("token", token);
@@ -160,8 +160,7 @@ export class DshApiClient {
   }
 
   private async request<T>(method: string, args: unknown, timeoutMs = 30_000): Promise<T> {
-    const run = async (): Promise<T> => {
-      await this.ensureAuth();
+    const attempt = async (): Promise<{ status: number; rpcId: string; body?: ServerResponse }> => {
       const message: ClientRequest = { type: "client-request", rpcId: randomUUID(), method, payload: { args } };
       const headers: Record<string, string> = { "content-type": "application/json" };
       if (this.cookie) headers.cookie = this.cookie;
@@ -171,30 +170,41 @@ export class DshApiClient {
         body: JSON.stringify(message),
         signal: AbortSignal.timeout(timeoutMs),
       });
-      if (res.status === 401 || res.status === 403) {
-        // 可能 cookie 过期/服务器重启:若有 token 强制刷新一次
-        if (this.launchToken) {
-          this.cookie = undefined;
-          await this.ensureAuth(true);
-          return run();
-        }
-        throw new DshAuthError(`服务器要求授权(HTTP ${res.status}):请重启服务器或通过本扩展启动`);
-      }
-      if (!res.ok) throw new Error(`DSH transport failure for ${method}: HTTP ${res.status}`);
-      const full = (await res.json()) as ServerResponse;
-      if (full.rpcId !== message.rpcId) throw new Error(`DSH rpcId mismatch for ${method}`);
-      if (!full.result.ok) {
-        throw new DshApiError(full.result.error.code, full.result.error.message, full.result.error.details);
-      }
-      return full.result.value as T;
+      return {
+        status: res.status,
+        rpcId: message.rpcId,
+        body: res.ok ? ((await res.json()) as ServerResponse) : undefined,
+      };
     };
-    return run();
+
+    let out = await attempt();
+    if (out.status === 401 || out.status === 403) {
+      // 懒认证:只有服务器拒绝时才交换 cookie(0.1.2 起 /api 需要签名 cookie;
+      // 旧版服务器根本不需要认证,不能因为还没拿到 token 就拦住所有请求)
+      if (this.cookie !== undefined && this.launchToken) {
+        this.cookie = undefined; // cookie 可能过期:强制刷新一次
+        await this.ensureAuth(true);
+        out = await attempt();
+      } else {
+        await this.ensureAuth(); // 无 token 时抛 DshAuthError(提示如何解决)
+        out = await attempt();
+      }
+    }
+    if (out.status === 401 || out.status === 403) {
+      throw new DshAuthError(`服务器要求授权(HTTP ${out.status}):请通过本扩展启动服务器`);
+    }
+    if (!out.body) throw new Error(`DSH transport failure for ${method}: HTTP ${out.status}`);
+    if (out.body.rpcId !== out.rpcId) throw new Error(`DSH rpcId mismatch for ${method}`);
+    if (!out.body.result.ok) {
+      throw new DshApiError(out.body.result.error.code, out.body.result.error.message, out.body.result.error.details);
+    }
+    return out.body.result.value as T;
   }
 
   /** 探测服务器:0.1.2 起 host.describe 移除,改用 session/list 作为探测。 */
   async ping(timeoutMs = 3000): Promise<HostDescribeValue | undefined> {
     try {
-      await this.request<SessionListValue>("session/list", {}, timeoutMs);
+      await this.request<SessionListValue>("session/list", { _request: {} }, timeoutMs);
       return {
         version: "0.0.1",
         cwd: this.hostInfo?.home ?? "",
@@ -205,7 +215,32 @@ export class DshApiClient {
       };
     } catch (error) {
       if (error instanceof DshAuthError) throw error; // 认证问题让调用方明确提示
+      // 0.1.2 线协议端点 404:可能是旧版服务器(0.1.1- rc 及更早,点号端点)仍在运行
+      if (await this.isLegacyServer()) {
+        throw new DshApiError(
+          "server-old-version",
+          "检测到运行中的旧版 DSH 服务器(0.1.1-rc.2 及更早,无 0.1.2 线协议):请先停止该服务器,再由本扩展重新启动。",
+        );
+      }
       return undefined;
+    }
+  }
+
+  /** 旧版服务器探测:0.1.1-及更早的 host.describe 点号端点是否存活。 */
+  private async isLegacyServer(timeoutMs = 3000): Promise<boolean> {
+    try {
+      const message: ClientRequest = { type: "client-request", rpcId: randomUUID(), method: "host.describe", payload: {} };
+      const res = await fetch(`${this.baseUrl}/api/host.describe`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(message),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!res.ok) return false;
+      const full = (await res.json()) as ServerResponse;
+      return full.type === "server-response" && !!full.result?.ok;
+    } catch {
+      return false;
     }
   }
 
@@ -399,29 +434,30 @@ export class DshApiClient {
   }
 
   listSessions() {
-    return this.request<SessionListValue>("session/list", {});
+    // 0.1.2 网关示例:会话域单参数端点的参数名固定为 request(_request),必须包一层
+    return this.request<SessionListValue>("session/list", { _request: {} });
   }
   searchSessions(query: string) {
-    return this.request<SessionSearchValue>("session/search", { query });
+    return this.request<SessionSearchValue>("session/search", { request: { query } });
   }
   readAttachment(sessionId: string, attachmentId: string) {
     return this.request<{ attachment: { id: string; mediaType?: string; name?: string; [key: string]: unknown }; data: string }>(
       "session/attachment",
-      { sessionId, attachmentId },
+      { request: { sessionId, attachmentId } },
     );
   }
   createSession(payload: SessionCreateRequest) {
-    return this.request<SessionCreateValue>("session/create", payload);
+    return this.request<SessionCreateValue>("session/create", { request: payload });
   }
   /** 0.1.2 起历史分页改为 session/page(需要 throughSeq)。 */
   sessionHistory(payload: SessionHistoryRequest) {
-    return this.request<SessionHistoryValue>("session/page", payload);
+    return this.request<SessionHistoryValue>("session/page", { request: payload });
   }
   sendPrompt(payload: SessionPromptRequest) {
-    return this.request<SessionPromptValue>("session/prompt", payload, 60_000);
+    return this.request<SessionPromptValue>("session/prompt", { request: payload }, 60_000);
   }
   sendPromptParts(sessionId: string, mode: "queue" | "steer", content: PromptContentPart[]) {
-    return this.request<SessionPromptValue>("session/prompt", { requestId: randomUUID(), sessionId, mode, content }, 60_000);
+    return this.request<SessionPromptValue>("session/prompt", { request: { requestId: randomUUID(), sessionId, mode, content } }, 60_000);
   }
 
   /**
@@ -515,19 +551,19 @@ export class DshApiClient {
   }
 
   cancelSession(sessionId: string) {
-    return this.request<{ accepted: true }>("session/cancel", { sessionId });
+    return this.request<{ accepted: true }>("session/cancel", { request: { sessionId } });
   }
   updateQueue(sessionId: string, itemId: string, action: { kind: "edit"; content: unknown[] } | { kind: "remove" } | { kind: "steer" }) {
-    return this.request<{ accepted: true }>("session/updateQueue", { sessionId, itemId, action });
+    return this.request<{ accepted: true }>("session/updateQueue", { request: { sessionId, itemId, action } });
   }
   renameSession(sessionId: string, title: string) {
-    return this.request<{ title: string; seq: number }>("session/rename", { sessionId, title });
+    return this.request<{ title: string; seq: number }>("session/rename", { request: { sessionId, title } });
   }
   forkSession(sessionId: string, atSeq?: number) {
-    return this.request<{ sessionId: string }>("session/fork", { sessionId, ...(atSeq === undefined ? {} : { atSeq }) });
+    return this.request<{ sessionId: string }>("session/fork", { request: { sessionId, ...(atSeq === undefined ? {} : { atSeq }) } });
   }
   archiveSession(sessionId: string) {
-    return this.request<{ archivedSessionIds: string[] }>("workspace/archiveSession", { sessionId });
+    return this.request<{ archivedSessionIds: string[] }>("workspace/archiveSession", { request: { sessionId } });
   }
 
   /** 0.1.2 起模型目录统一在 session/modelCatalog(= 旧 session.models + llm.models);
@@ -549,35 +585,41 @@ export class DshApiClient {
 
   selectModel(sessionId: string, provider: string, model: string, reasoningEffort?: string) {
     return this.request<{ selected: { provider: string; model: string; reasoningEffort?: string } }>("session/selectModel", {
-      sessionId,
-      provider,
-      model,
-      ...(reasoningEffort ? { reasoningEffort } : {}),
+      request: {
+        sessionId,
+        provider,
+        model,
+        ...(reasoningEffort ? { reasoningEffort } : {}),
+      },
     });
   }
 
   // ---------- 工作区(列表改由 workspace/follow 流;此处仅保留变更类端点) ----------
 
   createWorkspace(path: string) {
-    return this.request<{ workspace: WorkspaceItem; created: boolean }>("workspace/create", { path });
+    return this.request<{ workspace: WorkspaceItem; created: boolean }>("workspace/create", { request: { path } });
   }
   renameWorkspace(workspaceId: string, title: string) {
-    return this.request<{ workspace: WorkspaceItem }>("workspace/rename", { workspaceId, title });
+    return this.request<{ workspace: WorkspaceItem }>("workspace/rename", { request: { workspaceId, title } });
   }
   deleteWorkspace(workspaceId: string) {
-    return this.request<{ deleted: true }>("workspace/delete", { workspaceId });
+    return this.request<{ deleted: true }>("workspace/delete", { request: { workspaceId } });
   }
   moveWorkspace(workspaceId: string, beforeWorkspaceId?: string) {
     return this.request<{ workspaceIds: string[] }>("workspace/insertBefore", {
-      workspaceId,
-      ...(beforeWorkspaceId ? { beforeWorkspaceId } : {}),
+      request: {
+        workspaceId,
+        ...(beforeWorkspaceId ? { beforeWorkspaceId } : {}),
+      },
     });
   }
   moveSessionInWorkspace(workspaceId: string, sessionId: string, beforeSessionId?: string) {
     return this.request<{ workspace: WorkspaceItem }>("workspace/insertSessionBefore", {
-      workspaceId,
-      sessionId,
-      ...(beforeSessionId ? { beforeSessionId } : {}),
+      request: {
+        workspaceId,
+        sessionId,
+        ...(beforeSessionId ? { beforeSessionId } : {}),
+      },
     });
   }
 
@@ -638,7 +680,7 @@ export class DshApiClient {
   listSkills(sessionId: string) {
     return this.request<{ skills: { name: string; description: string; whenToUse?: string; modelInvocable: boolean; source?: string }[] }>(
       "skills/list",
-      { sessionId },
+      { request: { sessionId } },
     );
   }
   listSubagents(parentSessionId: string) {
@@ -647,19 +689,23 @@ export class DshApiClient {
   /** 0.1.2 起子代理历史 = session/page + subagent 地址。 */
   subagentHistory(parentSessionId: string, childSessionId: string, mode: "one-shot" | "continuable", throughSeq: number, beforeSeq?: number, maxMessages?: number) {
     return this.request<SessionHistoryValue>("session/page", {
-      address: { kind: "subagent", parentSessionId, childSessionId, mode },
-      throughSeq,
-      ...(beforeSeq !== undefined ? { beforeSeq } : {}),
-      ...(maxMessages !== undefined ? { maxMessages } : {}),
+      request: {
+        address: { kind: "subagent", parentSessionId, childSessionId, mode },
+        throughSeq,
+        ...(beforeSeq !== undefined ? { beforeSeq } : {}),
+        ...(maxMessages !== undefined ? { maxMessages } : {}),
+      },
     });
   }
   subagentPrompt(parentSessionId: string, childSessionId: string, text: string) {
     return this.request<SubagentPromptReceipt>("subagents/prompt", {
-      requestId: randomUUID(),
-      parentSessionId,
-      childSessionId,
-      mode: "continuable",
-      content: [{ type: "text", text }],
+      request: {
+        requestId: randomUUID(),
+        parentSessionId,
+        childSessionId,
+        mode: "continuable",
+        content: [{ type: "text", text }],
+      },
     });
   }
   subagentInterrupt(parentSessionId: string, childSessionId: string) {
@@ -688,8 +734,9 @@ export class DshApiClient {
   settingsMutate(ns: string, ops: SettingsPathOpView[], expectedRevision?: number) {
     return this.request<SettingsNamespaceView>("settings/mutate", { ns, ops, ...(expectedRevision !== undefined ? { expectedRevision } : {}) }, 60_000);
   }
+  /** 0.1.2 起 credentials/describe 直接返回 {ref: CredentialInfo} 记录(无 credentials 包装)。 */
   credentialsDescribe(refs: string[]) {
-    return this.request<{ credentials: Record<string, CredentialView> }>("credentials/describe", { refs });
+    return this.request<Record<string, CredentialView>>("credentials/describe", { refs });
   }
   async credentialsSet(ref: string, value: string) {
     await this.request<void>("credentials/set", { ref, value });
