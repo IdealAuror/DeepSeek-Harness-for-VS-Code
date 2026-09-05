@@ -1620,18 +1620,20 @@ function toolSelect(label: string, title: string): { wrap: HTMLElement; select: 
 const presetTool = toolSelect(t("预设"), t("Agent 预设"));
 const presetSelect = presetTool.select;
 
-// 模型 + 思考整合为单个紧凑按钮(收起只显示 ⚡ 模型名 · 思考名 + ▾,宽度有上限,
-// 不会无限拉长);点击后弹出面板,在面板内分别选择模型与推理等级。
+// 模型 + 思考:收起为单个细长按钮(模型名可省略,推理强度始终可见:如 deepseek-v4-Fl... · Max),
+// 位于输入框右下角;点击弹出面板,在面板内分别选择模型与推理等级。
 const modelPill = el("div", "model-pill");
 const modelPillHead = el("button", "model-pill-head");
 modelPillHead.type = "button";
 modelPillHead.title = t("模型与思考(推理强度)");
-const modelPillSpark = el("span", "model-pill-spark");
-modelPillSpark.append(lineIcon(ICONS.bolt, 13));
 const modelPillLabel = el("span", "model-pill-label");
+const modelPillModel = el("span", "model-pill-model");
+const modelPillSep = el("span", "model-pill-sep", " · ");
+const modelPillEffort = el("span", "model-pill-effort");
+modelPillLabel.append(modelPillModel, modelPillSep, modelPillEffort);
 const modelPillChevron = el("span", "model-pill-chevron");
 modelPillChevron.append(lineIcon(ICONS.down2, 12));
-modelPillHead.append(modelPillSpark, modelPillLabel, modelPillChevron);
+modelPillHead.append(modelPillLabel, modelPillChevron);
 const modelPillPop = el("div", "model-pill-pop");
 modelPillPop.hidden = true;
 // 弹层第 1 节:模型列表(可滚动,宽度受限)
@@ -1689,16 +1691,16 @@ btnAddAttach.title = t("添加文件或文件夹到对话");
 btnAddAttach.append(lineIcon(ICONS.plus, 12));
 const permissionTool = toolSelect(t("权限"), t("读写权限(沙箱模式 + 审批策略)"));
 const permissionSelect = permissionTool.select;
-// 底部行:左下角 / 命令菜单、权限选择
-composerBottom.append(btnPlus, permissionTool.wrap);
+// 底部行:左下角 / 命令菜单、权限选择;右下角 模型 + 思考按钮
+composerBottom.append(btnPlus, permissionTool.wrap, modelPill);
 // 发送提示:独占一行,位于输入框左下角
 const hint = el("div", "hint", t("Enter 发送 · Shift+Enter 换行"));
 const hintRow = el("div", "hint-row");
 hintRow.append(hint);
-// 对话框顶部行:左上角 ＋ 添加文件 + 附件芯片;右上角 预设胶囊(仅新会话) + 模型/思考胶囊
+// 对话框顶部行:左上角 ＋ 添加文件 + 附件芯片;右上角 预设胶囊(仅新会话)
 const composerTop = el("div", "composer-top");
 attachmentsRow.append(btnAddAttach);
-composerTop.append(attachmentsRow, presetTool.wrap, modelPill);
+composerTop.append(attachmentsRow, presetTool.wrap);
 composer.append(composerTop, inputWrap, composerBottom, hintRow);
 
 // 添加文件/文件夹选择菜单(挂在 composer 内)
@@ -3709,7 +3711,9 @@ function renderModelPill() {
   const effortName = m?.reasoningEffort
     ? (modelInfo?.reasoning?.efforts.find((e) => e.id === m.reasoningEffort)?.name ?? m.reasoningEffort)
     : t("默认");
-  modelPillLabel.textContent = m ? `${modelName(m.provider, m.model)} · ${effortName}` : t("模型");
+  modelPillModel.textContent = m ? modelName(m.provider, m.model) : t("模型");
+  modelPillEffort.textContent = m ? effortName : "";
+  modelPillSep.hidden = !m;
   modelPillHead.disabled = (state.models?.groups?.length ?? 0) === 0;
   modelPillList.innerHTML = "";
   const groups = state.models?.groups ?? [];

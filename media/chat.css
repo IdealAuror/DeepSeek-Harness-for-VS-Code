@@ -1321,26 +1321,26 @@ body {
   max-width: 200px;
 }
 
-/* ---------- 模型 + 思考:收起为单个紧凑按钮,点开后弹层内分节选择 ---------- */
+/* ---------- 模型 + 思考:输入框右下角单个按钮,弹层内分节选择 ---------- */
 .model-pill {
   position: relative;
   display: flex;
-  flex-shrink: 1;
+  flex-shrink: 0;
   min-width: 0;
-  max-width: min(46%, 232px);
+  max-width: 100%;
+  margin-left: auto; /* 右下角 */
 }
 
 .model-pill-head {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
   min-width: 0;
   max-width: 100%;
-  padding: 5px 10px;
+  padding: 2px 8px;
   border: 1px solid var(--dsh-border);
   border-radius: 999px;
-  background: var(--dsh-input-bg);
+  background: var(--dsh-bg);
   color: var(--dsh-fg);
   font-size: 12px;
   cursor: pointer;
@@ -1354,12 +1354,6 @@ body {
 .model-pill-head:disabled {
   opacity: 0.55;
   cursor: default;
-}
-
-.model-pill-spark {
-  display: flex;
-  flex-shrink: 0;
-  color: var(--dsh-accent);
 }
 
 .model-pill-chevron {
@@ -1377,21 +1371,35 @@ body {
   color: var(--dsh-accent);
 }
 
-/* 收起态文本:模型名 · 思考名,超长省略,不把按钮撑宽 */
+/* 收起态文本:模型名可省略号截断;分隔符与推理强度始终可见(如 deepseek-v4-Fl... · Max) */
 .model-pill-label {
-  flex: 1;
+  display: flex;
+  align-items: center;
   min-width: 0;
-  max-width: 168px;
+}
+
+.model-pill-model {
+  max-width: 148px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-pill-sep {
+  flex-shrink: 0;
+  color: var(--dsh-muted);
+}
+
+.model-pill-effort {
+  flex-shrink: 0;
   white-space: nowrap;
   font-weight: 500;
 }
 
-/* 弹层:固定宽度上限,模型列表与推理等级分节,不会无限拉长 */
+/* 弹层:固定宽度上限,模型列表与推理等级分节,不会无限拉长;位于右下角按钮上方 */
 .model-pill-pop {
   position: absolute;
-  top: calc(100% + 6px);
+  bottom: calc(100% + 6px);
   right: 0;
   z-index: 120;
   display: flex;
