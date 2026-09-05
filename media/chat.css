@@ -1321,105 +1321,74 @@ body {
   max-width: 200px;
 }
 
-/* ---------- 模型 + 思考整合胶囊(参考网页端样式) ---------- */
+/* ---------- 模型 + 思考:收起为单个紧凑按钮,点开后弹层内分节选择 ---------- */
 .model-pill {
   position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex-shrink: 0;
-  min-width: 172px;
-  padding: 7px 8px 8px;
-  border: 1px solid var(--dsh-border);
-  border-radius: 12px;
-  background: var(--dsh-input-bg);
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: min(46%, 232px);
 }
 
 .model-pill-head {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
   min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  max-width: 100%;
+  padding: 5px 10px;
+  border: 1px solid var(--dsh-border);
+  border-radius: 999px;
+  background: var(--dsh-input-bg);
   color: var(--dsh-fg);
   font-size: 12px;
-  font-weight: 500;
-  text-align: left;
   cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.model-pill-head:hover {
+  border-color: var(--dsh-accent);
 }
 
 .model-pill-head:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: default;
 }
 
-.model-pill-spark,
-.model-pill-chevron {
+.model-pill-spark {
   display: flex;
   flex-shrink: 0;
   color: var(--dsh-accent);
 }
 
 .model-pill-chevron {
+  display: flex;
+  flex-shrink: 0;
   color: var(--dsh-muted);
   transition: transform 0.15s ease, color 0.15s ease;
 }
 
-.model-pill-head:hover .model-pill-chevron {
-  color: var(--dsh-accent);
-  transform: translateX(1px);
+.model-pill.open .model-pill-chevron {
+  transform: rotate(180deg);
 }
 
+.model-pill-head:hover .model-pill-chevron {
+  color: var(--dsh-accent);
+}
+
+/* 收起态文本:模型名 · 思考名,超长省略,不把按钮撑宽 */
 .model-pill-label {
   flex: 1;
   min-width: 0;
+  max-width: 168px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 500;
 }
 
-/* 思考分段圆点(默认 + 各推理强度;点击即切换) */
-.think-seg {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 5px;
-  height: 16px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: var(--vscode-editorWidget-background, #2a2a2a);
-}
-
-.think-seg[hidden] {
-  display: none;
-}
-
-.think-seg-dot {
-  width: 9px;
-  height: 9px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: var(--dsh-muted);
-  opacity: 0.45;
-  cursor: pointer;
-  transition: transform 0.12s ease, background 0.12s ease, opacity 0.12s ease, box-shadow 0.12s ease;
-}
-
-.think-seg-dot:hover {
-  transform: scale(1.3);
-  opacity: 0.85;
-}
-
-.think-seg-dot.active {
-  background: var(--dsh-accent);
-  opacity: 1;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsh-accent) 22%, transparent);
-}
-
-/* 模型列表弹层(锚定在胶囊下方) */
+/* 弹层:固定宽度上限,模型列表与推理等级分节,不会无限拉长 */
 .model-pill-pop {
   position: absolute;
   top: calc(100% + 6px);
@@ -1427,11 +1396,7 @@ body {
   z-index: 120;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  min-width: 230px;
-  max-width: 340px;
-  max-height: 44vh;
-  overflow-y: auto;
+  width: min(78vw, 260px);
   padding: 4px;
   border: 1px solid var(--dsh-border);
   border-radius: 10px;
@@ -1443,11 +1408,20 @@ body {
   display: none;
 }
 
+.model-pill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 42vh;
+  overflow-y: auto;
+}
+
 .model-pill-item {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
+  min-width: 0;
   padding: 6px 9px;
   border: 0;
   border-radius: 6px;
@@ -1478,6 +1452,58 @@ body {
 
 .model-pill-item.current-missing {
   opacity: 0.85;
+}
+
+/* 推理等级分节(默认 + 每个强度一个分段选项) */
+.mpp-think {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 8px 5px 5px;
+  border-top: 1px solid var(--dsh-border);
+}
+
+.mpp-think[hidden] {
+  display: none;
+}
+
+.mpp-think-label {
+  padding: 0 5px;
+  font-size: 10.5px;
+  color: var(--dsh-muted);
+}
+
+.think-seg {
+  display: flex;
+  gap: 4px;
+}
+
+.think-opt {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 3px 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsh-fg);
+  font-size: 11px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.think-opt:hover {
+  background: var(--vscode-menu-selectionBackground, #04395e);
+  color: var(--vscode-menu-selectionForeground, #ffffff);
+}
+
+.think-opt.active {
+  background: var(--dsh-accent);
+  color: var(--dsh-btn-fg);
+  font-weight: 500;
 }
 
 /* ---------- 子代理芯片 ---------- */

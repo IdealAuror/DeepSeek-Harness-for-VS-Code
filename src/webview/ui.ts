@@ -1620,7 +1620,8 @@ function toolSelect(label: string, title: string): { wrap: HTMLElement; select: 
 const presetTool = toolSelect(t("预设"), t("Agent 预设"));
 const presetSelect = presetTool.select;
 
-// 模型 + 思考整合为一个胶囊(参考截图:⚡ 模型名 · 思考名 + 分段思考滑块 + 模型列表弹层)
+// 模型 + 思考整合为单个紧凑按钮(收起只显示 ⚡ 模型名 · 思考名 + ▾,宽度有上限,
+// 不会无限拉长);点击后弹出面板,在面板内分别选择模型与推理等级。
 const modelPill = el("div", "model-pill");
 const modelPillHead = el("button", "model-pill-head");
 modelPillHead.type = "button";
@@ -1629,13 +1630,23 @@ const modelPillSpark = el("span", "model-pill-spark");
 modelPillSpark.append(lineIcon(ICONS.bolt, 13));
 const modelPillLabel = el("span", "model-pill-label");
 const modelPillChevron = el("span", "model-pill-chevron");
-modelPillChevron.append(lineIcon(ICONS.chevronRight, 12));
+modelPillChevron.append(lineIcon(ICONS.down2, 12));
 modelPillHead.append(modelPillSpark, modelPillLabel, modelPillChevron);
-const thinkSeg = el("div", "think-seg");
-thinkSeg.title = t("思考深度(推理强度)");
 const modelPillPop = el("div", "model-pill-pop");
 modelPillPop.hidden = true;
-modelPill.append(modelPillHead, thinkSeg, modelPillPop);
+// 弹层第 1 节:模型列表(可滚动,宽度受限)
+const modelPillList = el("div", "model-pill-list");
+modelPillPop.append(modelPillList);
+// 弹层第 2 节:推理等级(仅当前模型声明了 efforts 时显示)
+const mppThink = el("div", "mpp-think");
+mppThink.hidden = true;
+const mppThinkLabel = el("div", "mpp-think-label");
+mppThinkLabel.textContent = t("思考深度(推理强度)");
+const thinkSeg = el("div", "think-seg");
+thinkSeg.title = t("思考深度(推理强度)");
+mppThink.append(mppThinkLabel, thinkSeg);
+modelPillPop.append(mppThink);
+modelPill.append(modelPillHead, modelPillPop);
 
 const inputWrap = el("div", "input-wrap");
 const input = el("textarea", "input");
@@ -2230,11 +2241,23 @@ document.addEventListener("click", (e) => {
 modelPillHead.addEventListener("click", (e) => {
   e.stopPropagation();
   renderModelPill();
-  modelPillPop.hidden = !modelPillPop.hidden;
+  renderThinkingSeg();
+  const opening = modelPillPop.hidden;
+  modelPillPop.hidden = !opening;
+  modelPill.classList.toggle("open", opening);
 });
-// 点击弹层外部关闭
+// 点击弹层外部或 Esc 关闭
 document.addEventListener("click", (e) => {
-  if (!modelPillPop.hidden && !modelPill.contains(e.target as Node)) modelPillPop.hidden = true;
+  if (!modelPillPop.hidden && !modelPill.contains(e.target as Node)) {
+    modelPillPop.hidden = true;
+    modelPill.classList.remove("open");
+  }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !modelPillPop.hidden) {
+    modelPillPop.hidden = true;
+    modelPill.classList.remove("open");
+  }
 });
 presetSelect.addEventListener("change", () => {
   if (presetSelect.value) vscode.postMessage({ kind: "selectPreset", preset: presetSelect.value });
@@ -3651,37 +3674,29 @@ function setLocalModelEffort(effort: string | undefined) {
   renderModelPill();
 }
 
+/** 弹层内的推理等级分段按钮(默认 + 每个强度一个选项;点击即切换,面板保持打开以便连选模型与强度)。 */
 function renderThinkingSeg() {
   thinkSeg.innerHTML = "";
   const m = state.models?.current;
   const modelInfo = m ? findModel(m.provider, m.model) : undefined;
   const efforts = modelInfo?.reasoning?.efforts ?? [];
-  if (efforts.length === 0) {
-    thinkSeg.hidden = true;
-    return;
-  }
-  thinkSeg.hidden = false;
-  // 默认(不指定推理强度)作为第一个圆点
-  const def = el("button", "think-seg-dot" + (m && !m.reasoningEffort ? " active" : ""));
-  def.type = "button";
-  def.title = t("默认");
-  def.addEventListener("click", () => {
-    if (!m) return;
-    setLocalModelEffort(undefined);
-    vscode.postMessage({ kind: "selectModel", provider: m.provider, model: m.model });
-  });
-  thinkSeg.append(def);
-  for (const effort of efforts) {
-    const dot = el("button", "think-seg-dot" + (m?.reasoningEffort === effort.id ? " active" : ""));
-    dot.type = "button";
-    dot.title = effort.name || effort.id;
-    dot.addEventListener("click", () => {
+  mppThink.hidden = efforts.length === 0;
+  if (efforts.length === 0) return;
+  const make = (label: string, effort: string | undefined) => {
+    const active = effort ? m?.reasoningEffort === effort : !m?.reasoningEffort;
+    const b = el("button", "think-opt" + (active ? " active" : ""));
+    b.type = "button";
+    b.textContent = label;
+    b.title = effort ? (modelInfo?.reasoning?.efforts.find((x) => x.id === effort)?.description ?? label) : label;
+    b.addEventListener("click", () => {
       if (!m) return;
-      setLocalModelEffort(effort.id);
-      vscode.postMessage({ kind: "selectModel", provider: m.provider, model: m.model, effort: effort.id });
+      setLocalModelEffort(effort);
+      vscode.postMessage({ kind: "selectModel", provider: m.provider, model: m.model, ...(effort ? { effort } : {}) });
     });
-    thinkSeg.append(dot);
-  }
+    thinkSeg.append(b);
+  };
+  make(t("默认"), undefined);
+  for (const effort of efforts) make(effort.name || effort.id, effort.id);
 }
 
 function findModel(provider: string, model: string): ModelInfo | undefined {
@@ -3696,8 +3711,7 @@ function renderModelPill() {
     : t("默认");
   modelPillLabel.textContent = m ? `${modelName(m.provider, m.model)} · ${effortName}` : t("模型");
   modelPillHead.disabled = (state.models?.groups?.length ?? 0) === 0;
-  if (modelPillPop.hidden) return;
-  modelPillPop.innerHTML = "";
+  modelPillList.innerHTML = "";
   const groups = state.models?.groups ?? [];
   const multiGroup = groups.length > 1;
   let currentInList = false;
@@ -3711,10 +3725,11 @@ function renderModelPill() {
         row.append(el("span", "model-pill-item-check", "✓"));
       }
       row.addEventListener("click", () => {
-        modelPillPop.hidden = true;
+        // 选完模型后面板保持打开,可继续调推理等级;点外部或 Esc 关闭
         vscode.postMessage({ kind: "selectModel", provider: g.id, model: model.id, effort: state.models?.current?.reasoningEffort });
+        renderModelPill();
       });
-      modelPillPop.append(row);
+      modelPillList.append(row);
     }
   }
   // 当前模型不在目录(例如临时模型)时,补一个只读占位项
@@ -3723,10 +3738,7 @@ function renderModelPill() {
     row.type = "button";
     row.append(el("span", "model-pill-item-name", modelName(m.provider, m.model)));
     row.append(el("span", "model-pill-item-check", "✓"));
-    row.addEventListener("click", () => {
-      modelPillPop.hidden = true;
-    });
-    modelPillPop.prepend(row);
+    modelPillList.prepend(row);
   }
 }
 
@@ -4702,6 +4714,7 @@ function applyStaticLabels() {
   input.placeholder = t("向 DeepSeek Harness 发送消息…");
   modelPillHead.title = t("模型与思考(推理强度)");
   thinkSeg.title = t("思考深度(推理强度)");
+  mppThinkLabel.textContent = t("思考深度(推理强度)");
   presetTool.label.textContent = t("预设");
   presetTool.wrap.title = t("Agent 预设");
   permissionTool.label.textContent = t("权限");

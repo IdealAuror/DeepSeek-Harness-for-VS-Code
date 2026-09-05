@@ -434,10 +434,30 @@ export class DshHub {
     try {
       return await this.client.sendPromptParts(sessionId, "queue", [{ type: "text", text }]);
     } catch (error) {
-      const message = error instanceof DshApiError ? `${error.code}: ${error.message}` : String(error);
+      const message = this.describeSendError(error);
       this.deps.onNotice?.(this.deps.t?.("hub.sendFailed", { message }) ?? `Send failed: ${message}`, "error");
       throw error;
     }
+  }
+
+  /** 发送失败 → 面向用户的文案:图片/模型类错误给可操作说明,其余沿用 code: message。 */
+  private describeSendError(error: unknown): string {
+    if (error instanceof DshApiError && error.code === "session/attachment-invalid") {
+      const reason = (error.details as { reason?: string } | undefined)?.reason;
+      if (reason === "MODEL_DOES_NOT_SUPPORT_IMAGES") {
+        const matched = error.message.match(/Model "([^"]+)"/);
+        const model = matched?.[1] ?? "";
+        return (
+          this.deps.t?.("hub.modelNoImages", { model: model || error.message }) ??
+          `The current model ${model ? `"${model}"` : ""} does not support image input: remove the images, or switch model via the top-right composer button`
+        );
+      }
+      if (reason === "IMAGE_TYPE_MISMATCH") return "Image content does not match its declared type: re-pick or re-copy the image";
+      if (reason === "TOO_MANY_IMAGES" || reason === "IMAGES_TOO_LARGE") return "The image batch is too large (count/size limit): remove some images and retry";
+      if (reason === "INVALID_IMAGE_BASE64") return "Image data is invalid: re-pick the image";
+      if (reason) return error.message;
+    }
+    return error instanceof DshApiError ? `${error.code}: ${error.message}` : String(error);
   }
 
   /**
@@ -530,7 +550,7 @@ export class DshHub {
     try {
       await this.client.sendPromptParts(sessionId, "queue", content);
     } catch (error) {
-      const message = error instanceof DshApiError ? `${error.code}: ${error.message}` : String(error);
+      const message = this.describeSendError(error);
       this.deps.onNotice?.(this.deps.t?.("hub.sendFailed", { message }) ?? `Send failed: ${message}`, "error");
       throw error;
     }
