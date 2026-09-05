@@ -2050,6 +2050,112 @@ input.addEventListener("blur", () => {
   closeSlash();
 });
 
+// ---------- 粘贴支持:剪贴板图片 → 图片附件;复制的本地文件/文件夹 → 文件附件 ----------
+
+/** 图片魔数探测(与服务端 IMAGE_TYPE_MISMATCH 规则一致):仅接受 PNG/JPEG/GIF/WebP。 */
+function sniffImageType(bytes: Uint8Array): string | undefined {
+  const has = (offset: number, ...sig: number[]) => sig.every((v, i) => bytes[offset + i] === v);
+  if (bytes.length >= 8 && has(0, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return "image/png";
+  if (bytes.length >= 3 && has(0, 0xff, 0xd8, 0xff)) return "image/jpeg";
+  if (bytes.length >= 6 && has(0, 0x47, 0x49, 0x46, 0x38) && (bytes[4] === 0x37 || bytes[4] === 0x39) && bytes[5] === 0x61) return "image/gif";
+  if (bytes.length >= 12 && has(0, 0x52, 0x49, 0x46, 0x46) && has(8, 0x57, 0x45, 0x42, 0x50)) return "image/webp";
+  return undefined;
+}
+
+function base64OfBytes(bytes: Uint8Array): string {
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  return btoa(bin);
+}
+
+const PASTE_IMAGE_MAX_BYTES = 6 * 1024 * 1024;
+
+/** 处理剪贴板中的文件项(图片 → state.images;带路径的其它文件 → 宿主附件)。 */
+async function applyPastedFiles(files: File[]) {
+  let added = 0;
+  const paths: string[] = [];
+  for (const file of files) {
+    if (file.type.startsWith("image/")) {
+      if (state.images.length >= 8) {
+        showToast(t("⚠️ 最多一次添加 8 张图片"), "warning");
+        break;
+      }
+      try {
+        const buf = new Uint8Array(await file.arrayBuffer());
+        if (buf.byteLength > PASTE_IMAGE_MAX_BYTES) {
+          showToast(t("⚠️ 图片超过 6MB 已跳过:" + (file.name || "clipboard")), "warning");
+          continue;
+        }
+        // 按字节探测:剪贴板 blob.type 可能与内容不符(如截图标记为 image/png 实为 JPEG)
+        const mediaType = sniffImageType(buf);
+        if (!mediaType) {
+          showToast(t("⚠️ 无法识别的图片格式:" + (file.name || "clipboard") + "(支持 PNG/JPEG/GIF/WebP)"), "warning");
+          continue;
+        }
+        const ext = mediaType === "image/png" ? "png" : mediaType === "image/jpeg" ? "jpg" : mediaType === "image/gif" ? "gif" : "webp";
+        state.images.push({
+          data: base64OfBytes(buf),
+          mediaType,
+          name: file.name || `pasted-${Date.now()}.${ext}`,
+        });
+        added++;
+      } catch (error) {
+        showToast(t("⚠️ 粘贴图片失败:" + String(error)), "error");
+      }
+    } else {
+      // VS Code webview 中复制的本地文件带 path/uri 才可附加
+      const p = (file as { path?: unknown; uri?: unknown }).path;
+      const uri = (file as { uri?: { fsPath?: unknown } }).uri;
+      const fromUri = typeof uri === "object" && uri !== null && typeof (uri as { fsPath?: unknown }).fsPath === "string"
+        ? (uri as { fsPath: string }).fsPath
+        : undefined;
+      const fsPath = typeof p === "string" ? p : fromUri;
+      if (fsPath) paths.push(fsPath);
+      else showToast(t("⚠️ 非图片附件请从资源管理器复制(未提供本地路径)"), "warning");
+    }
+  }
+  if (paths.length > 0) vscode.postMessage({ kind: "attachPastedPaths", paths });
+  if (added > 0) {
+    renderAttachments();
+    showToast(t(`✅ 已添加 ${added} 张图片`), "info");
+  }
+}
+
+/** 把文本中的本地路径(资源管理器复制文件的 file:// URI 列表 / 盘符与 UNC 路径)解析为路径数组。 */
+function parsePastedPathText(text: string): string[] {
+  const tokens = text.split(/\s+/).filter(Boolean);
+  const isPath = (token: string) =>
+    /^file:\/\/\/?/i.test(token) || /^[A-Za-z]:[\\/]/.test(token) || /^\\\\[^"']+/.test(token);
+  if (tokens.length > 0 && tokens.every(isPath)) return tokens;
+  return [];
+}
+
+input.addEventListener("paste", (e) => {
+  const cd = e.clipboardData;
+  if (!cd) return;
+  const files: File[] = [];
+  for (let i = 0; i < cd.items.length; i++) {
+    const item = cd.items[i];
+    if (item.kind === "file") {
+      const file = item.getAsFile();
+      if (file) files.push(file);
+    }
+  }
+  if (files.length > 0) {
+    e.preventDefault();
+    void applyPastedFiles(files);
+    return;
+  }
+  // 纯文本路径列表(如资源管理器复制 → file:// URI,或直接复制的盘符/UNC 路径)
+  const paths = parsePastedPathText(cd.getData("text/plain") ?? "");
+  if (paths.length > 0) {
+    e.preventDefault();
+    vscode.postMessage({ kind: "attachPastedPaths", paths });
+  }
+  // 其它文本粘贴走默认行为
+});
+
 btnSendStop.addEventListener("click", () => {
   const hasText = input.value.trim().length > 0 || state.images.length > 0;
   if (state.running && !hasText) {

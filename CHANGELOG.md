@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.94
+- Fix image sends + paste support: ① 'session/attachment-invalid: Declared image type does not match its bytes' — the 0.1.2-rc.1 server validates image bytes against the declared mediaType (IMAGE_TYPE_MISMATCH), but the extension derived mediaType from the file extension (a .png that is really JPEG, .bmp mapped to png…); images are now sniffed from magic bytes (PNG/JPEG/GIF/WebP) before sending, unsupported/corrupt files are skipped with a clear notice, and the .bmp dial filter entry was removed; ② composer paste support: clipboard images (screenshots, copied bytes) become image attachments in the same chips row next to + (byte-sniffed, ≤6MB each, ≤8 per message), and local files/folders copied from Explorer (file:// URIs, drive or UNC paths) attach exactly like the + file picker; plain-text pastes keep the default behavior.
+- 修复图片发送 + 新增粘贴支持:① 「session/attachment-invalid: Declared image type does not match its bytes」—— 0.1.2-rc.1 服务端按字节校验图片与声明的 mediaType 是否一致(IMAGE_TYPE_MISMATCH),而扩展此前按文件扩展名声明(如 .png 实为 JPEG、.bmp 被映射成 png);现在发送前按魔数探测真实类型(PNG/JPEG/GIF/WebP),无法识别/损坏的文件跳过并给出明确提示,选择框里的 .bmp 过滤项已移除;② 输入框支持粘贴:剪贴板图片(截图、复制图片)自动成为图片附件,出现在 + 号右侧同一芯片行(字节探测、单张 ≤6MB、每条消息 ≤8 张);从资源管理器复制的本地文件/文件夹(file:// URI 或盘符/UNC 路径)粘贴后与 + 菜单选择文件一样附加;纯文本粘贴行为不变。
+
 ## 0.12.93
 - Composer attachment layout fix: ① image attachments now render in the same attachment row as file/folder attachments (right of the + button) — they used to live in a separate row at the very top of the composer, so an added image appeared above the input while file chips sat next to +; ② both kinds share one chips row (image chips keep the dashed border for distinction) and the standalone .images-row was removed.
 - 输入区附件布局修复:① 图片附件现在与文件/文件夹附件同排显示(+ 号图标右侧)—— 此前图片芯片独立渲染在输入区顶部的一行,添加图片后出现在输入框上方,而文件芯片在 + 号右侧;② 两类附件共用同一芯片行(图片芯片保留虚线边框用于区分),并移除了独立的 images-row 行。

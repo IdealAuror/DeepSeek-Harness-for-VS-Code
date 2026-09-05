@@ -25,6 +25,21 @@ import type { CordisRequestRun } from "../dsh/cordisTypes";
 /** 宿主侧文案翻译(跟随 dsh.language 设置,配置变更即时生效)。 */
 const t = createTranslator();
 
+/**
+ * 用文件魔数探测图片真实 MIME 类型。
+ * rc.1 服务端按字节校验(IMAGE_TYPE_MISMATCH:"Declared image type does not match
+ * its bytes"),按扩展名声明(如 .png 实为 JPEG、.bmp 映射成 png)会发送失败;
+ * 这里与服务端一致的规则只接受 PNG / JPEG / GIF / WebP,其余返回 undefined。
+ */
+function detectImageMediaType(bytes: Uint8Array): string | undefined {
+  const has = (offset: number, ...sig: number[]) => sig.every((v, i) => bytes[offset + i] === v);
+  if (bytes.length >= 8 && has(0, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return "image/png";
+  if (bytes.length >= 3 && has(0, 0xff, 0xd8, 0xff)) return "image/jpeg";
+  if (bytes.length >= 6 && has(0, 0x47, 0x49, 0x46, 0x38) && (bytes[4] === 0x37 || bytes[4] === 0x39) && bytes[5] === 0x61) return "image/gif";
+  if (bytes.length >= 12 && has(0, 0x52, 0x49, 0x46, 0x46) && has(8, 0x57, 0x45, 0x42, 0x50)) return "image/webp";
+  return undefined;
+}
+
 /** 回退对比:自定义 URI scheme,由内容提供器按需执行 git show <commit>:<path> 供给 diff 左栏。 */
 const COMPARE_SCHEME = "dsh-git-old";
 let compareProviderRegistered = false;
@@ -624,7 +639,7 @@ export class ChatChannel {
             canSelectFolders: false,
             canSelectMany: true,
             openLabel: t("dlg.addImage"),
-            filters: { [t("dlg.imageFilter")]: ["png", "jpg", "jpeg", "gif", "webp", "bmp"] },
+            filters: { [t("dlg.imageFilter")]: ["png", "jpg", "jpeg", "gif", "webp"] },
             defaultUri: vscode.workspace.workspaceFolders?.[0]?.uri,
           });
           if (!picked || picked.length === 0) break;
@@ -636,11 +651,19 @@ export class ChatChannel {
               continue;
             }
             const name = uri.fsPath.replace(/\\/g, "/").split("/").pop() ?? "image";
-            const ext = name.split(".").pop()?.toLowerCase() ?? "png";
-            const mediaType = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "gif" ? "image/gif" : ext === "webp" ? "image/webp" : "image/png";
+            // 按字节探测真实类型:扩展名只是候选,类型不匹配时 rc.1 会以 IMAGE_TYPE_MISMATCH 拒绝
+            const mediaType = detectImageMediaType(new Uint8Array(raw));
+            if (!mediaType) {
+              this.post({
+                kind: "notice",
+                message: t("notice.attachmentsFailed", { error: `无法识别的图片格式(${name});支持 PNG/JPEG/GIF/WebP` }),
+                level: "warning",
+              });
+              continue;
+            }
             images.push({ data: Buffer.from(raw).toString("base64"), mediaType, name });
           }
-          this.post({ kind: "imagesPicked", images });
+          if (images.length > 0) this.post({ kind: "imagesPicked", images });
         } catch (error) {
           this.post({ kind: "notice", message: t("notice.attachmentsFailed", { error: String(error) }), level: "error" });
         }
@@ -773,6 +796,42 @@ export class ChatChannel {
             }
           }
           this.post({ kind: "attachmentsPicked", attachments });
+        } catch (error) {
+          this.post({ kind: "notice", message: t("notice.attachmentsFailed", { error: String(error) }), level: "error" });
+        }
+        break;
+      }
+      case "attachPastedPaths": {
+        // 粘贴复制的本地文件/文件夹(资源管理器复制 → file:// URI 或盘符/UNC 路径)
+        const rawPaths: unknown = msg.paths;
+        if (!Array.isArray(rawPaths)) break;
+        try {
+          const attachments: { kind: "file" | "folder"; path: string; label: string }[] = [];
+          for (const item of rawPaths.slice(0, 10)) {
+            if (typeof item !== "string") continue;
+            const path = item.trim().replace(/^"|"$/g, "");
+            if (!path) continue;
+            let fsPath = path;
+            if (/^file:\/\//i.test(fsPath)) {
+              try {
+                fsPath = vscode.Uri.parse(fsPath).fsPath;
+              } catch {
+                continue;
+              }
+            }
+            try {
+              const stat = await vscode.workspace.fs.stat(vscode.Uri.file(fsPath));
+              if (stat.type === vscode.FileType.Directory) {
+                attachments.push({ kind: "folder", path: fsPath, label: fsPath.replace(/\\/g, "/").split("/").pop() ?? fsPath });
+              } else {
+                attachments.push({ kind: "file", path: fsPath, label: fsPath.replace(/\\/g, "/").split("/").pop() ?? fsPath });
+              }
+            } catch {
+              // 路径不存在或不可访问:跳过
+            }
+          }
+          if (attachments.length > 0) this.post({ kind: "attachmentsPicked", attachments });
+          else this.post({ kind: "notice", message: t("notice.attachmentsFailed", { error: "粘贴的路径不存在或不可访问(如需粘贴为文本,请勿使用文件列表形式)" }), level: "warning" });
         } catch (error) {
           this.post({ kind: "notice", message: t("notice.attachmentsFailed", { error: String(error) }), level: "error" });
         }
