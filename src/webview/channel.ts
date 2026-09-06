@@ -268,6 +268,13 @@ export class ChatChannel {
         }),
       },
       {
+        // follow 快照入库后重推全量:首次点开会话时快照常晚于 select 推送到达,
+        // 若不重推,事件已合并但界面仍空白,需再次切换会话才可见
+        dispose: this.hub.onFollowReady((sid: string) => {
+          if (sid === store.currentSessionId) void this.pushFullState();
+        }),
+      },
+      {
         // 服务器(重)连接:重推 full 状态,刷新模型/技能/智能体目录等会话级与工作区级数据
         // (服务器升级重启后思考强度下拉、@ 提及等随之恢复,无需手动切换会话)
         dispose: this.hub.onStatus((status) => {

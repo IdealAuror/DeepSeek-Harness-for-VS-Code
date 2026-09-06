@@ -335,6 +335,27 @@ export class DshHub {
     });
   }
 
+  /** 会话 follow 快照入库完成回调集合(供 UI 在事件合并后重建历史,解决首次切换空白)。 */
+  private readonly followReadyListeners = new Set<(sessionId: string) => void>();
+
+  /** 订阅「某会话 follow 快照已入库」。返回退订函数。 */
+  onFollowReady(fn: (sessionId: string) => void): () => void {
+    this.followReadyListeners.add(fn);
+    return () => {
+      this.followReadyListeners.delete(fn);
+    };
+  }
+
+  private notifyFollowReady(sessionId: string) {
+    for (const fn of this.followReadyListeners) {
+      try {
+        fn(sessionId);
+      } catch (error) {
+        console.error("[dsh] onFollowReady listener threw:", error);
+      }
+    }
+  }
+
   /** 跟随一个会话:打开 session/follow 流(替换旧跟随)。 */
   private async startFollow(sessionId: string) {
     if (this.followedSession === sessionId && this.followHandle) return;
@@ -347,6 +368,7 @@ export class DshHub {
           this.followCursor.set(sessionId, frame.cursor);
           this.followSource.set(sessionId, "session");
           this.store.handleFollowSnapshot(frame);
+          this.notifyFollowReady(sessionId);
         } else {
           this.store.handleFollowEvent(sessionId, frame);
         }

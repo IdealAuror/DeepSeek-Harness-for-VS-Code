@@ -233,6 +233,8 @@ const state = {
   currentStreamTurn: undefined as number | undefined,
   /** 已流式输出的块键 `${turn}:${step}:${index}`,避免 assistant/message 重复追加 */
   streamedBlockKeys: new Set<string>(),
+  /** 压缩历史行(chunkrow/text-chunks 等)按 (turn,step) 累积的最终块:index → {kind,text} */
+  rowBlocks: new Map<string, Map<number, { kind: "text" | "reasoning"; text: string }>>(),
   /** 本回合的过程(工具调用)折叠组 */
   turnToolGroup: null as HTMLElement | null,
   /** 工作区智能体/技能配置(.claude / .codex / .github Copilot / .dsh) */
@@ -548,6 +550,7 @@ const EN_TEXT: Record<string, string> = {
   "模型": "Model",
   "应如何批准操作?": "How should operations be approved?",
   "了解更多": "Learn more",
+  "会话已开始,预设不可切换(新会话可选)": "This session has started: the preset is fixed (choose it for new sessions)",
   "只读访问:不能修改文件或执行命令;外部文件与网络访问按策略询问": "Read-only: cannot modify files or run commands; external files and network access are asked per policy",
   "可修改工作区内的文件;外部文件与网络访问按策略询问": "Can modify files inside the workspace; external files and network access are asked per policy",
   "可不受限制地访问互联网和你电脑上的任何文件": "Unrestricted access to the internet and any file on your computer",
@@ -1722,10 +1725,12 @@ composerBottom.append(btnPlus, permissionPill, modelPill);
 const hint = el("div", "hint", t("Enter 发送 · Shift+Enter 换行"));
 const hintRow = el("div", "hint-row");
 hintRow.append(hint);
-// 对话框顶部行:左上角 ＋ 添加文件 + 附件芯片;右上角 预设胶囊(仅新会话)
+// 对话框顶部行:左上角 ＋ 添加文件 + 附件芯片;右上角 预设(新会话下拉 / 已开始会话纯文本标签)
 const composerTop = el("div", "composer-top");
 attachmentsRow.append(btnAddAttach);
-composerTop.append(attachmentsRow, presetTool.wrap);
+const presetTag = el("span", "preset-tag");
+presetTag.hidden = true;
+composerTop.append(attachmentsRow, presetTool.wrap, presetTag);
 composer.append(composerTop, inputWrap, composerBottom, hintRow);
 
 // 添加文件/文件夹选择菜单(挂在 composer 内)
@@ -3080,6 +3085,70 @@ function handleEvent(wire: WireEvent) {
       }
       break;
     }
+    // 压缩历史行(网页端同源消费):持久层把逐 token 增量打包为 chunkrow 行,
+    // 旧历史快照里没有逐条 assistant/chunk,必须以行重建文本/推理块。
+    case "chunkrow/text-chunks":
+    case "chunkrow/reasoning-chunks": {
+      const row = data ?? {};
+      const turn = typeof row.turn === "number" ? row.turn : (state.currentStreamTurn ?? 0);
+      const step = typeof row.step === "number" ? row.step : 0;
+      const index = typeof row.index === "number" ? row.index : 0;
+      const bucketKey = `${turn}:${step}`;
+      let bucket = state.rowBlocks.get(bucketKey);
+      if (!bucket) {
+        bucket = new Map();
+        state.rowBlocks.set(bucketKey, bucket);
+      }
+      const prev = bucket.get(index);
+      const texts = Array.isArray(row.texts) ? row.texts.map(String) : [];
+      bucket.set(index, {
+        kind: ev.type === "chunkrow/reasoning-chunks" ? ("reasoning" as const) : ("text" as const),
+        text: (prev?.text ?? "") + texts.join(""),
+      });
+      break;
+    }
+    case "chunkrow/tool-call-chunks": {
+      // 压缩的工具调用行:与 tool/call 事件等价(id/name/args 分片)
+      const row = data ?? {};
+      const callId = String(row.id ?? "");
+      if (!callId) break;
+      let existing = findToolNode(callId);
+      const argsDelta = Array.isArray(row.args) ? row.args.map(String).join("") : "";
+      if (existing) {
+        if (row.name !== undefined) existing.name = String(row.name);
+        existing.args = (existing.args ?? "") + argsDelta;
+        if (existing.el) {
+          const pre = existing.el.querySelector(".tool-pre");
+          if (pre) pre.textContent = existing.args;
+          const preview = existing.el.querySelector(".tool-args-preview");
+          if (preview) preview.textContent = String(existing.args).replace(/\s+/g, " ").slice(0, 90);
+          updateToolSummary(existing);
+        }
+        break;
+      }
+      const callTurn = typeof row.turn === "number" ? row.turn : state.currentStreamTurn;
+      let assistant = findAssistantTail();
+      if (!assistant || (callTurn !== undefined && assistant.turn !== callTurn)) {
+        assistant = { kind: "assistant", key: `a:${callTurn ?? state.nodes.length}:${state.nodes.length}`, el: null, blocks: [], turn: callTurn ?? 0, tools: [] };
+        appendNode(assistant);
+      }
+      assistant.tools ??= [];
+      const node: NodeState = {
+        kind: "tool",
+        key: `t:${callId}`,
+        el: null,
+        callId,
+        name: row.name !== undefined ? String(row.name) : undefined,
+        args: argsDelta,
+        done: true,
+        afterBlock: (assistant.blocks?.length ?? 0) - 1,
+      };
+      node.el = renderNode(node);
+      assistant.tools.push(node);
+      state.nodes.push(node);
+      if (!state.replaying) refreshAssistantNode(assistant, undefined, true);
+      break;
+    }
     case "assistant/message": {
       state.streamBlock = null;
       state.streamKey = null;
@@ -3099,8 +3168,22 @@ function handleEvent(wire: WireEvent) {
         assistant = { kind: "assistant", key: `a:${turn}:${state.nodes.length}`, el: null, blocks: [], turn };
         appendNode(assistant);
       }
-      // 追加未被流式覆盖的文本/推理块(流式期间已追加过的跳过)
+      // 先落盘 chunkrow 压缩行(旧历史无逐条 chunk 事件,文本/推理以行存在;
+      // 行 index 与 message content 的块位置一致,行已覆盖的键由 part 循环跳过)
       let addedText = "";
+      const rowBucket = state.rowBlocks.get(`${turn}:${step}`);
+      if (rowBucket) {
+        state.rowBlocks.delete(`${turn}:${step}`);
+        const sorted = [...rowBucket.entries()].sort((a, b) => a[0] - b[0]);
+        for (const [index, block] of sorted) {
+          const key = `${turn}:${step}:${index}`;
+          if (state.streamedBlockKeys.has(key)) continue;
+          state.streamedBlockKeys.add(key);
+          assistant.blocks!.push({ type: block.kind, text: block.text, el: null });
+          if (block.kind === "text") addedText += block.text + "\n";
+        }
+      }
+      // 追加未被流式覆盖的文本/推理块(流式期间已追加过的跳过)
       for (let i = 0; i < content.length; i++) {
         const block = content[i];
         if (block?.type !== "text" && block?.type !== "reasoning") continue;
@@ -3799,10 +3882,16 @@ function modelName(provider: string, id: string): string {
 function renderPresetSelect() {
   const current = state.sessions.find((s) => s.sessionId === state.current);
   const presets = state.presets ?? [];
-  // 服务器限制:已开始的会话预设不可更改(agent preset is fixed),切换器只对新会话显示
+  // 服务器限制:已开始的会话预设不可更改(agent preset is fixed)。
+  // 新会话显示可切换下拉;已开始的会话只显示当前预设的纯文本标签(不提供点击下拉)。
   const switchable = (current?.blank ?? true);
   presetTool.wrap.hidden = !switchable;
-  if (!switchable) return;
+  presetTag.hidden = switchable;
+  if (!switchable) {
+    presetTag.textContent = current?.agentPreset ? presetLabel(current.agentPreset) : "";
+    presetTag.title = t("会话已开始,预设不可切换(新会话可选)");
+    return;
+  }
   presetSelect.innerHTML = "";
   let currentInList = false;
   for (const preset of presets) {
@@ -3849,7 +3938,7 @@ function renderPermissionPill() {
   permissionPillText.textContent = permissionLabel(current, currentOpt?.name);
   permissionPill.classList.toggle("danger", PERMISSION_ICONS[current]?.danger === true);
   permissionPillHead.disabled = options.length === 0;
-  if (permissionPillPop.hidden) return;
+  // 无论弹层开合都重建列表:首次展开(或投影稍后才到)时内容即时可见,无需点两次
   permissionPillList.innerHTML = "";
   for (const option of options) {
     const danger = PERMISSION_ICONS[option.value]?.danger === true;
@@ -4822,6 +4911,7 @@ function applyLanguage() {
   state.stepStarts = new Map();
   state.currentStreamTurn = undefined;
   state.streamedBlockKeys = new Set();
+  state.rowBlocks = new Map();
   turnProduced = [];
   turnProducedSet.clear();
   turnCallViews.clear();
@@ -4896,6 +4986,7 @@ function handleMessage(msg: any) {
       state.stepStarts = new Map();
       state.currentStreamTurn = undefined;
       state.streamedBlockKeys = new Set();
+      state.rowBlocks = new Map();
       state.turnToolGroup = null;
       messages.innerHTML = "";
       state.replaying = true;
@@ -5215,6 +5306,7 @@ function handleMessage(msg: any) {
       state.seqs = new Set();
       state.rawEvents = [];
       state.nodes = [];
+      state.rowBlocks = new Map();
       turnProduced = [];
       turnProducedSet.clear();
       turnCallViews.clear();
