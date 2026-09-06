@@ -463,8 +463,9 @@ export class DshApiClient {
   /**
    * 会话级斜杠命令执行(与网页端 live.command() 完全一致的通道):
    * 端点 /api/commands/execute,信封 {type:"client-request", rpcId, method:"commands/execute",
-   * payload:{args:{agentId, line, images?}}};result.value === undefined 表示未匹配任何命令。
-   * 0.1.2 契约与 rc.8+ 一致(images 为网关必填字段,按描述符探测)。
+   * payload:{args:{agentId, line, images}}};result.value === undefined 表示未匹配任何命令。
+   * 0.1.2 契约:commands/execute 的描述符固定含 images 参数,缺失即以
+   * gateway/arguments-invalid 拒绝 —— 与命令目录是否声明 input.images 无关,必须始终携带。
    */
   async executeCommand(
     sessionId: string,
@@ -472,8 +473,7 @@ export class DshApiClient {
     images: { mediaType: string; data: string; name?: string }[] = [],
   ): Promise<{ matched: boolean; execution?: CommandExecutionView }> {
     const endpoint = "commands/execute";
-    const args: Record<string, unknown> = { agentId: sessionId, line };
-    if (this.commandImagesSupported()) args.images = images;
+    const args: Record<string, unknown> = { agentId: sessionId, line, images };
     const message: ClientRequest = {
       type: "client-request",
       rpcId: randomUUID(),

@@ -1718,9 +1718,22 @@ export class ChatChannel {
     line: string,
     images: { mediaType: string; data: string; name?: string }[] = [],
   ): Promise<{ outcome: "executed" | "unmatched" | "unavailable"; execution?: CommandExecutionView }> {
-    const result = await this.hub.runCommandLine(sessionId, line, images);
-    const outcome = result.outcome;
     const name = line.trim().split(/\s+/)[0] ?? line;
+    let result: { outcome: "executed" | "unmatched" | "unavailable"; execution?: CommandExecutionView };
+    try {
+      result = await this.hub.runCommandLine(sessionId, line, images);
+    } catch (error) {
+      // 网关明确拒绝(如回合运行中 /permission 等命令被拒):给用户明确反馈,绝不静默/排队
+      const code = error instanceof DshApiError ? error.code : "";
+      const detail = error instanceof Error ? error.message : String(error);
+      if (code === "session/agent-busy") {
+        this.post({ kind: "notice", message: t("notice.permissionBusy", { line: name.replace("/", "") }), level: "warning" });
+      } else {
+        this.post({ kind: "notice", message: `${line} 执行失败: ${code ? `${code}: ` : ""}${detail}`, level: "error" });
+      }
+      return { outcome: "unavailable" };
+    }
+    const outcome = result.outcome;
     if (outcome === "executed") {
       if (name === "/permission") {
         this.post({ kind: "notice", message: t("notice.permissionSet", { preset: line.trim().split(/\s+/)[1] ?? "" }), level: "info" });

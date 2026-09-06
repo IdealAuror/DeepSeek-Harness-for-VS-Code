@@ -27,6 +27,7 @@
   "notice.presetFailed": "切換預設失敗:{error}",
   "notice.modelFailed": "切換模型失敗:{error}",
   "notice.permissionSet": "已切換權限預設:{preset}",
+  "notice.permissionBusy": "目前回合執行中:權限預設將於下一回合生效,請等工作階段閒置後重試。",
   "notice.openFileFailed": "無法開啟檔案:{error}",
   "notice.subagentNoReply": "(尚無回覆)",
   "notice.subagentPreviewFailed": "讀取失敗:{error}",

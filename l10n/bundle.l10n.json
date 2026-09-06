@@ -27,6 +27,7 @@
   "notice.presetFailed": "Switch preset failed: {error}",
   "notice.modelFailed": "Switch model failed: {error}",
   "notice.permissionSet": "Permission preset switched: {preset}",
+  "notice.permissionBusy": "A turn is currently running: the permission preset will apply on the next turn; retry when the session is idle.",
   "notice.openFileFailed": "Cannot open file: {error}",
   "notice.subagentNoReply": "(no reply yet)",
   "notice.subagentPreviewFailed": "Read failed: {error}",

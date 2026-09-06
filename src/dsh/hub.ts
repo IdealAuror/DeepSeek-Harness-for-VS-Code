@@ -315,6 +315,26 @@ export class DshHub {
     await this.startFollow(sessionId);
   }
 
+  /**
+   * 额外订阅一个会话的事件流,不改动当前 UI 跟随(remote.mux 支持多路逻辑流)。
+   * 0.1.2 起会话事件按地址分路(session/follow),一次性/后台会话(如提交信息生成的
+   * 归档会话)若不单独 follow 就收不到 turnEnd 等事件,等待方会一直超时。返回关闭句柄。
+   */
+  watchSession(sessionId: string): RemoteStreamHandle {
+    return this.client.openStream("session/follow", { request: { address: { kind: "session", sessionId }, maxMessages: HISTORY_PAGE_MESSAGES } }, {
+      onItem: (value) => {
+        const frame = value as SessionFollowFrame;
+        if (frame.type === "snapshot") {
+          this.followCursor.set(sessionId, frame.cursor);
+          this.followSource.set(sessionId, "session");
+          this.store.handleFollowSnapshot(frame);
+        } else {
+          this.store.handleFollowEvent(sessionId, frame);
+        }
+      },
+    });
+  }
+
   /** 跟随一个会话:打开 session/follow 流(替换旧跟随)。 */
   private async startFollow(sessionId: string) {
     if (this.followedSession === sessionId && this.followHandle) return;
@@ -462,9 +482,10 @@ export class DshHub {
 
   /**
    * 执行一条斜杠命令(网页端 live.command() 同款语义):
-   * 1. 优先 commands.execute 网关通道(0.1.2 始终提供,含 images 参数);
-   * 2. 网关不可用时回退 session.prompt 命令路径,并监听 command/run 事件确认宿主拦截;
-   * 3. 若命令未被拦截,在会话空闲时立即取消该轮,避免模型收到命令文本。
+   * 1. 走 commands.execute 网关通道(0.1.2 始终提供,images 字段必带);
+   * 2. 仅当网关通道在传输层不可用(旧版服务器无命令网关)时,回退 session.prompt
+   *    命令路径并监听 command/run 事件确认宿主拦截;网关明确拒绝(会话忙、参数
+   *    无效等 DshApiError)直接向上抛出 —— 绝不把命令文本当作普通消息排进对话。
    */
   async runCommandLine(
     sessionId: string,
@@ -475,8 +496,9 @@ export class DshHub {
       const result = await this.client.executeCommand(sessionId, line, images);
       return { outcome: result.matched ? "executed" : "unmatched", ...(result.execution ? { execution: result.execution } : {}) };
     } catch (error) {
-      // 网关通道不可用(部署未组合 api-gateway / commands 远程):回退官方命令消息路径
-      console.error("[dsh] commands.execute unavailable, falling back to session.prompt:", error);
+      if (error instanceof DshApiError) throw error; // 网关在但拒绝了(忙/无效等):交给上层给用户反馈
+      // 传输层失败(网关不可用/旧版服务器):回退官方命令消息路径
+      console.error("[dsh] commands.execute transport failure, falling back to session.prompt:", error);
     }
     const wasRunning = this.store.sessions.get(sessionId)?.running === true;
     const intercepted = await this.promptAsCommand(sessionId, images, line, wasRunning);

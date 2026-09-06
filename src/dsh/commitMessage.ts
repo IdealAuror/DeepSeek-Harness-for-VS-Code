@@ -271,6 +271,9 @@ export function registerCommitMessageCommand(hub: DshHub, ctx: vscode.ExtensionC
       void vscode.window.showErrorMessage(t("commit.failed", { error: error instanceof Error ? error.message : String(error) }));
       return;
     }
+    // 0.1.2 会话事件按地址分路:归档的一次性会话必须单独 follow 才能收到 turnEnd,
+    // 否则 waitForTurnEnd 永远等不到回合结束而超时(不影响当前会话的 UI 跟随)。
+    const watch = hub.watchSession(sessionId);
 
     await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: t("commit.generating"), cancellable: true },
@@ -280,42 +283,46 @@ export function registerCommitMessageCommand(hub: DshHub, ctx: vscode.ExtensionC
           cancelled = true;
         });
         try {
-          await ensureCommitModel(hub, sessionId);
-        } catch (error) {
-          void vscode.window.showErrorMessage(t("commit.failed", { error: error instanceof Error ? error.message : String(error) }));
-          return;
-        }
-        const beforeTurn = hub.store.lastTurnBySession.get(sessionId) ?? 0;
-        const promptSeq = hub.store.maxSeq.get(sessionId) ?? 0;
-        try {
-          await hub.send(sessionId, buildPrompt(diff));
-        } catch {
-          return; // hub.send 已通过 onNotice 弹出错误提示
-        }
-        const outcome = await waitForTurnEnd(hub, sessionId, beforeTurn, () => cancelled);
-        switch (outcome) {
-          case "cancelled":
-            void vscode.window.showInformationMessage(t("commit.cancelled"));
+          try {
+            await ensureCommitModel(hub, sessionId);
+          } catch (error) {
+            void vscode.window.showErrorMessage(t("commit.failed", { error: error instanceof Error ? error.message : String(error) }));
             return;
-          case "timeout":
-            void vscode.window.showErrorMessage(t("commit.timeout"));
+          }
+          const beforeTurn = hub.store.lastTurnBySession.get(sessionId) ?? 0;
+          const promptSeq = hub.store.maxSeq.get(sessionId) ?? 0;
+          try {
+            await hub.send(sessionId, buildPrompt(diff));
+          } catch {
+            return; // hub.send 已通过 onNotice 弹出错误提示
+          }
+          const outcome = await waitForTurnEnd(hub, sessionId, beforeTurn, () => cancelled);
+          switch (outcome) {
+            case "cancelled":
+              void vscode.window.showInformationMessage(t("commit.cancelled"));
+              return;
+            case "timeout":
+              void vscode.window.showErrorMessage(t("commit.timeout"));
+              return;
+            case "interrupted":
+              void vscode.window.showWarningMessage(t("commit.interrupted"));
+              return;
+            case "error":
+              void vscode.window.showErrorMessage(t("commit.failed", { error: t("commit.agentError") }));
+              return;
+            case "done":
+              break;
+          }
+          const message = extractCommitMessage(hub, sessionId, promptSeq);
+          if (!message) {
+            void vscode.window.showWarningMessage(t("commit.empty"));
             return;
-          case "interrupted":
-            void vscode.window.showWarningMessage(t("commit.interrupted"));
-            return;
-          case "error":
-            void vscode.window.showErrorMessage(t("commit.failed", { error: t("commit.agentError") }));
-            return;
-          case "done":
-            break;
+          }
+          repo.inputBox.value = message;
+          void vscode.window.showInformationMessage(t("commit.done"));
+        } finally {
+          watch.cancel();
         }
-        const message = extractCommitMessage(hub, sessionId, promptSeq);
-        if (!message) {
-          void vscode.window.showWarningMessage(t("commit.empty"));
-          return;
-        }
-        repo.inputBox.value = message;
-        void vscode.window.showInformationMessage(t("commit.done"));
       },
     );
   });

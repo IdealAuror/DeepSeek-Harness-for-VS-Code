@@ -27,6 +27,7 @@
   "notice.presetFailed": "切换预设失败: {error}",
   "notice.modelFailed": "切换模型失败: {error}",
   "notice.permissionSet": "已切换权限预设: {preset}",
+  "notice.permissionBusy": "当前回合正在运行:权限预设将在下一回合生效,请等会话空闲后重试。",
   "notice.openFileFailed": "无法打开文件: {error}",
   "notice.goalComplete": "目标已标记完成",
   "notice.goalCompleteFailed": "完成目标失败: {error}",
