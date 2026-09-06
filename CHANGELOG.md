@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.6
+- Preset descriptions are now localized by id unconditionally for the built-in presets (standard / code / minimal / creator): presetDisplayText no longer depends on the trust field — some deployments or entry points may not supply it, or ship Chinese built-in metadata, which made the popup fall back to raw metadata and show Chinese on non-Chinese UIs. Behavior: built-in ids always resolve through the per-language dictionary (13 languages) with the EN fallback; only user presets keep their file metadata. Verified: all preset name/description keys exist in every language dictionary.
+- 内置预设的名称与描述改为**按 id 无条件本地化**(标准/编码/极简/创造):presetDisplayText 不再依赖 trust 字段 —— 部分部署/入口可能不返回 trust,或内置元数据本身是中文,此前会导致非中文界面回退到原始元数据而显示中文。现在:内置 id 一律走当前语言词典(13 种语言)+ 英文回退;仅用户预设保留文件元数据。已校验:全部预设名/描述键在每份语言词典中都存在。
+
 ## 0.13.5
 - Preset picker icons removed: the collapsed pill is now just '预设 · 名称 ▾' (no 🧩 emoji) and the popup option rows no longer carry the system/user emoji badges — name + muted description + ✓ only, keeping the row layout clean and aligned with the web's list.
 - 预设选择器移除图标:收起胶囊只显示「预设 · 名称 ▾」(去掉 🧩),弹层选项行也去掉系统/用户 emoji 徽标 —— 仅保留 名称 + 灰色描述 + ✓,行布局更简洁、与网页端列表一致。

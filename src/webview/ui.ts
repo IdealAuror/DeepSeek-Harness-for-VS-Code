@@ -525,7 +525,11 @@ const BUILT_IN_PRESET_TEXTS: Record<string, { name: string; description: string 
 
 /** 与网页端 presetDisplayText 同款:内置(system)预设按 id 本地化,用户预设用文件元数据。 */
 function presetDisplayText(preset: { id: string; name?: string; description?: string; trust?: string }): { name: string; description?: string } {
-  const keys = preset.trust === "system" ? BUILT_IN_PRESET_TEXTS[preset.id] : undefined;
+  // 内置 id(标准/编码/极简/创造)按当前语言词典本地化 —— 不依赖 trust 字段:
+  // 部分部署/入口可能不提供 trust,或内置元数据本身是中文;按 id 命中即本地化,
+  // 用户预设(file 元数据)除外。
+  let keys: { name: string; description: string } | undefined;
+  if (preset.trust !== "user") keys = BUILT_IN_PRESET_TEXTS[preset.id];
   if (keys !== undefined) return { name: t(keys.name), description: t(keys.description) };
   return { name: preset.name ?? preset.id, ...(preset.description === undefined ? {} : { description: preset.description }) };
 }
