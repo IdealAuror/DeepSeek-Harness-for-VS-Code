@@ -108,6 +108,16 @@ export interface ChatSink {
   webview: vscode.Webview;
   onDidDispose: vscode.Event<void>;
   dispose(): void;
+  /**
+   * 平台 webview 预载失败回调(仅触发一次)。
+   * VS Code 在 webview iframe 的预载页内注册 Service Worker 来加载本地资源
+   * (src/vs/workbench/contrib/webview/browser/pre/index.html);冷启动时该注册
+   * 常因平台竞态失败(InvalidStateError: Failed to register a ServiceWorker,
+   * 上报于 microsoft/vscode#125993),此时扩展内容永远不会加载,前端也不会发送 "ready"。
+   */
+  onBootFailed?: () => void;
+  /** 诊断日志(扩展输出通道)。 */
+  log?: (line: string) => void;
 }
 
 /**
@@ -123,6 +133,8 @@ export class ChatChannel {
   private rollbackRefreshTimers = new Map<string, NodeJS.Timeout>();
   /** 服务器在线状态(上升沿触发 full 重推,刷新会话级数据) */
   private lastServerUp = false;
+  /** 前端是否已上报 "ready"(脚本尾部无条件发送);未就绪说明平台预载或 bundle 执行失败 */
+  private booted = false;
 
   constructor(
     private readonly hub: DshHub,
@@ -144,6 +156,15 @@ export class ChatChannel {
     };
     sink.webview.html = this.html(sink.webview);
     sink.webview.onDidReceiveMessage((msg) => void this.onMessage(msg), undefined, this.disposables);
+    // 平台 webview 预载守护:预载页的 Service Worker 注册失败(冷启动竞态,microsoft/vscode#125993)
+    // 时内容帧不会被写入,前端永远收不到 "ready"。10 秒未就绪即调用宿主恢复钩子;
+    // 正常机器上 bundle 是本地资源,ready 通常 1 秒内到达,不会误触。
+    const bootWatchdog = setTimeout(() => {
+      if (this.booted) return;
+      this.log("[boot] 10 秒内未收到 webview ready —— 平台 webview 预载(Service Worker 注册)疑似失败");
+      this.sink.onBootFailed?.();
+    }, 10_000);
+    this.disposables.push({ dispose: () => clearTimeout(bootWatchdog) });
     this.disposables.push(
       sink.onDidDispose(() => {
         for (const d of this.disposables) d.dispose();
@@ -573,6 +594,7 @@ export class ChatChannel {
     const current = store.currentSessionId;
     switch (msg.kind) {
       case "ready":
+        this.booted = true;
         await this.ensureAndPush();
         break;
       case "send": {
@@ -1899,6 +1921,10 @@ export class ChatChannel {
 
   private post(message: unknown) {
     void this.sink.webview.postMessage(message);
+  }
+
+  private log(line: string) {
+    this.sink.log?.(line);
   }
 
   private cssCache: string | undefined;

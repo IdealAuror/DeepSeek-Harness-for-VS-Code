@@ -106,7 +106,7 @@ export function activate(ctx: vscode.ExtensionContext) {
   // 必须在视图被解析之前完成注册;视图条目在 package.json 中声明 "type": "webview",
   // 否则 VS Code 会按默认 tree 视图处理,去找不存在的树数据提供者并显示占位文案。
   const registerViewProviders = () => {
-    const provider = new ChatPanelProvider(hub, ctx);
+    const provider = new ChatPanelProvider(hub, ctx, (line) => output.appendLine("[webview] " + line));
     ctx.subscriptions.push(
       vscode.window.registerWebviewViewProvider(ChatPanelProvider.viewType, provider, {
         webviewOptions: { retainContextWhenHidden: true },
@@ -118,7 +118,7 @@ export function activate(ctx: vscode.ExtensionContext) {
     output.appendLine("[activate] 视图 provider 已注册(dsh.chatView / dsh.chatViewSecondary)");
   };
   registerViewProviders();
-  const chatWindow = new ChatWindowProvider(hub, ctx);
+  const chatWindow = new ChatWindowProvider(hub, ctx, (line) => output.appendLine("[webview] " + line));
   const cordisPanel = new CordisPanelProvider(hub, ctx);
 
   // ---------- 状态栏 ----------

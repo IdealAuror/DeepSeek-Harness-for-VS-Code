@@ -5,6 +5,12 @@
  * 任何库若尝试 navigator.serviceWorker.register() 会触发
  * "InvalidStateError: Failed to register a ServiceWorker" 并导致整个视图加载失败。
  * 本模块必须先于其他依赖导入执行。
+ *
+ * 注意:本护栏只覆盖扩展内容(内层 iframe)里第三方库的尝试。
+ * 报错 "Error loading webview: Could not register service worker: InvalidStateError..."
+ * 来自 VS Code 平台自己的 webview 预载页(src/vs/workbench/contrib/webview/browser/pre/index.html),
+ * 发生在扩展内容加载之前,本护栏无法拦截;该类失败由宿主侧的 boot 守护自动恢复
+ * (见 channel.ts 的 ChatSink.onBootFailed),平台问题见 microsoft/vscode#125993。
  */
 (function installServiceWorkerGuard() {
   try {

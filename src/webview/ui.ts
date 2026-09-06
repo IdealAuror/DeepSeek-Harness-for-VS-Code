@@ -125,6 +125,8 @@ interface PresetInfo {
   trust?: "system" | "user";
   name?: string;
   description?: string;
+  /** 无法加载的预设(服务器标记):显示原因并置为危险色。 */
+  broken?: string;
 }
 
 interface BlockState {
@@ -551,6 +553,7 @@ const EN_TEXT: Record<string, string> = {
   "应如何批准操作?": "How should operations be approved?",
   "了解更多": "Learn more",
   "会话已开始,预设不可切换(新会话可选)": "This session has started: the preset is fixed (choose it for new sessions)",
+  "选择 Agent 预设(新会话生效)": "Choose an Agent preset (applies to new sessions)",
   "只读访问:不能修改文件或执行命令;外部文件与网络访问按策略询问": "Read-only: cannot modify files or run commands; external files and network access are asked per policy",
   "可修改工作区内的文件;外部文件与网络访问按策略询问": "Can modify files inside the workspace; external files and network access are asked per policy",
   "可不受限制地访问互联网和你电脑上的任何文件": "Unrestricted access to the internet and any file on your computer",
@@ -1626,8 +1629,24 @@ function toolSelect(label: string, title: string): { wrap: HTMLElement; select: 
 }
 
 // 预设:输入框右上角(仅新会话)
-const presetTool = toolSelect(t("预设"), t("Agent 预设"));
-const presetSelect = presetTool.select;
+// 预设:收起为「🧩 预设 · 名称 ▾」胶囊(仅新会话);弹层:标题 + 选项(名称/描述/✓,参考网页端样式)
+const presetPill = el("div", "preset-pill");
+const presetPillHead = el("button", "preset-pill-head");
+presetPillHead.type = "button";
+presetPillHead.title = t("Agent 预设");
+const presetPillIcon = el("span", "preset-pill-icon", "🧩");
+const presetPillText = el("span", "preset-pill-text");
+const presetPillChevron = el("span", "preset-pill-chevron");
+presetPillChevron.append(lineIcon(ICONS.down2, 12));
+presetPillHead.append(presetPillIcon, presetPillText, presetPillChevron);
+const presetPillPop = el("div", "preset-pill-pop");
+presetPillPop.hidden = true;
+const ppPresetHeader = el("div", "pp-header");
+const ppPresetTitle = el("span", "pp-title", t("选择 Agent 预设(新会话生效)"));
+ppPresetHeader.append(ppPresetTitle);
+const presetPillList = el("div", "preset-pill-list");
+presetPillPop.append(ppPresetHeader, presetPillList);
+presetPill.append(presetPillHead, presetPillPop);
 
 // 模型 + 思考:收起为单个细长按钮(模型名可省略,推理强度始终可见:如 deepseek-v4-Fl... · Max),
 // 位于输入框右下角;点击弹出面板,在面板内分别选择模型与推理等级。
@@ -1730,7 +1749,7 @@ const composerTop = el("div", "composer-top");
 attachmentsRow.append(btnAddAttach);
 const presetTag = el("span", "preset-tag");
 presetTag.hidden = true;
-composerTop.append(attachmentsRow, presetTool.wrap, presetTag);
+composerTop.append(attachmentsRow, presetPill, presetTag);
 composer.append(composerTop, inputWrap, composerBottom, hintRow);
 
 // 添加文件/文件夹选择菜单(挂在 composer 内)
@@ -2291,8 +2310,25 @@ document.addEventListener("keydown", (e) => {
     modelPill.classList.remove("open");
   }
 });
-presetSelect.addEventListener("change", () => {
-  if (presetSelect.value) vscode.postMessage({ kind: "selectPreset", preset: presetSelect.value });
+presetPillHead.addEventListener("click", (e) => {
+  e.stopPropagation();
+  renderPresetPill();
+  const opening = presetPillPop.hidden;
+  presetPillPop.hidden = !opening;
+  presetPill.classList.toggle("open", opening);
+});
+// 点击弹层外部或 Esc 关闭(与权限胶囊一致)
+document.addEventListener("click", (e) => {
+  if (!presetPillPop.hidden && !presetPill.contains(e.target as Node)) {
+    presetPillPop.hidden = true;
+    presetPill.classList.remove("open");
+  }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !presetPillPop.hidden) {
+    presetPillPop.hidden = true;
+    presetPill.classList.remove("open");
+  }
 });
 permissionPillHead.addEventListener("click", (e) => {
   e.stopPropagation();
@@ -3905,38 +3941,55 @@ function modelName(provider: string, id: string): string {
   return findModel(provider, id)?.name ?? id;
 }
 
-function renderPresetSelect() {
+/** 预设胶囊 = 收起态(🧩 预设 · 名称 ▾)+ 弹层(标题 + 选项列表:图标/名称/描述/✓)。 */
+function renderPresetPill() {
   const current = state.sessions.find((s) => s.sessionId === state.current);
   const presets = state.presets ?? [];
   // 服务器限制:已开始的会话预设不可更改(agent preset is fixed)。
-  // 新会话显示可切换下拉;已开始的会话只显示当前预设的纯文本标签(不提供点击下拉)。
+  // 新会话显示可切换胶囊;已开始的会话只显示当前预设的纯文本标签(不提供点击下拉)。
   const switchable = (current?.blank ?? true);
-  presetTool.wrap.hidden = !switchable;
+  presetPill.hidden = !switchable;
   presetTag.hidden = switchable;
   if (!switchable) {
     presetTag.textContent = current?.agentPreset ? presetLabel(current.agentPreset) : "";
     presetTag.title = t("会话已开始,预设不可切换(新会话可选)");
     return;
   }
-  presetSelect.innerHTML = "";
-  let currentInList = false;
+  const currentPreset = current?.agentPreset ? presets.find((p) => p.id === current.agentPreset) : undefined;
+  if (currentPreset) {
+    presetPillText.textContent = `${t("预设")} · ${presetDisplayText(currentPreset).name}`;
+  } else if (current?.agentPreset) {
+    presetPillText.textContent = `${t("预设")} · ${presetLabel(current.agentPreset)}`;
+  } else {
+    presetPillText.textContent = t("预设");
+  }
+  presetPillHead.disabled = presets.length === 0;
+  // 无论弹层开合都重建列表:首次展开即有内容,投影晚到也会实时填充
+  presetPillList.innerHTML = "";
   for (const preset of presets) {
-    const option = el("option", undefined, presetLabel(preset.id) + (preset.isDefault ? t(" · 默认") : ""));
-    option.value = preset.id;
-    if (current?.agentPreset === preset.id) {
-      option.selected = true;
-      currentInList = true;
+    const text = presetDisplayText(preset);
+    const broken = typeof preset.broken === "string" && preset.broken.length > 0;
+    const row = el("button", "pp-opt" + (broken ? " danger" : ""));
+    row.type = "button";
+    row.append(el("span", "pp-opt-icon", preset.trust === "system" ? "🛡️" : "📄"));
+    const body = el("span", "pp-opt-body");
+    body.append(
+      el("span", "pp-opt-name", text.name + (preset.isDefault ? t(" · 默认") : "")),
+    );
+    const desc = text.description ?? (broken ? preset.broken : "");
+    if (desc) body.append(el("span", "pp-opt-desc", desc));
+    row.append(body);
+    if (current?.agentPreset === preset.id || (presets.length === 1 && !current?.agentPreset)) {
+      row.append(el("span", "pp-opt-check", "✓"));
     }
-    presetSelect.append(option);
+    row.addEventListener("click", () => {
+      presetPillPop.hidden = true;
+      presetPill.classList.remove("open");
+      vscode.postMessage({ kind: "selectPreset", preset: preset.id });
+      renderPresetPill();
+    });
+    presetPillList.append(row);
   }
-  // 当前预设不在列表(自定义/已移除)时,补一个只读占位项
-  if (current?.agentPreset && !currentInList) {
-    const option = el("option", undefined, presetLabel(current.agentPreset));
-    option.value = current.agentPreset;
-    option.selected = true;
-    presetSelect.prepend(option);
-  }
-  presetSelect.disabled = presets.length === 0;
 }
 
 function presetLabel(id: string): string {
@@ -4906,8 +4959,8 @@ function applyStaticLabels() {
   modelPillHead.title = t("模型与思考(推理强度)");
   thinkSeg.title = t("思考深度(推理强度)");
   mppThinkLabel.textContent = t("思考深度(推理强度)");
-  presetTool.label.textContent = t("预设");
-  presetTool.wrap.title = t("Agent 预设");
+  presetPillHead.title = t("Agent 预设");
+  ppPresetTitle.textContent = t("选择 Agent 预设(新会话生效)");
   permissionPillHead.title = t("读写权限(沙箱模式 + 审批策略)");
   ppTitle.textContent = t("应如何批准操作?");
   ppMore.textContent = t("了解更多");
@@ -4950,7 +5003,7 @@ function applyLanguage() {
   renderSessions();
   renderThinkingSeg();
   renderModelPill();
-  renderPresetSelect();
+  renderPresetPill();
   renderPermissionPill();
   renderGoal();
   renderModeChips();
@@ -5037,7 +5090,7 @@ function handleMessage(msg: any) {
       renderGoal();
       renderThinkingSeg();
       renderModelPill();
-      renderPresetSelect();
+      renderPresetPill();
       renderPermissionPill();
       renderContextBar();
       renderStatsLine();
@@ -5134,7 +5187,7 @@ function handleMessage(msg: any) {
     case "sessions": {
       state.sessions = msg.sessions ?? [];
       renderSessions();
-      renderPresetSelect();
+      renderPresetPill();
       panels.updateWorkspaces();
       break;
     }
@@ -5160,7 +5213,7 @@ function handleMessage(msg: any) {
     }
     case "presets": {
       state.presets = msg.value?.presets ?? [];
-      renderPresetSelect();
+      renderPresetPill();
       panels.refreshSettings();
       break;
     }

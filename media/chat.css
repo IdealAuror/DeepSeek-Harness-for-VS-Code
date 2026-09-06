@@ -2705,7 +2705,7 @@ body {
   color: var(--dsh-accent);
 }
 
-/* ---------- 预设:新会话为可切换下拉;已开始会话显示纯文本标签(不可点击) ---------- */
+/* ---------- 预设:新会话为可切换胶囊,已开始会话显示纯文本标签 ---------- */
 .preset-tag {
   flex-shrink: 0;
   max-width: 200px;
@@ -2719,6 +2719,97 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: default;
+}
+
+/* 预设胶囊(与权限胶囊同款样式) */
+.preset-pill {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.preset-pill-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 8px;
+  border: 1px solid var(--dsh-border);
+  border-radius: 999px;
+  background: var(--dsh-bg);
+  color: var(--dsh-fg);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.preset-pill-head:hover {
+  border-color: var(--dsh-accent);
+}
+
+.preset-pill-head:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.preset-pill-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.preset-pill-text {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preset-pill-chevron {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--dsh-muted);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.preset-pill.open .preset-pill-chevron {
+  transform: rotate(180deg);
+}
+
+.preset-pill-head:hover .preset-pill-chevron {
+  color: var(--dsh-accent);
+}
+
+/* 预设弹层(与权限弹层同款:标题 + 选项行) */
+.preset-pill-pop {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  width: min(92vw, 360px);
+  padding: 4px;
+  border: 1px solid var(--dsh-border);
+  border-radius: 10px;
+  background: var(--vscode-menu-background, #252526);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.preset-pill-pop[hidden] {
+  display: none;
+}
+
+.preset-pill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 48vh;
+  overflow-y: auto;
 }
 
 /* ---------- 权限:收起为「⚠ 图标 + 名称 ▾」胶囊,弹层:标题 + 选项(名称/说明/✓,参考截图样式) ---------- */
