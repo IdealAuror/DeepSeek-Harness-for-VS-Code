@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.2
+- Turn-end fallback for assembly: chunkrow rows that were not yet flushed by an assistant/message (interrupted turns, row-before-node ordering) are now merged into the turn's assistant node when turn/end arrives — the last remaining ordering hole in the row-assembly path. Combined with the earlier verified pipeline (rows carry full text; replay reconstructs text + reasoning for every assistant node), the renderer now covers every arrival order.
+- 回合结束时兜底组装:尚未被 assistant/message 落地的 chunkrow 行(中断回合、行先于节点到达等顺序组合)会在 turn/end 时按 index 合入该回合节点 —— 行组装路径上最后一个顺序漏洞补齐。配合已验证的管线(行内含完整文本;重放能为每个 assistant 节点重建文本与思考),渲染器现在覆盖所有到达顺序。
+
 ## 0.13.1
 - Replay robustness: ① empty reasoning/text blocks are no longer rendered as placeholders (an interrupted stream or a row with no content used to leave a '思考过程' summary that expands to nothing) — blocks with no text are skipped so the conversation only shows actual content; ② the chunkrow row consumption from 0.13.0 is verified end-to-end against the live session journal: packing the real event log with rc.1's packChunkRuns and replaying it through the extension's row-assembly logic reconstructs text AND reasoning blocks for every assistant node.
 - 重放增强:① 空的推理/文本块不再渲染为占位(中断的流式块或无内容行之前会留下点开为空的「思考过程」)—— 无文本的块直接跳过,对话里只显示真实内容;② 0.13.0 新增的 chunkrow 行消费已用真实会话日志端到端验证:用 rc.1 的 packChunkRuns 打包本次会话事件、再走扩展的行组装逻辑,每个 assistant 节点都能重建出文本与思考块。

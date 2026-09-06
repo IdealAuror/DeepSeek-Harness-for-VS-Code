@@ -3337,6 +3337,24 @@ function handleEvent(wire: WireEvent) {
       stopTurnStatus();
       const finishedTurn = state.currentStreamTurn;
       state.currentStreamTurn = undefined;
+      // 兜底:回合结束时把仍未随 assistant/message 落地的 chunkrow 行按 index 合入该回合节点
+      // (覆盖无 message 结束的中断回合,以及任何行先于节点创建到达的顺序组合)
+      if (finishedTurn !== undefined) {
+        const node = [...state.nodes].reverse().find((n) => n.kind === "assistant" && n.turn === finishedTurn);
+        if (node && node.blocks) {
+          const pending: { index: number; kind: "text" | "reasoning"; text: string }[] = [];
+          for (const [key, bucket] of state.rowBlocks) {
+            if (!key.startsWith(`${finishedTurn}:`)) continue;
+            state.rowBlocks.delete(key);
+            for (const [index, b] of bucket) pending.push({ index, kind: b.kind, text: b.text });
+          }
+          if (pending.length > 0) {
+            pending.sort((a, b) => a.index - b.index);
+            for (const b of pending) node.blocks.push({ type: b.kind, text: b.text, el: null });
+            refreshAssistantNode(node, undefined, true);
+          }
+        }
+      }
       // 回合结束后才渲染操作条(复制/分支/点赞)
       if (finishedTurn !== undefined) {
         const node = [...state.nodes].reverse().find((n) => n.kind === "assistant" && n.turn === finishedTurn);
