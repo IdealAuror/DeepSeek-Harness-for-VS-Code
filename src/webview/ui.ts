@@ -2836,6 +2836,8 @@ function renderAssistantBlocks(assistant: NodeState): HTMLElement {
   appendToolsAfter(-1);
   let seenReasoning = false;
   (assistant.blocks ?? []).forEach((block, index) => {
+    // 空的推理/文本块不渲染占位(如中断的流式块):避免出现「思考过程」点开却没有任何内容
+    if (typeof block.text !== "string" || block.text.trim() === "") return;
     if (block.type === "reasoning") {
       const first = !seenReasoning;
       seenReasoning = true;
