@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.3
+- Renderer decoupled from stream/row bookkeeping: assistant/message content parts (text & reasoning) are now ALWAYS rendered — the streamedBlockKeys gate is gone, and the only dedupe is content-equality against the last appended block (rows, live stream and message parts can all arrive independently; any source with real text renders). This removes the last conceivable path where present content could be suppressed by key collisions or stale replay state.
+- 渲染与流式/行状态彻底解耦:assistant/message 的 content 部件(文本与推理)现在**无条件渲染** —— 移除 streamedBlockKeys 门槛,唯一去重是与上一块内容相等(行、实时流、消息部件三种来源可独立到达,任何带真实文本的来源都会渲染)。这排除了「内容存在却因键冲突或重放状态被吞掉」的最后一条可能路径。
+
 ## 0.13.2
 - Turn-end fallback for assembly: chunkrow rows that were not yet flushed by an assistant/message (interrupted turns, row-before-node ordering) are now merged into the turn's assistant node when turn/end arrives — the last remaining ordering hole in the row-assembly path. Combined with the earlier verified pipeline (rows carry full text; replay reconstructs text + reasoning for every assistant node), the renderer now covers every arrival order.
 - 回合结束时兜底组装:尚未被 assistant/message 落地的 chunkrow 行(中断回合、行先于节点到达等顺序组合)会在 turn/end 时按 index 合入该回合节点 —— 行组装路径上最后一个顺序漏洞补齐。配合已验证的管线(行内含完整文本;重放能为每个 assistant 节点重建文本与思考),渲染器现在覆盖所有到达顺序。

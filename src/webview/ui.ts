@@ -3173,28 +3173,29 @@ function handleEvent(wire: WireEvent) {
       // 先落盘 chunkrow 压缩行(旧历史无逐条 chunk 事件,文本/推理以行存在;
       // 行 index 与 message content 的块位置一致,行已覆盖的键由 part 循环跳过)
       let addedText = "";
+      const pushBlock = (type: "text" | "reasoning", text: string) => {
+        // 与最后一块内容相同则视为重复(行/流式/部件三种来源去重);
+        // 否则无条件追加 —— 不以 streamedBlockKeys 为门槛,任何来源的真实内容都会渲染
+        const last = assistant.blocks!.at(-1);
+        if (last && last.type === type && last.text === text) return;
+        assistant.blocks!.push({ type, text, el: null });
+        if (type === "text") addedText += text + "\n";
+      };
       const rowBucket = state.rowBlocks.get(`${turn}:${step}`);
       if (rowBucket) {
         state.rowBlocks.delete(`${turn}:${step}`);
         const sorted = [...rowBucket.entries()].sort((a, b) => a[0] - b[0]);
-        for (const [index, block] of sorted) {
-          const key = `${turn}:${step}:${index}`;
-          if (state.streamedBlockKeys.has(key)) continue;
-          state.streamedBlockKeys.add(key);
-          assistant.blocks!.push({ type: block.kind, text: block.text, el: null });
-          if (block.kind === "text") addedText += block.text + "\n";
+        for (const [, block] of sorted) {
+          if (!block.text) continue;
+          pushBlock(block.kind, block.text);
         }
       }
-      // 追加未被流式覆盖的文本/推理块(流式期间已追加过的跳过)
+      // 追加 message content 中的文本/推理块(内容比对去重,不再依赖流式键)
       for (let i = 0; i < content.length; i++) {
         const block = content[i];
         if (block?.type !== "text" && block?.type !== "reasoning") continue;
-        if (typeof block.text !== "string") continue;
-        const key = `${turn}:${step}:${i}`;
-        if (state.streamedBlockKeys.has(key)) continue;
-        state.streamedBlockKeys.add(key);
-        assistant.blocks!.push({ type: block.type === "reasoning" ? "reasoning" : "text", text: block.text, el: null });
-        if (block.type === "text") addedText += block.text + "\n";
+        if (typeof block.text !== "string" || !block.text) continue;
+        pushBlock(block.type === "reasoning" ? "reasoning" : "text", block.text);
       }
       if (addedText) assistant.plainText = ((assistant.plainText ?? "") + "\n" + addedText.trim()).trim();
       refreshAssistantNode(assistant, undefined, true); // 重放/实时均在此一次性渲染最终内容
@@ -3350,7 +3351,12 @@ function handleEvent(wire: WireEvent) {
           }
           if (pending.length > 0) {
             pending.sort((a, b) => a.index - b.index);
-            for (const b of pending) node.blocks.push({ type: b.kind, text: b.text, el: null });
+            for (const b of pending) {
+              if (!b.text) continue;
+              const last = node.blocks.at(-1);
+              if (last && last.type === b.kind && last.text === b.text) continue;
+              node.blocks.push({ type: b.kind, text: b.text, el: null });
+            }
             refreshAssistantNode(node, undefined, true);
           }
         }
