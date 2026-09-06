@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.5
+- Preset picker icons removed: the collapsed pill is now just '预设 · 名称 ▾' (no 🧩 emoji) and the popup option rows no longer carry the system/user emoji badges — name + muted description + ✓ only, keeping the row layout clean and aligned with the web's list.
+- 预设选择器移除图标:收起胶囊只显示「预设 · 名称 ▾」(去掉 🧩),弹层选项行也去掉系统/用户 emoji 徽标 —— 仅保留 名称 + 灰色描述 + ✓,行布局更简洁、与网页端列表一致。
+
 ## 0.13.4
 - Preset picker restyled like the permission popup: ① collapsed state is now a '🧩 预设 · 名称 ▾' pill (26px, same look as permission/model pills) instead of the native select; ② clicking opens a themed popup with a title ('选择 Agent 预设(新会话生效)') and option rows: system/user badge icon + bold name (+ · 默认) + muted description (system presets use the localized built-in descriptions; user presets use file metadata; broken presets show the reason in the danger color) + ✓ on the current one; ③ started sessions keep showing the plain preset text tag (no dropdown); selection flows through the same selectPreset message.
 - 预设选择器按权限弹层样式重做:① 收起态改为「🧩 预设 · 名称 ▾」胶囊(与权限/模型胶囊同高同风格),不再用原生下拉;② 点开弹出主题化面板:标题「选择 Agent 预设(新会话生效)」+ 选项行 —— 系统/用户徽标图标 + 加粗名称(含 · 默认)+ 灰色小字描述(内置预设用本地化说明,用户预设取文件元数据,损坏预设显示原因并标危险色)+ 当前项 ✓;③ 已开始会话仍显示纯文本预设标签(不可点击);选择沿用同一 selectPreset 通道。

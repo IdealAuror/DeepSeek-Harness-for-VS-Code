@@ -2755,13 +2755,6 @@ body {
   cursor: default;
 }
 
-.preset-pill-icon {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  font-size: 12px;
-}
-
 .preset-pill-text {
   max-width: 160px;
   overflow: hidden;

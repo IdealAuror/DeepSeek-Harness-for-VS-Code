@@ -1629,16 +1629,15 @@ function toolSelect(label: string, title: string): { wrap: HTMLElement; select: 
 }
 
 // 预设:输入框右上角(仅新会话)
-// 预设:收起为「🧩 预设 · 名称 ▾」胶囊(仅新会话);弹层:标题 + 选项(名称/描述/✓,参考网页端样式)
+// 预设:收起为「预设 · 名称 ▾」胶囊(仅新会话);弹层:标题 + 选项(名称/描述/✓,参考网页端样式)
 const presetPill = el("div", "preset-pill");
 const presetPillHead = el("button", "preset-pill-head");
 presetPillHead.type = "button";
 presetPillHead.title = t("Agent 预设");
-const presetPillIcon = el("span", "preset-pill-icon", "🧩");
 const presetPillText = el("span", "preset-pill-text");
 const presetPillChevron = el("span", "preset-pill-chevron");
 presetPillChevron.append(lineIcon(ICONS.down2, 12));
-presetPillHead.append(presetPillIcon, presetPillText, presetPillChevron);
+presetPillHead.append(presetPillText, presetPillChevron);
 const presetPillPop = el("div", "preset-pill-pop");
 presetPillPop.hidden = true;
 const ppPresetHeader = el("div", "pp-header");
@@ -3971,7 +3970,6 @@ function renderPresetPill() {
     const broken = typeof preset.broken === "string" && preset.broken.length > 0;
     const row = el("button", "pp-opt" + (broken ? " danger" : ""));
     row.type = "button";
-    row.append(el("span", "pp-opt-icon", preset.trust === "system" ? "🛡️" : "📄"));
     const body = el("span", "pp-opt-body");
     body.append(
       el("span", "pp-opt-name", text.name + (preset.isDefault ? t(" · 默认") : "")),
