@@ -175,8 +175,12 @@ interface NodeState {
   cmd?: boolean;
   /** 工具调用失败(结果 isError) */
   failed?: boolean;
-  /** 用户消息 / 工具结果携带的图片引用(官方 image 内容块) */
+  // 用户消息 / 工具结果携带的图片引用(官方 image 内容块)
   images?: { attachmentId: string; mediaType?: string }[];
+  /** 本回合交付的文件(官方 present 工具:路径 + 描述,渲染为网页端同款文件卡) */
+  presented?: { path: string; description?: string }[];
+  /** 收尾答案的事件时间(回合尾本地时钟) */
+  time?: number;
 }
 
 // ---------- 状态 ----------
@@ -205,6 +209,13 @@ const state = {
   permissions: undefined as { options: { value: string; name: string; description?: string }[]; currentValue: string } | undefined,
   /** 各轮 turn/start 的 seq,用于"回退到上一轮" */
   turnStarts: [] as number[],
+  /** 回合起止时刻与用量(网页端回合尾「用量 / 用时 / 时间」同源数据) */
+  turnStartMs: new Map<number, number>(),
+  turnEndMs: new Map<number, number>(),
+  turnUsage: new Map<number, TurnUsageBucket>(),
+  /** 回合首个 / 末个模型增量的时刻(TTFT 与输出速度的解码窗口) */
+  turnFirstTokenMs: new Map<number, number>(),
+  turnLastDeltaMs: new Map<number, number>(),
   /** 回合级 Git 回退快照(服务端插件写入 .dsh/rollback,宿主推送可用清单) */
   rollback: undefined as { sessionId: string; available: boolean; checkpoints: { turn: number; time: number }[] } | undefined,
   /** 计划模式状态(plan/mode 事件) */
@@ -288,6 +299,20 @@ const state = {
     }[];
   } | null,
 };
+
+/**
+ * 一个回合的用量累计(网页端 TurnUsagePanel 的 usage 同源):
+ * 按步累加 assistant/message 的 usage,输出侧含推理 token 明细。
+ */
+interface TurnUsageBucket {
+  uncachedInput: number;
+  cacheRead: number;
+  cacheWrite: number;
+  output: number;
+  reasoning: number;
+  /** 本回合实际用到的路由(provider/model) */
+  routes: Set<string>;
+}
 
 /**
  * 当前回合产出的文件(与网页端 ui-deliverables 一致:由 mutation 工具调用视图的
@@ -393,6 +418,12 @@ const ICONS = {
   down: "M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17",
   // 产物(盒子)
   box: "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z|M3.27 6.96 12 12.01l8.73-5.05|M12 22.08V12",
+  // 时钟(回合用时)
+  clock: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z|M12 6v6l4 2",
+  // 数据库(回合用量)
+  database: "M12 2C7.58 2 4 3.34 4 5s3.58 3 8 3 8-1.34 8-3-3.58-3-8-3z|M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5|M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6",
+  // 右上箭头(用默认应用打开)
+  rightUp: "M7 17 17 7|M7 7h10v10",
   // 分支(↪)
   branch: "M6 3v12|M18 9a9 9 0 0 1-9 9|M6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6z|M18 6a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
   // 回退(逆时针)
@@ -730,6 +761,26 @@ const EN_TEXT: Record<string, string> = {
   "{n} 已完成": "{n} completed",
   "{n} 进行中": "{n} in progress",
   "{n} 待处理": "{n} pending",
+  "本轮用量": "Turn usage",
+  "用量 {total}": "Usage {total}",
+  "提供方 / 模型": "Provider / model",
+  "缓存命中": "Cache hit",
+  "未缓存输入": "Uncached input",
+  "缓存读取": "Cache read",
+  "缓存写入": "Cache write",
+  "输出": "Output",
+  "（其中推理 {tokens}）": " ({tokens} reasoning)",
+  "本轮用时和速度": "Turn time and speed",
+  "本轮总用时": "Total turn time",
+  "输出速度（TPS）": "Tokens per second (TPS)",
+  "首 token 用时（TTFT）": "Time to first token (TTFT)",
+  "用时 {duration}": "Ran for {duration}",
+  "{minutes}分{seconds}秒": "{minutes}m {seconds}s",
+  "{seconds}秒": "{seconds}s",
+  "{m}月{d}日": "{m}/{d}",
+  "{y}年{m}月{d}日": "{y}-{m}-{d}",
+  "用默认应用打开": "Open with default app",
+  "更多操作": "More actions",
   "工具定义": "Tool definitions",
   "对话消息": "Messages",
   "上下文已用 {p}": "{p} of context used",
@@ -1760,7 +1811,7 @@ statusRow.append(turnStatus, modeChips);
 const composerBottom = el("div", "composer-bottom");
 const btnPlus = el("button", "btn-icon-btn plus-btn");
 btnPlus.title = t("输入命令(/plan、/compact、.claude 命令…)");
-btnPlus.append(lineIcon(ICONS.slash, 13));
+btnPlus.append(lineIcon(ICONS.slash, 12));
 const btnAddAttach = el("button", "attach-add-btn");
 btnAddAttach.title = t("添加文件或文件夹到对话");
 btnAddAttach.append(lineIcon(ICONS.plus, 12));
@@ -2887,13 +2938,77 @@ function buildFilesCard(files: string[]): HTMLElement {
   return wrap;
 }
 
-/** 把本轮产物渲染进助手消息的产物容器(位于操作条之前);无产物时隐藏容器。 */
+/** 把本轮产物渲染进助手消息的产物容器(位于操作条之前);交付卡在产物列表上方。 */
 function renderNodeFiles(node: NodeState) {
   if (!node.filesEl) return;
   node.filesEl.innerHTML = "";
+  const presented = node.presented ?? [];
   const files = node.deliverables ?? [];
-  node.filesEl.hidden = files.length === 0;
+  node.filesEl.hidden = presented.length === 0 && files.length === 0;
+  if (presented.length > 0) {
+    const grid = el("div", "deliverable-grid");
+    for (const file of presented) grid.append(buildPresentedCard(file));
+    node.filesEl.append(grid);
+  }
   if (files.length > 0) node.filesEl.append(buildFilesCard(files));
+}
+
+/** 解析 present 工具调用参数:{ files: [{ path, description? }] }(参数可能仍在流式拼装,解析失败即忽略)。 */
+function parsePresentedFiles(rawArgs: unknown): { path: string; description?: string }[] {
+  if (typeof rawArgs !== "string" || !rawArgs.trim()) return [];
+  try {
+    const args = JSON.parse(rawArgs) as { files?: unknown };
+    if (!Array.isArray(args?.files)) return [];
+    return args.files
+      .map((item) => (item && typeof item === "object" ? (item as { path?: unknown; description?: unknown }) : undefined))
+      .filter((item): item is { path: string; description?: string } => typeof item?.path === "string" && item.path.length > 0)
+      .map((item) => ({ path: item.path, description: typeof item.description === "string" ? item.description : undefined }));
+  } catch {
+    return [];
+  }
+}
+
+/** 交付文件卡(网页端 PresentedFileCard 同款:文件图标 + 名称 + 描述 + 打开/更多)。 */
+function buildPresentedCard(file: { path: string; description?: string }): HTMLElement {
+  const card = el("div", "deliverable-card");
+  const name = basename(file.path);
+  const ext = name.includes(".") ? name.split(".").pop()!.toUpperCase() : "";
+  const icon = el("span", "deliverable-icon");
+  icon.append(lineIcon(ICONS.copy, 16));
+  const body = el("div", "deliverable-body");
+  body.append(el("div", "deliverable-name", name));
+  body.append(el("div", "deliverable-desc", (file.description ?? "").trim() || ext || t("文件")));
+  const split = el("div", "deliverable-split");
+  const open = el("button", "deliverable-open", t("打开"));
+  open.type = "button";
+  open.title = file.path;
+  open.addEventListener("click", (e) => {
+    e.stopPropagation();
+    vscode.postMessage({ kind: "openFile", path: file.path });
+  });
+  const more = el("button", "deliverable-more");
+  more.type = "button";
+  more.title = t("更多操作");
+  more.append(lineIcon(ICONS.down2, 11));
+  more.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openAnchoredMenu(more, (menu) => {
+      const add = (iconPaths: string, label: string, action: () => void) => {
+        const row = el("button", "plus-menu-item");
+        row.append(lineIcon(iconPaths), el("span", "menu-item-label", label));
+        row.addEventListener("click", () => {
+          closeActivePopover();
+          action();
+        });
+        menu.append(row);
+      };
+      add(ICONS.rightUp, t("用默认应用打开"), () => vscode.postMessage({ kind: "openInDefaultApp", path: file.path }));
+      add(ICONS.folder, t("在资源管理器中显示"), () => vscode.postMessage({ kind: "revealInExplorer", path: file.path }));
+    });
+  });
+  split.append(open, more);
+  card.append(icon, body, split);
+  return card;
 }
 
 function findAssistantTail(): NodeState | undefined {
@@ -2910,6 +3025,7 @@ function findAssistantTail(): NodeState | undefined {
  */
 function applyAssistantChunk(data: any, timeMs: number) {
   const chunk = data?.chunk ?? {};
+  const turn = typeof data?.turn === "number" ? data.turn : undefined;
   switch (chunk.type) {
     case "block-start":
       beginAssistantBlock(data?.turn ?? 0, data?.step ?? 0, chunk.index ?? 0, chunk.blockType ?? "text", timeMs);
@@ -2918,11 +3034,15 @@ function applyAssistantChunk(data: any, timeMs: number) {
       setTurnStatusActivity(chunk.blockType === "reasoning" || chunk.blockType === "text" ? chunk.blockType : "reasoning");
       break;
     case "text-delta":
-      appendToStream("text", chunk.text ?? "");
+    case "reasoning-delta": {
+      // 解码窗口:首个增量(TTFT 基准)与末个增量(输出速度基准)
+      if (turn !== undefined) {
+        if (!state.turnFirstTokenMs.has(turn)) state.turnFirstTokenMs.set(turn, timeMs);
+        state.turnLastDeltaMs.set(turn, timeMs);
+      }
+      appendToStream(chunk.type === "reasoning-delta" ? "reasoning" : "text", chunk.text ?? "");
       break;
-    case "reasoning-delta":
-      appendToStream("reasoning", chunk.text ?? "");
-      break;
+    }
     default:
       break;
   }
@@ -3152,6 +3272,121 @@ function renderActions(node: NodeState) {
   });
   if (node.feedback === "positive") up.classList.add("selected-positive");
   if (node.feedback === "negative") down.classList.add("selected-negative");
+
+  // 回合尾统计(网页端 MessageIconActions 同款):用量胶囊 + 用时胶囊 + 本地时钟
+  const turn = node.turn;
+  const bucket = typeof turn === "number" ? state.turnUsage.get(turn) : undefined;
+  const total = bucket === undefined ? 0 : bucket.uncachedInput + bucket.cacheRead + bucket.cacheWrite + bucket.output;
+  if (bucket !== undefined && total > 0) node.actionsEl.append(buildTurnUsageStat(bucket, total));
+  const startMs = typeof turn === "number" ? state.turnStartMs.get(turn) : undefined;
+  const endMs = typeof turn === "number" ? state.turnEndMs.get(turn) : undefined;
+  if (startMs !== undefined && endMs !== undefined && typeof turn === "number") {
+    node.actionsEl.append(buildTurnTimeStat(turn, bucket, Math.max(0, endMs - startMs)));
+  }
+  const clockMs = node.time ?? endMs;
+  if (clockMs !== undefined) node.actionsEl.append(el("span", "turn-stat-clock", formatMessageClock(clockMs)));
+}
+
+/**
+ * 本地时钟(网页端 formatMessageClock 同款):同一天 → HH:mm;同年 → 「{m}月{d}日 HH:mm」;
+ * 跨年 → 「{y}年{m}月{d}日 HH:mm」。
+ */
+function formatMessageClock(time: number): string {
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const date = new Date(time);
+  const now = new Date();
+  const clock = `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+  if (date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()) return clock;
+  const params = { y: String(date.getFullYear()), m: String(date.getMonth() + 1), d: String(date.getDate()) };
+  const short = t("{m}月{d}日", params);
+  return `${date.getFullYear() === now.getFullYear() ? short : t("{y}年{m}月{d}日", params)} ${clock}`;
+}
+
+/** 用时文案(网页端 formatRunDuration 同款):≥1 分钟用「{m}分{s}秒」,否则「{s}秒」。 */
+function formatRunDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0) return t("{minutes}分{seconds}秒", { minutes: String(minutes), seconds: String(seconds).padStart(2, "0") });
+  return t("{seconds}秒", { seconds: String(seconds) });
+}
+
+/** 回合用量胶囊:数据库图标 + 「用量 29.6M tok」,点击展开精确明细。 */
+function buildTurnUsageStat(bucket: TurnUsageBucket, total: number): HTMLElement {
+  const wrap = el("span", "turn-stat");
+  const btn = el("button", "turn-stat-btn");
+  btn.type = "button";
+  btn.title = t("本轮用量");
+  btn.append(lineIcon(ICONS.database, 13), el("span", "turn-stat-label", t("用量 {total}", { total: `${fmtCompactTokens(total)} tok` })));
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openAnchoredMenu(btn, (menu) => {
+      menu.classList.add("turn-stat-pop");
+      const title = el("div", "ts-title");
+      title.append(lineIcon(ICONS.database, 13), el("span", undefined, t("本轮用量")), el("span", "ts-title-value", `${total.toLocaleString()} tok`));
+      menu.append(title, el("div", "ts-rule"));
+      const rows = el("dl", "ts-rows");
+      const addRow = (label: string, value: string, title2?: string) => {
+        const dt = el("dt", undefined, label);
+        const dd = el("dd", undefined, value);
+        if (title2) dd.title = title2;
+        rows.append(dt, dd);
+      };
+      if (bucket.routes.size > 0) addRow(t("提供方 / 模型"), [...bucket.routes].join(", "));
+      const promptSide = total - bucket.output;
+      if (bucket.cacheRead > 0 && promptSide > 0) addRow(t("缓存命中"), `${Math.round((bucket.cacheRead / promptSide) * 1000) / 10}%`);
+      addRow(t("未缓存输入"), bucket.uncachedInput.toLocaleString());
+      if (bucket.cacheRead > 0) addRow(t("缓存读取"), bucket.cacheRead.toLocaleString());
+      if (bucket.cacheWrite > 0) addRow(t("缓存写入"), bucket.cacheWrite.toLocaleString());
+      const outputText = bucket.reasoning > 0 ? `${bucket.output.toLocaleString()}${t("（其中推理 {tokens}）", { tokens: fmtCompactTokens(bucket.reasoning) })}` : bucket.output.toLocaleString();
+      addRow(t("输出"), outputText);
+      menu.append(rows);
+    });
+  });
+  wrap.append(btn);
+  return wrap;
+}
+
+/** 回合用时胶囊:时钟图标 + 「用时 5分58秒」,点击展开总用时 / 输出速度 / 首 token。 */
+function buildTurnTimeStat(turn: number, bucket: TurnUsageBucket | undefined, runMs: number): HTMLElement {
+  const wrap = el("span", "turn-stat");
+  const btn = el("button", "turn-stat-btn");
+  btn.type = "button";
+  btn.title = t("本轮用时和速度");
+  btn.append(lineIcon(ICONS.clock, 13), el("span", "turn-stat-label", t("用时 {duration}", { duration: formatRunDuration(runMs) })));
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openAnchoredMenu(btn, (menu) => {
+      menu.classList.add("turn-stat-pop");
+      const title = el("div", "ts-title");
+      title.append(lineIcon(ICONS.clock, 13), el("span", undefined, t("本轮用时和速度")));
+      menu.append(title, el("div", "ts-rule"));
+      const rows = el("dl", "ts-rows");
+      const addRow = (label: string, value: string) => rows.append(el("dt", undefined, label), el("dd", undefined, value));
+      addRow(t("本轮总用时"), formatRunDuration(runMs));
+      // 首 token 用时(TTFT)= 回合起点 → 首个文本/推理增量(仅实时回合可测,历史重放无从测得)
+      const firstTokenMs = state.turnFirstTokenMs.get(turn);
+      const startMs = state.turnStartMs.get(turn);
+      if (firstTokenMs !== undefined && startMs !== undefined) {
+        addRow(t("首 token 用时（TTFT）"), t("{seconds}秒", { seconds: formatLatencySeconds(firstTokenMs - startMs) }));
+      }
+      // 输出速度(TPS)= 输出 token / 解码窗口(首个 → 末个增量),与网页端 decodeMs 同源
+      const lastDeltaMs = state.turnLastDeltaMs.get(turn);
+      if (bucket !== undefined && bucket.output > 0 && firstTokenMs !== undefined && lastDeltaMs !== undefined && lastDeltaMs > firstTokenMs) {
+        const tps = bucket.output / ((lastDeltaMs - firstTokenMs) / 1000);
+        addRow(t("输出速度（TPS）"), t("{tps} tok/s", { tps: String(tps >= 10 ? Math.round(tps) : Math.round(tps * 10) / 10) }));
+      }
+      menu.append(rows);
+    });
+  });
+  wrap.append(btn);
+  return wrap;
+}
+
+/** 亚秒级延迟(网页端 formatLatencySeconds 同款):<10 秒保留一位小数,否则取整。 */
+function formatLatencySeconds(ms: number): string {
+  const seconds = Math.max(0, ms) / 1000;
+  return seconds < 10 ? String(Math.round(seconds * 10) / 10) : String(Math.round(seconds));
 }
 
 // ---------- 事件折叠 ----------
@@ -3339,7 +3574,22 @@ function handleEvent(wire: WireEvent) {
       refreshAssistantNode(assistant, undefined, true); // 重放/实时均在此一次性渲染最终内容
       // 回合级元信息与操作条(最终一步的数据生效)
       assistant.seq = ev.seq;
+      assistant.time = ev.time;
       assistant.deliverables = [...turnProduced];
+      // 回合用量累计(网页端 TurnUsagePanel 同源):按步累加,供回合尾「用量」胶囊
+      if (typeof turn === "number" && data?.usage && typeof data.usage === "object") {
+        const step = data.usage as { inputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number; outputTokens?: number; reasoningTokens?: number };
+        const bucket: TurnUsageBucket =
+          state.turnUsage.get(turn) ?? { uncachedInput: 0, cacheRead: 0, cacheWrite: 0, output: 0, reasoning: 0, routes: new Set<string>() };
+        bucket.uncachedInput += Number(step.inputTokens ?? 0);
+        bucket.cacheRead += Number(step.cacheReadTokens ?? 0);
+        bucket.cacheWrite += Number(step.cacheWriteTokens ?? 0);
+        bucket.output += Number(step.outputTokens ?? 0);
+        bucket.reasoning += Number(step.reasoningTokens ?? 0);
+        const source = data.message?.source as { provider?: string; model?: string } | undefined;
+        if (source?.provider && source?.model) bucket.routes.add(`${source.provider}/${source.model}`);
+        state.turnUsage.set(turn, bucket);
+      }
       const modelName = state.models?.current?.model ?? "DeepSeek";
       const stepStart = state.stepStarts.get(`${turn}:${step}`);
       const usage = data?.usage;
@@ -3383,6 +3633,22 @@ function handleEvent(wire: WireEvent) {
           const preview = existing.el.querySelector(".tool-args-preview");
           if (preview) preview.textContent = String(existing.args ?? "").replace(/\s+/g, " ").slice(0, 90);
           updateToolSummary(existing);
+        }
+        break;
+      }
+      // 交付文件(官方 present 工具):渲染为网页端同款文件卡(名称 + 描述 + 打开/更多),
+      // 不再作为普通工具行;卡片落在回合尾产物容器里
+      if (String(data?.name ?? "") === "present") {
+        const presented = parsePresentedFiles(data?.arguments);
+        if (presented.length > 0) {
+          const callTurn = typeof data?.turn === "number" ? data.turn : state.currentStreamTurn;
+          let target = [...state.nodes].reverse().find((n) => n.kind === "assistant" && (callTurn === undefined || n.turn === callTurn));
+          if (!target) {
+            target = { kind: "assistant", key: `a:${callTurn ?? state.nodes.length}:${state.nodes.length}`, el: null, blocks: [], turn: callTurn ?? 0, tools: [] };
+            appendNode(target);
+          }
+          target.presented = [...(target.presented ?? []), ...presented];
+          renderNodeFiles(target);
         }
         break;
       }
@@ -3463,6 +3729,8 @@ function handleEvent(wire: WireEvent) {
       state.currentTurnTools = [];
       state.turnToolGroup = null;
       state.turnStarts.push(ev.seq);
+      // 回合起点:回合尾「用时」胶囊的计时基准(网页端 turn.start)
+      if (typeof data.turn === "number") state.turnStartMs.set(data.turn, ev.time);
       // 每回合重置产物累积器(不再读取 data.deliverables —— 本部署该字段为空)
       turnProduced = [];
       turnProducedSet.clear();
@@ -3481,8 +3749,9 @@ function handleEvent(wire: WireEvent) {
       state.streamBlock = null;
       state.streamKey = null;
       stopTurnStatus();
-      const finishedTurn = state.currentStreamTurn;
+      const finishedTurn = state.currentStreamTurn ?? (typeof data.turn === "number" ? data.turn : undefined);
       state.currentStreamTurn = undefined;
+      if (typeof finishedTurn === "number") state.turnEndMs.set(finishedTurn, ev.time);
       // 兜底:回合结束时把仍未随 assistant/message 落地的 chunkrow 行按 index 合入该回合节点
       // (覆盖无 message 结束的中断回合,以及任何行先于节点创建到达的顺序组合)
       if (finishedTurn !== undefined) {
@@ -5272,6 +5541,11 @@ function applyLanguage() {
   state.streamedBlockKeys = new Set();
   state.streamedBlocks = new Map();
   state.rowBlocks = new Map();
+  state.turnStartMs = new Map();
+  state.turnEndMs = new Map();
+  state.turnUsage = new Map();
+  state.turnFirstTokenMs = new Map();
+  state.turnLastDeltaMs = new Map();
   turnProduced = [];
   turnProducedSet.clear();
   turnCallViews.clear();
@@ -5349,6 +5623,11 @@ function handleMessage(msg: any) {
       state.streamedBlockKeys = new Set();
       state.streamedBlocks = new Map();
       state.rowBlocks = new Map();
+      state.turnStartMs = new Map();
+      state.turnEndMs = new Map();
+      state.turnUsage = new Map();
+      state.turnFirstTokenMs = new Map();
+      state.turnLastDeltaMs = new Map();
       state.turnToolGroup = null;
       messages.innerHTML = "";
       state.replaying = true;
@@ -5700,6 +5979,11 @@ function handleMessage(msg: any) {
       state.rawEvents = [];
       state.nodes = [];
       state.rowBlocks = new Map();
+      state.turnStartMs = new Map();
+      state.turnEndMs = new Map();
+      state.turnUsage = new Map();
+      state.turnFirstTokenMs = new Map();
+      state.turnLastDeltaMs = new Map();
       turnProduced = [];
       turnProducedSet.clear();
       turnCallViews.clear();

@@ -6,7 +6,7 @@
 > npx @deepseek-ai/dsh web
 > ```
 
-[中文版](#chinese) | Publisher: Jager · Latest: 0.13.8
+[中文版](#chinese) | Publisher: Jager · Latest: 0.13.9
 
 Use [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) directly in VS Code, alongside ChatGPT / Copilot: the built-in `@dsh` chat participant, secondary sidebar / standalone chat windows, workspaces / jobs / trajectory / settings panels, turn-level Git rollback, and a **multi-language UI** (简体中文 / 繁體中文 / English / 日本語 / 한국어 / Deutsch / Français / Español / Português / ไทย / Bahasa Indonesia / Türkçe / Русский / العربية — follows the VS Code display language or switch manually).
 
@@ -19,6 +19,8 @@ Use [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) 
 - **Standalone chat window**: `DSH: Open Standalone Chat Window`.
 - **Modern chat UI**: large rounded input box, pill toolbar (thinking depth / model / preset / permission), session stats line (turns · steps · LLM/tool time · first token · tok/s · cache hit · in/out tokens), and a **context meter ring** at the top-right of the input box, right of the preset pill (web parity: click for "context used", the ~used / window reading, and the system-prompt / tool-definition / conversation breakdown with colour-coded bar segments and per-category token counts).
 - **Per-message actions** (minimal line icons): copy (double-rectangle icon) / branch (forked line icon; menu: counter-clockwise arrow "Rewind here" · forked icon "Branch from here" · up-left fold "Branch and rewind earlier" · up-left arrow "Back to main") / thumbs up/down (line icons, official `/feedback`) / message header shows model · thinking time · per-step tokens.
+- **Turn footer stats** (web parity): a `Usage 25.8K tok` pill (click for provider/model, cache hit rate, uncached input, cache read/write, output with reasoning share), a `Ran for 5m 57s` pill (click for total turn time, output TPS, time to first token), and the local clock of the closing message at the row's right end (`HH:mm`, `M/D HH:mm` for earlier days, `Y-M-D HH:mm` for other years).
+- **Deliverable file cards** (web `present` parity): files the model delivers appear as cards at the turn tail — file name + description, an **Open** button (opens the file, or the HEAD→worktree diff for tracked files) and a **⋯ menu** with "Open with default app" and "Reveal in File Explorer".
 - **Turn-level Git rollback** (↩ button on each assistant turn + branch-menu entries): the DSH server-side plugin `dsh-git-rollback` snapshots the workspace's git state (tracked + untracked files) at every turn start into hidden refs (`refs/dsh/checkpoints/<sid>`, zero pollution of your branch history) and records them under `.dsh/rollback`; the button restores the workspace to the state before that turn. Commands `/rollback [N]`, `/redo`, `/checkpoints` work in both the web command panel and the VS Code chat (rollback is non-destructive: the pre-rollback state is saved first, `/redo` restores it, ignored files are never touched). Each message's ⋯/branch menu also offers **"Undo this turn's file changes"** (preview-and-confirm review dialog, reverses only the files that turn changed — your own commits and HEAD stay untouched), **"View checkpoints"**, and "Undo this turn's changes and branch from here". The web chat gets the same Copilot-style turn dividers and a floating restore dialog out of the box (plugin web half, served via the DSH client-modules pipeline).
 
 ![Undo turn's changes review dialog](https://raw.githubusercontent.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code/main/media/git.jpg)
@@ -130,7 +132,7 @@ npm run package     # → Releases/
 > npx @deepseek-ai/dsh web
 > ```
 
-[English version](#) | 发布者:Jager · 最新版本:0.13.8
+[English version](#) | 发布者:Jager · 最新版本:0.13.9
 
 在 VS Code 中直接使用 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)(`dsh`),与 ChatGPT / Copilot 一样融入 VS Code 聊天体系:内置聊天参与者 `@dsh`、辅助侧栏 / 独立聊天窗口、工作区 / 后台任务 / 轨迹 / 设置面板、回合级 Git 回退,以及**多语言界面**(简体中文 / 繁體中文 / English / 日本語 / 한국어 / Deutsch / Français / Español / Português / ไทย / Bahasa Indonesia / Türkçe / Русский / العربية,跟随 VS Code 显示语言或手动切换)。
 
@@ -141,6 +143,8 @@ npm run package     # → Releases/
 - **独立聊天窗口**:编辑器区 WebviewPanel,命令 `DSH: 打开独立聊天窗口`。
 - **现代聊天界面**:大号圆角输入框、胶囊工具栏(思考深度 / 模型 / 预设 / 权限)、会话统计行(轮数 · 步骤 · LLM/工具耗时 · 首 token · tok/s · 缓存命中 · 输入/输出 token),以及输入框右上角、预设胶囊右侧的**上下文进度环**(与网页端一致:点击展开「上下文已用」读数 ~已用 / 上限,以及 系统提示词 / 工具定义 / 对话消息 三段彩色构成与各自 token 数)。
 - **消息操作条**(每条回答下方,简约线条图标):复制(双层矩形图标)/ 分支(分叉线条图标,点击展开菜单:逆时针箭头"回退到此处" · 分叉图标"从此处新建分支" · 左上折线"分支并回退到更早位置" · 左上箭头"回到主线")/ 点赞、点踩(拇指线条图标,官方 `/feedback` 记录)/ 消息头显示模型名 · 思考耗时 · 本步 token 消耗。
+- **回合尾统计**(与网页端一致):`用量 25.8K tok` 胶囊(点击展开 提供方/模型 · 缓存命中率 · 未缓存输入 · 缓存读取/写入 · 输出(含推理占比))、`用时 5分57秒` 胶囊(点击展开 本轮总用时 · 输出速度 TPS · 首 token 用时 TTFT),最右侧显示收尾消息的本地时间(当天 `HH:mm`,更早 `M月D日 HH:mm`,跨年 `Y年M月D日 HH:mm`)。
+- **交付文件卡**(与网页端 `present` 一致):模型交付的文件在回合尾渲染为卡片——文件名 + 描述、**打开** 按钮(已跟踪文件直接打开 HEAD→工作区 diff)与 **⋯** 菜单(用默认应用打开 / 在资源管理器中显示)。
 - **回合级 Git 回退**(每条助手回答上的 ↩ 按钮 + 「分支/回退」菜单项):DSH 服务端插件 `dsh-git-rollback` 在每个回合开始时把工作区 git 状态(含未跟踪文件)快照到隐藏引用(`refs/dsh/checkpoints/<sid>`,用户分支历史零污染)并记录在 `.dsh/rollback`;点击按钮即可把工作区恢复到该回合之前的状态。`/rollback [N]`、`/redo`、`/checkpoints` 命令在 web 命令面板与 VS Code 聊天面板通用——回退非破坏性(先存保存点,`/redo` 可恢复,ignored 文件永不触碰)。每条消息的 ⋯/分支菜单另提供 **「撤销本回合改动」**(先预览后确认的审核弹窗,只反向应用该回合自身产生的文件改动——你自己的提交与 HEAD 完全不受影响)、**「查看检查点」** 与「撤销本回合变更并从此处新建分支」。网页端聊天开箱即用地获得同款 Copilot 风格回合分隔线与悬浮还原弹窗(插件 web 半区,经 DSH client-modules 管线分发)。
 
 ![撤销本回合改动审核弹窗](https://raw.githubusercontent.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code/main/media/git.jpg)

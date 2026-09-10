@@ -1335,7 +1335,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 26px;
+  height: 24px;
   min-width: 0;
   max-width: 100%;
   padding: 0 8px;
@@ -1343,7 +1343,7 @@ body {
   border-radius: 999px;
   background: var(--dsh-bg);
   color: var(--dsh-fg);
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   transition: border-color 0.15s ease;
 }
@@ -2755,13 +2755,13 @@ body {
 }
 
 .plus-btn {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   border: 1px dashed var(--dsh-muted);
   background: transparent;
   color: var(--dsh-muted);
-  font-size: 16px;
+  font-size: 14px;
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -2799,7 +2799,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 26px;
+  height: 24px;
   min-width: 0;
   max-width: 100%;
   padding: 0 8px;
@@ -2807,7 +2807,7 @@ body {
   border-radius: 999px;
   background: var(--dsh-bg);
   color: var(--dsh-fg);
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   transition: border-color 0.15s ease;
 }
@@ -2883,7 +2883,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 26px;
+  height: 24px;
   min-width: 0;
   max-width: 100%;
   padding: 0 8px;
@@ -2891,7 +2891,7 @@ body {
   border-radius: 999px;
   background: var(--dsh-bg);
   color: var(--dsh-fg);
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   transition: border-color 0.15s ease;
 }
@@ -3472,6 +3472,204 @@ body {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
 }
 
+/* ---------- 回合尾统计(网页端 MessageIconActions 的用量 / 用时 / 时间) ---------- */
+
+.turn-stat {
+  display: inline-flex;
+  align-items: center;
+}
+
+.turn-stat-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 7px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsh-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.turn-stat-btn:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.18));
+  color: var(--dsh-fg);
+}
+
+.turn-stat-btn svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.turn-stat-label {
+  white-space: nowrap;
+}
+
+.turn-stat-clock {
+  margin-left: auto;
+  align-self: center;
+  padding-left: 8px;
+  color: var(--dsh-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* 统计弹层(网页端 stat-dialog 同款:标题 + 分隔线 + 两列明细) */
+.turn-stat-pop {
+  min-width: 240px;
+  padding: 12px;
+  color: var(--dsh-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.ts-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  color: var(--dsh-fg);
+  font-weight: 500;
+}
+
+.ts-title svg {
+  flex-shrink: 0;
+}
+
+.ts-title-value {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.ts-rule {
+  border-top: 1px solid var(--dsh-border);
+  margin-bottom: 10px;
+}
+
+.ts-rows {
+  display: grid;
+  grid-template-columns: minmax(76px, auto) minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.ts-rows dt,
+.ts-rows dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.ts-rows dd {
+  color: var(--dsh-fg);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- 交付文件卡(网页端 PresentedFileCard 同款) ---------- */
+
+.deliverable-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.deliverable-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsh-border);
+  border-radius: 14px;
+  background: var(--vscode-editorWidget-background, var(--dsh-input-bg));
+  color: var(--dsh-fg);
+  overflow: hidden;
+}
+
+.deliverable-card:hover {
+  background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.12));
+}
+
+.deliverable-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--dsh-border);
+  border-radius: 10px;
+  color: var(--vscode-textLink-foreground, #4d93f8);
+}
+
+.deliverable-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.deliverable-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.deliverable-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsh-muted);
+  font-size: 12px;
+}
+
+.deliverable-split {
+  display: flex;
+  flex-shrink: 0;
+  align-items: stretch;
+  border: 1px solid var(--dsh-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.deliverable-open {
+  border: none;
+  background: transparent;
+  color: var(--dsh-fg);
+  font-size: 12px;
+  padding: 0 12px;
+  height: 28px;
+  cursor: pointer;
+}
+
+.deliverable-open:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.18));
+  color: var(--vscode-textLink-foreground, #4d93f8);
+}
+
+.deliverable-more {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  border: none;
+  border-left: 1px solid var(--dsh-border);
+  background: transparent;
+  color: var(--dsh-muted);
+  cursor: pointer;
+}
+
+.deliverable-more:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.18));
+  color: var(--dsh-fg);
+}
+
 /* ---------- 上下文进度环 + 分类面板(网页端 composer ContextMeter 同款) ---------- */
 
 .context-meter {
@@ -3488,8 +3686,8 @@ body {
 .context-meter-trigger {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 0;
   border-radius: 999px;

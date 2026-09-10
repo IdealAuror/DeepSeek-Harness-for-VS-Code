@@ -1262,6 +1262,22 @@ export class ChatChannel {
         }
         break;
       }
+      case "openInDefaultApp": {
+        // 交付卡「用默认应用打开」(网页端 presented.defaultApp 同款):交给系统默认程序
+        if (typeof msg.path === "string" && msg.path) {
+          let target = msg.path;
+          if (!isAbsolutePath(target) && current) {
+            const cwd = store.sessions.get(current)?.cwd;
+            if (cwd) target = join(cwd, target);
+          }
+          try {
+            await vscode.env.openExternal(vscode.Uri.file(target));
+          } catch (error) {
+            this.post({ kind: "notice", message: String(error), level: "error" });
+          }
+        }
+        break;
+      }
       case "rollbackApply": {
         // 回合级回退:统一走服务端插件命令通道(命令结果摘要经 runCommandAndNotify 透传)
         // 支持按回合号 /rollback N,或按检查点提交 /rollback <sha>(分叉分隔线兜底路径)

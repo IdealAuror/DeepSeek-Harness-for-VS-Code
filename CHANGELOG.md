@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.9
+- Web-parity turn footer (usage pill + duration pill + local clock) and deliverable file cards (Open / Open with default app / Reveal in File Explorer); permission, model, preset pills and the / button are now smaller
+- 回合尾新增网页同款统计(用量胶囊 + 用时胶囊 + 本地时间)与交付文件卡(打开 / 用默认应用打开 / 在资源管理器中显示);权限、模型、预设胶囊与 / 按钮整体缩小
+
 ## 0.13.8
 - To-do panel restyled as the web TodoPanel (title + non-zero-only progress summary + collapsible list + the three status glyphs); context meter ring moved to the top-right of the input box, right of the preset pill
 - 任务清单改为网页端 TodoPanel 风格(标题 + 只列非零状态的进度摘要 + 折叠清单 + 三种状态图标);上下文进度环移到输入框右上角(预设胶囊右侧)
