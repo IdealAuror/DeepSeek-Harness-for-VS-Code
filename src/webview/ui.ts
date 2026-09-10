@@ -133,6 +133,12 @@ interface BlockState {
   type: "text" | "reasoning";
   text: string;
   el: HTMLElement | null;
+  /** 所属助手节点(首个增量到达整块重绘时定位用) */
+  owner?: NodeState;
+  /** 用户手动展开/收起过:优先于"流式中自动展开"的默认行为 */
+  userOpen?: boolean;
+  /** 思考行的一行摘要(流式期间增量刷新) */
+  previewEl?: HTMLElement | null;
 }
 
 interface NodeState {
@@ -420,6 +426,16 @@ const ICONS = {
   box: "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z|M3.27 6.96 12 12.01l8.73-5.05|M12 22.08V12",
   // 时钟(回合用时)
   clock: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z|M12 6v6l4 2",
+  // 终端(命令类工具)
+  terminal: "M4 17l6-5-6-5|M12 19h8",
+  // 文件(读取 / 写入类工具)
+  file: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6",
+  // 星芒(思考过程)
+  sparkle: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z",
+  // 机器人(子代理 / 工作流)
+  robot: "M5 8h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z|M12 4v4|M9 14h.01|M15 14h.01",
+  // 清单(任务类工具)
+  checklist: "M4 6h2v2H4z|M4 11h2v2H4z|M4 16h2v2H4z|M10 7h10|M10 12h10|M10 17h10",
   // 数据库(回合用量)
   database: "M12 2C7.58 2 4 3.34 4 5s3.58 3 8 3 8-1.34 8-3-3.58-3-8-3z|M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5|M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6",
   // 右上箭头(用默认应用打开)
@@ -781,11 +797,26 @@ const EN_TEXT: Record<string, string> = {
   "{y}年{m}月{d}日": "{y}-{m}-{d}",
   "用默认应用打开": "Open with default app",
   "更多操作": "More actions",
+  "读取": "Read",
+  "写入": "Write",
+  "搜索": "Search",
+  "工具调用": "Tool call",
+  "技能": "Skill",
+  "网页搜索": "Web search",
+  "网页获取": "Web fetch",
+  "读取图片": "Read image",
+  "失败": "Failed",
+  "产物": "Deliverable",
+  "代码": "Code",
   "工具定义": "Tool definitions",
   "对话消息": "Messages",
   "上下文已用 {p}": "{p} of context used",
   "⚠️ 最多一次添加 8 张图片": "⚠️ Up to 8 images can be added at once",
   "⚠️ 非图片附件请从资源管理器复制(未提供本地路径)": "⚠️ Copy non-image attachments from the file explorer (no local path was provided)",
+  "⚠️ 图片超过 6MB 已跳过:{name}": "⚠️ Image larger than 6 MB skipped: {name}",
+  "⚠️ 无法识别的图片格式:{name}(支持 PNG/JPEG/GIF/WebP)": "⚠️ Unrecognized image format: {name} (PNG/JPEG/GIF/WebP supported)",
+  "⚠️ 粘贴图片失败:{error}": "⚠️ Pasting the image failed: {error}",
+  "✅ 已添加 {n} 张图片": "✅ Added {n} image(s)",
   "已注入模型 · 点击展开": "Injected into the model · click to expand",
   "提交回答": "Submit answer",
   "🔧 过程": "🔧 Process",
@@ -2261,13 +2292,13 @@ async function applyPastedFiles(files: File[]) {
       try {
         const buf = new Uint8Array(await file.arrayBuffer());
         if (buf.byteLength > PASTE_IMAGE_MAX_BYTES) {
-          showToast(t("⚠️ 图片超过 6MB 已跳过:" + (file.name || "clipboard")), "warning");
+          showToast(t("⚠️ 图片超过 6MB 已跳过:{name}", { name: file.name || "clipboard" }), "warning");
           continue;
         }
         // 按字节探测:剪贴板 blob.type 可能与内容不符(如截图标记为 image/png 实为 JPEG)
         const mediaType = sniffImageType(buf);
         if (!mediaType) {
-          showToast(t("⚠️ 无法识别的图片格式:" + (file.name || "clipboard") + "(支持 PNG/JPEG/GIF/WebP)"), "warning");
+          showToast(t("⚠️ 无法识别的图片格式:{name}(支持 PNG/JPEG/GIF/WebP)", { name: file.name || "clipboard" }), "warning");
           continue;
         }
         const ext = mediaType === "image/png" ? "png" : mediaType === "image/jpeg" ? "jpg" : mediaType === "image/gif" ? "gif" : "webp";
@@ -2278,7 +2309,7 @@ async function applyPastedFiles(files: File[]) {
         });
         added++;
       } catch (error) {
-        showToast(t("⚠️ 粘贴图片失败:" + String(error)), "error");
+        showToast(t("⚠️ 粘贴图片失败:{error}", { error: String(error) }), "error");
       }
     } else {
       // VS Code webview 中复制的本地文件带 path/uri 才可附加
@@ -2295,7 +2326,7 @@ async function applyPastedFiles(files: File[]) {
   if (paths.length > 0) vscode.postMessage({ kind: "attachPastedPaths", paths });
   if (added > 0) {
     renderAttachments();
-    showToast(t(`✅ 已添加 ${added} 张图片`), "info");
+    showToast(t("✅ 已添加 {n} 张图片", { n: String(added) }), "info");
   }
 }
 
@@ -2847,21 +2878,21 @@ function renderNode(node: NodeState): HTMLElement {
       return wrap;
     }
     case "tool": {
-      // 工具执行过程行(网页端 tool view 同款):图标 + 名称 + 状态 + 参数预览,点击展开参数/结果
-      const wrap = el("details", "msg tool-card" + (node.done ? (node.failed ? " tool-failed" : " tool-done") : " tool-running"));
-      const summary = el("summary", "tool-summary");
-      const nameSpan = el("span", "tool-name");
-      nameSpan.append(el("span", "tool-icon", toolIcon(node.name)));
-      nameSpan.append(el("span", "tool-name-text", node.name ?? "tool"));
-      summary.append(nameSpan);
-      const statusSpan = el("span", "tool-status" + (node.done ? (node.failed ? " tool-status-failed" : " tool-status-done") : " tool-status-running"), node.done ? (node.failed ? "✗" : "✓") : "⏳");
-      summary.append(statusSpan);
-      if (node.args) {
-        const preview = el("span", "tool-args-preview");
-        preview.textContent = String(node.args).replace(/\s+/g, " ").slice(0, 90);
-        summary.append(preview);
-      }
-      const body = el("div", "tool-body");
+      // 工具行(网页端 ToolRow 同款):图标 + 标题 + · + 一行摘要 + 状态,点击展开参数/结果
+      const wrap = el("details", "msg step-row step-tool" + (node.done ? (node.failed ? " tool-failed" : " tool-done") : " tool-running"));
+      wrap.dataset.tool = node.name ?? "";
+      const summary = el("summary", "step-line");
+      const nameSpan = el("span", "step-name");
+      const icon = el("span", "step-icon");
+      icon.append(lineIcon(toolIconPaths(node.name), 14));
+      nameSpan.append(icon, el("span", "step-title", toolTitle(node.name)));
+      summary.append(nameSpan, el("span", "step-sep"));
+      summary.append(el("span", "step-summary", toolSummary(node.name, node.args)));
+      summary.append(el("span", "step-status" + (node.done ? (node.failed ? " step-status-failed" : " step-status-done") : " step-status-running"), node.done ? (node.failed ? "✗" : "✓") : "…"));
+      const chevron = el("span", "step-chevron");
+      chevron.append(lineIcon(ICONS.down2, 12));
+      summary.append(chevron);
+      const body = el("div", "step-body");
       const argsLabel = el("div", "tool-label", t("参数"));
       const argsPre = el("pre", "tool-pre", node.args ?? "");
       body.append(argsLabel, argsPre);
@@ -3064,7 +3095,7 @@ function beginAssistantBlock(turn: number, step: number, index: number, blockTyp
     assistant.reasoningMs = Math.max(0, startTime - assistant.reasoningStartMs);
   }
   state.currentStreamTurn = turn;
-  const block: BlockState = { type: blockType === "reasoning" ? "reasoning" : "text", text: "", el: null };
+  const block: BlockState = { type: blockType === "reasoning" ? "reasoning" : "text", text: "", el: null, owner: assistant };
   assistant.blocks!.push(block);
   state.streamedBlockKeys.add(`${turn}:${step}:${index}`);
   // 按 (turn:step) 登记流式块:结算时用 message content 的权威文本原位覆盖,
@@ -3076,13 +3107,6 @@ function beginAssistantBlock(turn: number, step: number, index: number, blockTyp
   // 先把 streamBlock 指向新块再渲染:推理块开始时 detail 默认展开(思考中),文本块开始后自动收起
   state.streamBlock = block;
   refreshAssistantNode(assistant, block);
-}
-
-/** 思考折叠条文案:💭 思考过程 · 耗时(网页端 Think 折叠同款)。 */
-function reasoningSummary(assistant: NodeState, first: boolean): string {
-  const base = t("💭 思考过程");
-  if (first && assistant.reasoningMs !== undefined) return `${base} · ${fmtDuration(assistant.reasoningMs)}`;
-  return base;
 }
 
 /** 渲染助手内容:推理/文本块与内联工具行按执行顺序交错(Think → 工具 → Think → 答案)。 */
@@ -3099,16 +3123,36 @@ function renderAssistantBlocks(assistant: NodeState): HTMLElement {
   appendToolsAfter(-1);
   let seenReasoning = false;
   (assistant.blocks ?? []).forEach((block, index) => {
-    // 空的推理/文本块不渲染占位(如中断的流式块):避免出现「思考过程」点开却没有任何内容
+    // 空的推理/文本块不渲染占位(如中断的流式块):避免出现「思考过程」点开却没有任何内容。
+    // 注意:流式块首个增量到达时 appendToStream 会强制整块重绘,所以跳过空块不会漏掉正在生成的内容。
     if (typeof block.text !== "string" || block.text.trim() === "") return;
     if (block.type === "reasoning") {
       const first = !seenReasoning;
       seenReasoning = true;
-      // 思考进行中默认展开,思考结束(下一个块开始)后收起 —— 与网页端 Think 折叠一致
-      const details = el("details", "block-reasoning-details");
-      if (block === state.streamBlock && state.running) details.open = true;
-      details.append(el("summary", "block-reasoning-summary", reasoningSummary(assistant, first)));
-      const body = el("div", "block-body");
+      // 网页端 ThinkingRow 同款:一行「思考 · <首行预览>」,点击展开完整思考;
+      // 思考进行中默认展开(让用户看到最新思考过程),思考结束(下一个块开始/回合结束)后自动收起;
+      // 用户手动开合过的块尊重用户选择。
+      const details = el("details", "step-row step-think");
+      details.open = block.userOpen ?? (block === state.streamBlock && state.running);
+      const summary = el("summary", "step-line");
+      const icon = el("span", "step-icon");
+      icon.append(lineIcon(ICONS.sparkle, 14));
+      const title = el("span", "step-title", t("思考"));
+      const preview = el("span", "step-summary", reasoningPreview(block.text));
+      block.previewEl = preview;
+      summary.append(icon, title, el("span", "step-sep"), preview);
+      if (first && assistant.reasoningMs !== undefined) {
+        summary.append(el("span", "step-suffix", fmtDuration(assistant.reasoningMs)));
+      }
+      const chevron = el("span", "step-chevron");
+      chevron.append(lineIcon(ICONS.down2, 12));
+      summary.append(chevron);
+      // 只记录"用户意图":summary 的点击在默认动作之前触发,此时 details.open 仍是旧值
+      summary.addEventListener("click", () => {
+        block.userOpen = !details.open;
+      });
+      details.append(summary);
+      const body = el("div", "step-body");
       setHtml(body, block.text);
       block.el = body;
       details.append(body);
@@ -3126,6 +3170,29 @@ function renderAssistantBlocks(assistant: NodeState): HTMLElement {
   return container;
 }
 
+/** 思考预览:取首个非空行,压缩空白并截断(网页端 Think 行的一行摘要同款)。 */
+function reasoningPreview(text: string): string {
+  const line = text
+    .split("\n")
+    .map((item) => item.replace(/^[#>*\-\s]+/, "").trim())
+    .find((item) => item !== "");
+  if (!line) return "";
+  return line.length > 120 ? `${line.slice(0, 120)}…` : line;
+}
+
+/**
+ * 回合尾操作条(复制/分支/点赞 + 用量/用时/时间)的显示策略,与网页端一致:
+ * - 会话空闲:最新回合始终显示;
+ * - 会话运行中:历史回合默认隐藏,仅在 hover / 获得焦点时淡入 —— 避免"还在思考就出现操作栏与用量"。
+ */
+function refreshActionsReveal() {
+  const latest = [...state.nodes].reverse().find((n) => n.kind === "assistant" && typeof n.turn === "number");
+  for (const node of state.nodes) {
+    if (node.kind !== "assistant" || !node.el) continue;
+    node.el.dataset.actionsReveal = node === latest && !state.running ? "always" : "hover";
+  }
+}
+
 function refreshAssistantNode(assistant: NodeState, activeBlock?: BlockState, force = false) {
   if (!assistant.el || !assistant.blocks) return;
   // 重放历史时跳过中间渲染(block-start),仅在 assistant/message(force)时一次性渲染最终内容
@@ -3137,11 +3204,20 @@ function refreshAssistantNode(assistant: NodeState, activeBlock?: BlockState, fo
 }
 
 function appendToStream(blockType: string, text: string) {
-  if (!state.streamBlock) return;
-  if ((state.streamBlock.type === "reasoning") !== (blockType === "reasoning")) return;
-  state.streamBlock.text += text;
+  const block = state.streamBlock;
+  if (!block) return;
+  if ((block.type === "reasoning") !== (blockType === "reasoning")) return;
+  const wasEmpty = block.text === "";
+  block.text += text;
   if (state.replaying) return; // 重放期间仅累积文本,最终由 assistant/message 一次性渲染
-  if (state.streamBlock.el) setHtml(state.streamBlock.el, state.streamBlock.text);
+  // 块起始时正文为空,renderAssistantBlocks 会跳过空块(block.el 为 null):
+  // 首个增量到达时整块重绘一次,「思考过程」当场出现并默认展开;后续增量走增量更新
+  if (!block.el && wasEmpty && block.text.trim() !== "" && block.owner) {
+    refreshAssistantNode(block.owner, block, true);
+  }
+  if (block.el) setHtml(block.el, block.text);
+  // 思考行的一行摘要在流式期间同步刷新,避免预览停留在最初几个 token
+  if (block.previewEl) block.previewEl.textContent = reasoningPreview(block.text);
   scrollToBottom();
 }
 
@@ -3155,16 +3231,17 @@ function findToolNode(callId: string): NodeState | undefined {
 
 function updateToolSummary(node: NodeState) {
   if (!node.el) return;
-  // 名称/图标
-  const icon = node.el.querySelector(".tool-icon");
-  if (icon) icon.textContent = toolIcon(node.name);
-  const name = node.el.querySelector(".tool-name-text");
-  if (name) name.textContent = node.name ?? "tool";
+  // 标题(工具名 → 本地化标题)
+  const title = node.el.querySelector(".step-title");
+  if (title) title.textContent = toolTitle(node.name);
+  // 一行摘要:用人类可读字段(路径 / 命令 / 查询串)而不是整段 JSON
+  const summary = node.el.querySelector(".step-summary");
+  if (summary) summary.textContent = toolSummary(node.name, node.args);
   // 状态
-  const status = node.el.querySelector(".tool-status");
+  const status = node.el.querySelector(".step-status");
   if (status) {
-    status.textContent = node.done ? (node.failed ? "✗" : "✓") : "⏳";
-    status.className = "tool-status" + (node.done ? (node.failed ? " tool-status-failed" : " tool-status-done") : " tool-status-running");
+    status.textContent = node.done ? (node.failed ? "✗" : "✓") : "…";
+    status.className = "step-status" + (node.done ? (node.failed ? " step-status-failed" : " step-status-done") : " step-status-running");
   }
 }
 
@@ -3190,6 +3267,10 @@ function renderActions(node: NodeState) {
   if (state.running && node.turn !== undefined && node.turn === state.currentStreamTurn) {
     node.actionsEl.innerHTML = "";
     return;
+  }
+  // 会话仍在运行时,任何历史回合的操作条都只在这一条消息被 hover 时淡入(网页端 data-actions-reveal=hover 同款)
+  if (state.running && node.el) {
+    node.el.dataset.actionsReveal = "hover";
   }
   node.actionsEl.innerHTML = "";
 
@@ -3482,8 +3563,6 @@ function handleEvent(wire: WireEvent) {
         if (existing.el) {
           const pre = existing.el.querySelector(".tool-pre");
           if (pre) pre.textContent = existing.args;
-          const preview = existing.el.querySelector(".tool-args-preview");
-          if (preview) preview.textContent = String(existing.args).replace(/\s+/g, " ").slice(0, 90);
           updateToolSummary(existing);
         }
         break;
@@ -3630,8 +3709,6 @@ function handleEvent(wire: WireEvent) {
         if (existing.el) {
           const pre = existing.el.querySelectorAll(".tool-pre")[0];
           if (pre) pre.textContent = existing.args ?? "";
-          const preview = existing.el.querySelector(".tool-args-preview");
-          if (preview) preview.textContent = String(existing.args ?? "").replace(/\s+/g, " ").slice(0, 90);
           updateToolSummary(existing);
         }
         break;
@@ -3698,7 +3775,7 @@ function handleEvent(wire: WireEvent) {
         existing.el?.classList.add(existing.failed ? "tool-failed" : "tool-done");
         if (existing.el) {
           const pres = existing.el.querySelectorAll(".tool-pre");
-          const body = existing.el.querySelector(".tool-body");
+          const body = existing.el.querySelector(".step-body");
           if (pres.length === 1) {
             body?.append(el("div", "tool-label", t("结果")), el("pre", "tool-pre", existing.result ?? ""));
           }
@@ -3731,6 +3808,8 @@ function handleEvent(wire: WireEvent) {
       state.turnStarts.push(ev.seq);
       // 回合起点:回合尾「用时」胶囊的计时基准(网页端 turn.start)
       if (typeof data.turn === "number") state.turnStartMs.set(data.turn, ev.time);
+      // 新回合开始:历史回合的操作条与用量改为 hover 才显示(避免"还在思考就出现底部操作栏")
+      refreshActionsReveal();
       // 每回合重置产物累积器(不再读取 data.deliverables —— 本部署该字段为空)
       turnProduced = [];
       turnProducedSet.clear();
@@ -3754,6 +3833,8 @@ function handleEvent(wire: WireEvent) {
       if (typeof finishedTurn === "number") state.turnEndMs.set(finishedTurn, ev.time);
       // 兜底:回合结束时把仍未随 assistant/message 落地的 chunkrow 行按 index 合入该回合节点
       // (覆盖无 message 结束的中断回合,以及任何行先于节点创建到达的顺序组合)
+      // 回合结束:刷新操作条可见性(最新回合恢复常显;仍在运行时其余回合保持 hover 才显示)
+      refreshActionsReveal();
       if (finishedTurn !== undefined) {
         const node = [...state.nodes].reverse().find((n) => n.kind === "assistant" && n.turn === finishedTurn);
         if (node && node.blocks) {
@@ -4246,6 +4327,115 @@ function toolIcon(name?: string): string {
   if (n.includes("workflow")) return "🔀";
   if (n.includes("ask_user") || n.includes("question")) return "❓";
   return "🔧";
+}
+
+/** 工具行的线条图标(网页端 ToolRow 的 leading 图标同源;emoji 版本保留给非网页样式处使用)。 */
+function toolIconPaths(name?: string): string {
+  const n = (name ?? "").toLowerCase();
+  if (n.includes("bash") || n.includes("pwsh") || n.includes("shell") || n === "terminal" || n.includes("code_runtime")) return ICONS.terminal;
+  if (n.includes("edit") || n.includes("write") || n.includes("str_replace")) return ICONS.edit;
+  if (n.includes("read_image")) return ICONS.image;
+  if (n.includes("read")) return ICONS.file;
+  if (n.includes("grep") || n.includes("glob") || n.includes("search")) return ICONS.search;
+  if (n.includes("web")) return ICONS.globe;
+  if (n.includes("todo") || n.includes("plan")) return ICONS.checklist;
+  if (n.includes("skill")) return ICONS.list;
+  if (n.includes("goal")) return ICONS.help;
+  if (n.includes("subagent") || n.includes("workflow") || n.includes("task")) return ICONS.robot;
+  if (n.includes("ask_user") || n.includes("question")) return ICONS.help;
+  if (n.includes("present") || n.includes("job")) return ICONS.box;
+  return ICONS.gear;
+}
+
+/** 工具行的中文标题(网页端 tool.title.* 同源)。 */
+function toolTitle(name?: string): string {
+  const n = (name ?? "").toLowerCase();
+  if (n.includes("bash")) return "Bash";
+  if (n.includes("pwsh") || n.includes("powershell")) return "Pwsh";
+  if (n.includes("grep")) return "Grep";
+  if (n.includes("glob")) return "Glob";
+  if (n.includes("read_image")) return t("读取图片");
+  if (n.includes("read")) return t("读取");
+  if (n.includes("edit") || n.includes("str_replace")) return t("编辑");
+  if (n.includes("write")) return t("写入");
+  if (n.includes("web_search")) return t("网页搜索");
+  if (n.includes("web_fetch")) return t("网页获取");
+  if (n.includes("todo")) return t("任务");
+  if (n.includes("skill")) return t("技能");
+  if (n.includes("subagent")) return t("子代理");
+  if (n.includes("present")) return t("产物");
+  if (n.includes("code_runtime") || n.includes("code")) return t("代码");
+  if (n.includes("search")) return t("搜索");
+  return name && name.length <= 28 ? name : t("工具调用");
+}
+
+/** 解析工具参数(解析失败返回 undefined;流式期间参数可能仍是半截 JSON)。 */
+function parseToolArgs(raw: unknown): Record<string, unknown> | undefined {
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** 从参数里取第一个字符串字段(按优先级)。 */
+function firstString(args: Record<string, unknown> | undefined, keys: string[]): string | undefined {
+  if (!args) return undefined;
+  for (const key of keys) {
+    const value = args[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+/**
+ * 工具行的摘要文案(网页端 ToolRow 的 summary 同款):优先用模型给的 description,
+ * 否则按工具类型取路径 / 命令 / 查询串等人类可读字段,而不是直接摊开 JSON。
+ */
+function toolSummary(name: string | undefined, rawArgs: unknown): string {
+  const n = (name ?? "").toLowerCase();
+  const args = parseToolArgs(rawArgs);
+  const description = firstString(args, ["description", "summary", "label"]);
+  const path = firstString(args, ["path", "file_path", "filePath", "notebook_path", "file"]);
+  if (n.includes("bash") || n.includes("pwsh") || n.includes("shell")) {
+    const command = firstString(args, ["command", "cmd"]);
+    if (description) return description;
+    if (command) return command.replace(/\s+/g, " ").trim();
+  }
+  if (path) {
+    const extra = n.includes("write") || n.includes("edit") ? firstString(args, ["old_string"]) === undefined && typeof args?.content === "string"
+      ? ` (${String(args.content).split("\n").length} 行)`
+      : ""
+      : "";
+    return `${path}${extra}`;
+  }
+  const query = firstString(args, ["query", "pattern", "search", "q"]);
+  if (query) return query;
+  if (n.includes("web_fetch")) {
+    const url = firstString(args, ["url"]);
+    if (url) return url;
+  }
+  const todos = args?.todos;
+  if (Array.isArray(todos)) {
+    const done = todos.filter((item) => (item as { status?: string })?.status === "completed").length;
+    const active = todos.find((item) => (item as { status?: string })?.status === "in_progress") as { content?: string } | undefined;
+    return `${done}/${todos.length} 已完成${active?.content ? ` · ${active.content}` : ""}`;
+  }
+  const files = args?.files;
+  if (Array.isArray(files)) {
+    const names = files.map((item) => (typeof (item as { path?: string })?.path === "string" ? String((item as { path: string }).path) : "")).filter(Boolean);
+    if (names.length > 0) return names.map((p) => p.split(/[\\/]/).pop()).join(", ");
+  }
+  if (description) return description;
+  // 兜底:取参数里第一个短字符串值,避免整段 JSON 撑满一行
+  if (args) {
+    for (const value of Object.values(args)) {
+      if (typeof value === "string" && value.trim() && value.length <= 120) return value.trim().replace(/\s+/g, " ");
+    }
+  }
+  return typeof rawArgs === "string" ? rawArgs.replace(/\s+/g, " ").slice(0, 120) : "";
 }
 
 /** 本地即时更新当前模型的推理强度(乐观显示;服务器 projection 到达后再次校准)。 */
@@ -4960,6 +5150,7 @@ function stopTurnStatus() {
 function updateRunning() {
   updateSendButton();
   refreshSteerButtons();
+  refreshActionsReveal();
 }
 
 /** 🧩 按钮徽标:待审批的 Cordis 插件数(网页端 Cordis 面板 approvals 计数同款)。 */
@@ -5457,12 +5648,38 @@ function applyQueueItems(items: { id: string; placement: string; message?: { con
   }
 }
 
+/**
+ * 文案开头自带的状态 emoji(toast 自身也会给图标,必须剥掉,否则出现「⚠️ ⚠️ …」重复)。
+ * 注意「️」变体选择符可选:词典里两种写法都可能出现。
+ */
+const LEADING_STATUS_EMOJI = /^\s*(⚠️|⚠|ℹ️|ℹ|❗|❌|✅|☑️|☑|🚫|⛔)\s*/u;
+
+/** 统一 emoji 写法(补上变体选择符),保证与 toast 图标一致。 */
+function normalizeStatusEmoji(emoji: string): string {
+  switch (emoji) {
+    case "⚠":
+      return "⚠️";
+    case "ℹ":
+      return "ℹ️";
+    case "☑":
+      return "☑️";
+    default:
+      return emoji;
+  }
+}
+
 /** 浮动 toast:显示操作反馈(信息 4s / 错误 8s),点击 × 关闭;可带一个动作按钮。 */
 function showToast(message: string, level: string, action?: { label: string; onClick: () => void }) {
   if (!message) return;
+  // 文案可能自带状态 emoji(如「⚠️ 最多一次添加 8 张图片」):剥掉后统一由 toast 出一枚图标,
+  // 但保留文案自身的语义 —— 成功类 ✅ 仍显示 ✅,而不是一律降级成 info 的 ℹ️。
+  const leading = LEADING_STATUS_EMOJI.exec(message);
+  const text = leading === null ? message : message.slice(leading[0].length);
+  if (!text) return;
+  const icon = leading === null ? (level === "info" ? "ℹ️" : "⚠️") : normalizeStatusEmoji(leading[1]);
   const toast = el("div", `toast toast-${level === "error" ? "error" : level === "warning" ? "warning" : "info"}`);
-  toast.append(el("span", "toast-icon", level === "info" ? "ℹ️" : "⚠️"));
-  toast.append(el("span", "toast-text", message));
+  toast.append(el("span", "toast-icon", icon));
+  toast.append(el("span", "toast-text", text));
   if (action) {
     const btn = el("button", "toast-action", action.label);
     btn.addEventListener("click", () => {

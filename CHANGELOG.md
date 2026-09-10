@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.13.12
+- Process area now uses the web timeline (thinking rows with a one-line preview that expand while streaming and collapse afterwards; tool rows with localized titles, human summaries, status dot and running sweep); fixed earlier turns showing their action row and usage while a turn is still running (hover-reveal, only the settled latest turn always shows); literal dsh-session: text inside attachment content is escaped so the host no longer parses documentation examples as session references and fails the turn
+- 过程区改为网页端时间线:思考行(一行摘要,流式展开/结束收起)+ 工具行(本地化标题 · 人类可读摘要 · 状态点 · 运行扫光);修复会话运行中历史回合仍显示操作栏与用量(现为悬停淡入,仅已结束的最新回合常显);附件正文中的 dsh-session: 字面量自动转义,避免主机把文档示例当引用解析导致整回合失败
+
+## 0.13.11
+- The latest reasoning block now stays expanded while it streams (first delta renders immediately, later deltas update in place) and collapses once thinking ends; blocks the user toggled manually keep their state across re-renders; also fixed streamed text being deferred to the end of a block because empty blocks were skipped
+- 最新思考过程流式期间默认展开(首个增量即时出现并按增量刷新),思考结束(文本块开始或回合结束)自动收起;用户手动开合过的思考块在后续重绘中保持;修复空块被跳过导致流式文本延迟到块结束才显示的问题
+
+## 0.13.10
+- Fix duplicated status emoji in attachment/image tips (the toast owns the icon; a leading emoji is stripped but keeps its meaning); four concatenated tips became placeholder dictionary keys translated into all 12 languages
+- 修复附件/图片提示重复 emoji(toast 统一出图标,文案开头 emoji 自动剥离并保留语义);四条拼接提示改为带占位符的词典键并补齐 12 语言
+
 ## 0.13.9
 - Web-parity turn footer (usage pill + duration pill + local clock) and deliverable file cards (Open / Open with default app / Reveal in File Explorer); permission, model, preset pills and the / button are now smaller
 - 回合尾新增网页同款统计(用量胶囊 + 用时胶囊 + 本地时间)与交付文件卡(打开 / 用默认应用打开 / 在资源管理器中显示);权限、模型、预设胶囊与 / 按钮整体缩小

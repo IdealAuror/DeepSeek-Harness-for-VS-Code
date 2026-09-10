@@ -523,5 +523,20 @@
   "{m}月{d}日": "{d}/{m}",
   "{y}年{m}月{d}日": "{d}/{m}/{y}",
   "用默认应用打开": "Abrir com o aplicativo padrão",
-  "更多操作": "Mais ações"
+  "更多操作": "Mais ações",
+  "⚠️ 图片超过 6MB 已跳过:{name}": "⚠️ Imagem com mais de 6 MB ignorada: {name}",
+  "⚠️ 无法识别的图片格式:{name}(支持 PNG/JPEG/GIF/WebP)": "⚠️ Formato de imagem não reconhecido: {name} (compatível com PNG/JPEG/GIF/WebP)",
+  "⚠️ 粘贴图片失败:{error}": "⚠️ Falha ao colar a imagem: {error}",
+  "✅ 已添加 {n} 张图片": "✅ {n} imagem(ns) adicionada(s)",
+  "读取": "Leitura",
+  "写入": "Gravação",
+  "搜索": "Busca",
+  "工具调用": "Chamada de ferramenta",
+  "技能": "Habilidade",
+  "网页搜索": "Pesquisa na web",
+  "网页获取": "Obtenção web",
+  "读取图片": "Leitura de imagem",
+  "失败": "Falha",
+  "产物": "Entregável",
+  "代码": "Código"
 }

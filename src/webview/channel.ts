@@ -1921,11 +1921,24 @@ export class ChatChannel {
     return { parts: parts.join("\n\n"), text: cleaned.trim() };
   }
 
+  /**
+   * 附件正文里出现 `dsh-session:` 字面量时打断 scheme(插入 U+200B,视觉一致)。
+   *
+   * 原因:主机的 prompt 预处理会把整段文本里的 `@[x](dsh-session:…)` / 裸 `dsh-session:…`
+   * 都当成会话引用解析,遇到非规范载荷(例如文档里写的占位示例 `dsh-session:…`)会抛
+   * `invalid session reference URI` 并让整个回合失败(已用隔离 0.1.5 服务器复现)。
+   * 附件内容属于"文件内容"而不是"用户输入的引用":其中的引用本就不该被展开为快照上下文,
+   * 因此这里统一打断,既避免回合失败,也避免误把文档示例当成真实引用。
+   */
+  private escapeSessionRefsInAttachment(content: string): string {
+    return content.replace(/dsh-session:/g, "dsh-\u200Bsession:");
+  }
+
   private async composeWithAttachments(text: string, attachments?: { kind: "file" | "folder"; path: string }[], agentParts?: string): Promise<string> {
     const list = (attachments ?? []).slice(0, 10);
     if (list.length === 0 && !agentParts) return text;
     const parts: string[] = [];
-    if (agentParts) parts.push(agentParts);
+    if (agentParts) parts.push(this.escapeSessionRefsInAttachment(agentParts));
     let total = 0;
     const MAX_TOTAL = 150_000;
     const MAX_FILE = 100_000;
@@ -1939,7 +1952,7 @@ export class ChatChannel {
           }
           const raw = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.file(a.path))).toString("utf8");
           const content = raw.slice(0, MAX_FILE) + (raw.length > MAX_FILE ? `\n…(已截断,共 ${raw.length} 字符)` : "");
-          parts.push(`**文件 ${a.path}**\n\`\`\`\n${content}\n\`\`\``);
+          parts.push(`**文件 ${a.path}**\n\`\`\`\n${this.escapeSessionRefsInAttachment(content)}\n\`\`\``);
         } else {
           const entries = await vscode.workspace.fs.readDirectory(vscode.Uri.file(a.path));
           const lines = entries.slice(0, 200).map(([name, type]) => `- ${name}${type === vscode.FileType.Directory ? "/" : ""}`);

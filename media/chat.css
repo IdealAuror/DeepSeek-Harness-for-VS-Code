@@ -1255,7 +1255,185 @@ body {
   gap: 6px;
 }
 
-.tool-group-body .tool-card {
+.tool-group-body /* ---------- 助手回合的时间线行(网页端 ToolRow / ThinkRow 同款) ---------- */
+
+/* 左侧时间线导轨:每行一段竖线 + 一小段刻度,与网页端过程区一致 */
+.step-row {
+  position: relative;
+  margin: 0 0 2px;
+  border: none;
+  border-radius: 0;
+  padding: 0 0 0 14px;
+}
+
+.step-row::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--dsh-border);
+}
+
+.step-row::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 13px;
+  width: 9px;
+  height: 1px;
+  background: var(--dsh-border);
+}
+
+.step-line {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  color: var(--dsh-muted);
+}
+
+.step-line::-webkit-details-marker {
+  display: none;
+}
+
+.step-line:hover {
+  background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.12));
+}
+
+.step-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.step-icon {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  color: var(--dsh-muted);
+}
+
+.step-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsh-fg);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* 标题与摘要之间的 2px 圆点分隔(网页端 .sep 同款) */
+.step-sep {
+  flex: none;
+  width: 2px;
+  height: 2px;
+  margin: 0 8px;
+  border-radius: 1px;
+  background: var(--dsh-muted);
+}
+
+.step-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsh-muted);
+  font-size: 13px;
+}
+
+.step-suffix {
+  flex: none;
+  margin-left: 6px;
+  color: var(--dsh-muted);
+  font-size: 11px;
+}
+
+.step-status {
+  flex: none;
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--dsh-muted);
+}
+
+.step-status-running {
+  color: var(--dsh-accent);
+}
+
+.step-status-done {
+  color: var(--vscode-charts-green, #89d185);
+}
+
+.step-status-failed,
+.step-row.tool-failed .step-title {
+  color: var(--vscode-errorForeground, #f48771);
+}
+
+.step-chevron {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  margin-left: 6px;
+  color: var(--dsh-muted);
+  transition: transform 0.15s ease;
+}
+
+.step-row[open] > .step-line .step-chevron {
+  transform: rotate(180deg);
+}
+
+.step-body {
+  padding: 2px 6px 8px;
+}
+
+/* 运行中的行:横向扫光(网页端 running sweep 同款) */
+.step-row.tool-running > .step-line {
+  position: relative;
+  overflow: hidden;
+}
+
+.step-row.tool-running > .step-line::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -120px;
+  width: 120px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, rgba(128, 128, 128, 0.22) 55%, transparent 100%);
+  animation: step-row-sweep 2.6s ease-out infinite;
+}
+
+@keyframes step-row-sweep {
+  0% { left: -120px; }
+  90%, 100% { left: 100%; }
+}
+
+/* 会话运行中:历史回合的操作条/用量只在该条消息 hover 或聚焦时淡入(网页端 data-actions-reveal=hover) */
+@media (hover: hover) {
+  .msg-assistant[data-actions-reveal="hover"] .msg-actions {
+    opacity: 0;
+    transition: opacity 80ms ease;
+  }
+
+  .msg-assistant[data-actions-reveal="hover"]:hover .msg-actions,
+  .msg-assistant[data-actions-reveal="hover"]:focus-within .msg-actions {
+    opacity: 1;
+  }
+}
+
+.tool-card {
   border: none;
   border-radius: 0;
 }

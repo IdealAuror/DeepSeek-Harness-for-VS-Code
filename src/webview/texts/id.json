@@ -523,5 +523,20 @@
   "{m}月{d}日": "{d}/{m}",
   "{y}年{m}月{d}日": "{d}/{m}/{y}",
   "用默认应用打开": "Buka dengan aplikasi default",
-  "更多操作": "Tindakan lain"
+  "更多操作": "Tindakan lain",
+  "⚠️ 图片超过 6MB 已跳过:{name}": "⚠️ Gambar melebihi 6MB dilewati: {name}",
+  "⚠️ 无法识别的图片格式:{name}(支持 PNG/JPEG/GIF/WebP)": "⚠️ Format gambar tidak dikenali: {name} (mendukung PNG/JPEG/GIF/WebP)",
+  "⚠️ 粘贴图片失败:{error}": "⚠️ Gagal menempelkan gambar: {error}",
+  "✅ 已添加 {n} 张图片": "✅ {n} gambar ditambahkan",
+  "读取": "Baca",
+  "写入": "Tulis",
+  "搜索": "Cari",
+  "工具调用": "Panggilan alat",
+  "技能": "Keterampilan",
+  "网页搜索": "Pencarian web",
+  "网页获取": "Ambil web",
+  "读取图片": "Baca gambar",
+  "失败": "Gagal",
+  "产物": "Hasil",
+  "代码": "Kode"
 }
