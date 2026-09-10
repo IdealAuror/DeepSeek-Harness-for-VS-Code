@@ -3113,11 +3113,26 @@ function beginAssistantBlock(turn: number, step: number, index: number, blockTyp
 function renderAssistantBlocks(assistant: NodeState): HTMLElement {
   const container = el("div", "msg-blocks");
   const tools = assistant.tools ?? [];
+  /**
+   * 过程行(思考 / 工具)按"连续段"包进一个 .step-group:整段只画一条左侧细导轨,
+   * 与网页端一致;正文块会打断分组,因此不会出现每行一小截的碎线。
+   */
+  let group: HTMLElement | null = null;
+  const openGroup = (): HTMLElement => {
+    if (!group) {
+      group = el("div", "step-group");
+      container.append(group);
+    }
+    return group;
+  };
+  const closeGroup = () => {
+    group = null;
+  };
   const appendToolsAfter = (index: number) => {
     for (const t of tools) {
       if ((t.afterBlock ?? -1) !== index) continue;
       if (!t.el) t.el = renderNode(t);
-      container.append(t.el);
+      openGroup().append(t.el);
     }
   };
   appendToolsAfter(-1);
@@ -3140,7 +3155,11 @@ function renderAssistantBlocks(assistant: NodeState): HTMLElement {
       const title = el("span", "step-title", t("思考"));
       const preview = el("span", "step-summary", reasoningPreview(block.text));
       block.previewEl = preview;
-      summary.append(icon, title, el("span", "step-sep"), preview);
+      // 与工具行一致:图标 + 标题包在 .step-name(flex:none)里,
+      // 否则标题作为 .step-line 的直接子项会被长摘要压缩成一个字(「思」)
+      const nameSpan = el("span", "step-name");
+      nameSpan.append(icon, title);
+      summary.append(nameSpan, el("span", "step-sep"), preview);
       if (first && assistant.reasoningMs !== undefined) {
         summary.append(el("span", "step-suffix", fmtDuration(assistant.reasoningMs)));
       }
@@ -3156,8 +3175,9 @@ function renderAssistantBlocks(assistant: NodeState): HTMLElement {
       setHtml(body, block.text);
       block.el = body;
       details.append(body);
-      container.append(details);
+      openGroup().append(details);
     } else {
+      closeGroup();
       const bwrap = el("div", "block");
       const body = el("div", "block-body");
       setHtml(body, block.text);
@@ -3650,6 +3670,21 @@ function handleEvent(wire: WireEvent) {
         pushBlock(block.type, block.text);
       }
       if (addedText) assistant.plainText = ((assistant.plainText ?? "") + "\n" + addedText.trim()).trim();
+      // 工具行的插入位置按权威 content 顺序校正:
+      // 历史重放里 tool/call 总在 assistant/message 之前到达(此时还没有任何块,afterBlock 只能是 -1),
+      // 于是工具行会被顶到最前面;这里按 content 中"思考/文本块 ↔ tool-call 块"的真实顺序重排,
+      // 与网页端"工具插在所属思考块之后"一致。
+      let displayIndex = -1;
+      for (const block of content) {
+        if (block?.type === "text" || block?.type === "reasoning") {
+          if (typeof block.text === "string" && block.text.trim() !== "") displayIndex += 1;
+          continue;
+        }
+        if (block?.type === "tool-call" && typeof block.id === "string") {
+          const tool = (assistant.tools ?? []).find((item) => item.callId === block.id);
+          if (tool) tool.afterBlock = displayIndex;
+        }
+      }
       refreshAssistantNode(assistant, undefined, true); // 重放/实时均在此一次性渲染最终内容
       // 回合级元信息与操作条(最终一步的数据生效)
       assistant.seq = ev.seq;

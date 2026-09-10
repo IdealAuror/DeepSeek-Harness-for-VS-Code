@@ -1257,40 +1257,29 @@ body {
 
 .tool-group-body /* ---------- 助手回合的时间线行(网页端 ToolRow / ThinkRow 同款) ---------- */
 
-/* 左侧时间线导轨:每行一段竖线 + 一小段刻度,与网页端过程区一致 */
+/* 过程段:连续的过程行(思考 / 工具)共用一条细导轨,而不是每行一小截 */
+.step-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 2px 0 6px;
+  padding-left: 11px;
+  border-left: 1px solid var(--dsh-border);
+}
+
 .step-row {
   position: relative;
-  margin: 0 0 2px;
+  margin: 0;
   border: none;
   border-radius: 0;
-  padding: 0 0 0 14px;
-}
-
-.step-row::before {
-  content: "";
-  position: absolute;
-  left: 4px;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--dsh-border);
-}
-
-.step-row::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 13px;
-  width: 9px;
-  height: 1px;
-  background: var(--dsh-border);
+  padding: 0;
 }
 
 .step-line {
   display: flex;
   align-items: center;
   min-width: 0;
-  height: 26px;
+  height: 24px;
   padding: 0 6px;
   border-radius: 6px;
   cursor: pointer;
@@ -1312,8 +1301,6 @@ body {
   align-items: center;
   gap: 6px;
   flex: none;
-  max-width: 40%;
-  overflow: hidden;
   white-space: nowrap;
 }
 
@@ -1325,6 +1312,8 @@ body {
 }
 
 .step-title {
+  flex: none;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

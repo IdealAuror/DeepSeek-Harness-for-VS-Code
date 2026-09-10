@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.14
+- Fix the thinking row title collapsing to a single character: the icon and title were direct flex children of the row, so a long summary squeezed them; the thinking row now wraps them in .step-name like tool rows and the title itself is flex:none
+- 修复思考行标题被压成一个字「思」:思考行的图标与标题此前直接挂在行容器上,长摘要按 flex 规则把它压缩;现与工具行一致包进 .step-name,并给标题加 flex:none
+
+## 0.13.13
+- Timeline cleanup: per-row rails and ticks removed in favour of one thin rail per contiguous process group (prose breaks the group); tool rows are re-anchored after their step's thinking block using the authoritative content order; thinking/tool titles are no longer width-capped; rows tightened to 24px
+- 时间线收敛:去掉每行的竖线与刻度(改为每个连续过程段一条细导轨,正文打断分组),工具行按 content 顺序插回所属思考块之后,思考/工具标题不再被限宽截断,行高收紧到 24px
+
 ## 0.13.12
 - Process area now uses the web timeline (thinking rows with a one-line preview that expand while streaming and collapse afterwards; tool rows with localized titles, human summaries, status dot and running sweep); fixed earlier turns showing their action row and usage while a turn is still running (hover-reveal, only the settled latest turn always shows); literal dsh-session: text inside attachment content is escaped so the host no longer parses documentation examples as session references and fails the turn
 - 过程区改为网页端时间线:思考行(一行摘要,流式展开/结束收起)+ 工具行(本地化标题 · 人类可读摘要 · 状态点 · 运行扫光);修复会话运行中历史回合仍显示操作栏与用量(现为悬停淡入,仅已结束的最新回合常显);附件正文中的 dsh-session: 字面量自动转义,避免主机把文档示例当引用解析导致整回合失败
