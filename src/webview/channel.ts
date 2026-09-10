@@ -1802,6 +1802,9 @@ export class ChatChannel {
     if (outcome === "executed") {
       if (name === "/permission") {
         this.post({ kind: "notice", message: t("notice.permissionSet", { preset: line.trim().split(/\s+/)[1] ?? "" }), level: "info" });
+      } else if (name === "/compact" && result.execution?.result?.kind !== "error") {
+        // 压缩上下文:进度与结果由对话内的压缩命令行呈现(网页端同款),
+        // 等待期间(数十秒)不再追加"已执行 /compact"toast;失败仍照常提示
       } else {
         const commandText = result.execution?.result?.text;
         const message = commandText ? `${t("notice.commandExecuted", { line })}\n${commandText}` : t("notice.commandExecuted", { line });

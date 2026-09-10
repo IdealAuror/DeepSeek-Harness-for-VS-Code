@@ -541,7 +541,10 @@ export class DshApiClient {
       method: "POST",
       headers: this.headers(),
       body: JSON.stringify(message),
-      signal: AbortSignal.timeout(30_000),
+      // 命令是同步 RPC:handler 结束才返回。/compact 在宿主端跑完整轮摘要
+      // (实测 1400 条历史的压缩耗时 ~27s,更大的会话更久),因此给足 10 分钟;
+      // 期间进度由 command/run → compaction/* → command/done 事件驱动界面。
+      signal: AbortSignal.timeout(600_000),
     });
     if (res.status === 401 || res.status === 403) {
       await this.ensureAuth(true);

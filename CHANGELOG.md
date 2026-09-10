@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.16
+- Header toolbar buttons now follow the VS Code theme instead of the primary-button blue: transparent background, `icon.foreground` icon color, `toolbar.hoverBackground` / `toolbar.activeBackground` on hover and press, 5px radius and a focus ring — no more solid blue chips clashing with the editor UI (light, dark and high-contrast themes all follow automatically); dialog confirm buttons and the send button keep their accent fill
+- 头部工具按钮改为跟随 VS Code 主题,不再沿用主按钮蓝:透明底 + icon.foreground 图标色 + 悬停/按下用 toolbar.hoverBackground / toolbar.activeBackground + 5px 圆角 + 焦点圈,整排实心蓝按钮不再与编辑器界面冲突(浅色 / 深色 / 高对比主题自动跟随);对话框确认按钮与发送按钮仍保留强调色
+
+## 0.13.15
+- Compact context now matches the web client: the menu entries (slash menu and the left "/" menu) execute /compact immediately instead of inserting text, and the conversation shows a live compaction row (sweep while running → "Compacted N history items (~T tokens)", summary expandable); the compaction checkpoint is no longer rendered as a system-prompt card, the shadowed range is collapsed out of the transcript (live and on reload), and automatic compaction gets its own row; commands/execute allows 10 minutes because compaction runs synchronously on the host
+- 压缩上下文与网页端对齐:菜单(斜杠补全与左下角 / 菜单)点击即执行 /compact,不再插入文本等待回车;对话内新增压缩命令行(运行中扫光 → 已压缩 N 条历史记录(约 T tokens),摘要可展开),压缩检查点不再落成「系统提示词」卡片,被压缩的区间在对话中折叠(实时与重载一致),自动压缩同样单列一行;另因压缩在宿主端同步执行,commands/execute 超时放宽到 10 分钟
+
 ## 0.13.14
 - Fix the thinking row title collapsing to a single character: the icon and title were direct flex children of the row, so a long summary squeezed them; the thinking row now wraps them in .step-name like tool rows and the title itself is flex:none
 - 修复思考行标题被压成一个字「思」:思考行的图标与标题此前直接挂在行容器上,长摘要按 flex 规则把它压缩;现与工具行一致包进 .step-name,并给标题加 flex:none

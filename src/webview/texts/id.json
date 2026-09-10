@@ -252,7 +252,6 @@
   "跟随 VS Code 显示语言": "Ikuti bahasa tampilan VS Code",
   "切换后界面就地重渲染;默认跟随 VS Code 显示语言。": "Antarmuka dirender ulang di tempat setelah berpindah; secara default mengikuti bahasa tampilan VS Code.",
   "插入 /plan 到输入框,回车后进入/退出计划模式": "Sisipkan /plan ke kolom input; tekan Enter untuk masuk/keluar mode rencana",
-  "插入 /compact 到输入框,回车执行": "Sisipkan /compact ke kolom input; tekan Enter untuk menjalankan",
   "插入 /goal 命令,补全目标描述后回车": "Sisipkan /goal, lengkapi tujuan, lalu tekan Enter",
   "插入 /feedback 命令记录会话反馈": "Sisipkan /feedback untuk mencatat umpan balik sesi",
   "请列出当前所有动态 Cordis 插件及其运行状态(cordis_inspect)": "Daftarkan semua plugin Cordis dinamis dan status berjalannya (cordis_inspect)",
@@ -538,5 +537,12 @@
   "读取图片": "Baca gambar",
   "失败": "Gagal",
   "产物": "Hasil",
-  "代码": "Kode"
+  "代码": "Kode",
+  "正在压缩上下文…": "Memadatkan konteks…",
+  "已压缩 {items} 条历史记录(约 {tokens} tokens)": "{items} item riwayat dipadatkan (~{tokens} token)",
+  "上下文已压缩": "Konteks dipadatkan",
+  "点击展开压缩摘要": "Klik untuk melihat ringkasan pemadatan",
+  "压缩摘要不可用": "Ringkasan pemadatan tidak tersedia",
+  "命令": "Perintah",
+  "立即执行 /compact;压缩进度显示在对话中": "Jalankan /compact segera; kemajuan tampil di percakapan"
 }

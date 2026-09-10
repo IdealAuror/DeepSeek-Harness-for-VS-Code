@@ -69,8 +69,38 @@ body {
   min-width: 0;
 }
 
-.header-tool-row .btn-icon {
+/*
+ * 头部工具按钮 = VS Code 原生工具栏外观:透明底 + 主题图标色 + 悬停/按下底色 + 5px 圆角。
+ * 之前沿用 --dsh-btn-bg(= --vscode-button-background,主按钮蓝),整排实心蓝按钮
+ * 与编辑器界面/侧边栏色调冲突;现在全部走主题变量,浅色/深色/高对比主题都自动跟随。
+ */
+.header-tool-row .btn-icon,
+.header-session-row .btn-icon {
   padding: 3px 7px;
+  background: transparent;
+  color: var(--vscode-icon-foreground, var(--vscode-foreground, #cccccc));
+  border: 1px solid transparent;
+  border-radius: 5px;
+}
+
+.header-tool-row .btn-icon:hover,
+.header-session-row .btn-icon:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.2));
+  filter: none;
+}
+
+.header-tool-row .btn-icon:active,
+.header-session-row .btn-icon:active,
+.header-tool-row .btn-icon.open,
+.header-session-row .btn-icon.open {
+  background: var(--vscode-toolbar-activeBackground, var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.28)));
+  filter: none;
+}
+
+.header-tool-row .btn-icon:focus-visible,
+.header-session-row .btn-icon:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--dsh-accent));
+  outline-offset: -1px;
 }
 
 .header-tools-right {
@@ -3347,7 +3377,159 @@ body {
   min-width: 140px;
 }
 
-/* ---------- 系统提示词卡片(新对话注入的系统提示词快照) ---------- */
+/* ---------- 命令行(压缩上下文:网页端 CompactionItem 同款单行) ---------- */
+.msg.cmd-row {
+  align-self: stretch;
+  margin: 2px 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.cmd-row-btn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.cmd-row[data-expandable="true"] .cmd-row-btn {
+  cursor: pointer;
+}
+
+.cmd-row[data-expandable="true"] .cmd-row-btn:hover {
+  background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.12));
+}
+
+/* 运行中:横向扫光(与过程行同款节奏,网页端 sweep 一致) */
+.cmd-row[data-state="running"] .cmd-row-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.cmd-row[data-state="running"] .cmd-row-btn::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -120px;
+  width: 120px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, rgba(128, 128, 128, 0.22) 55%, transparent 100%);
+  animation: step-row-sweep 2.6s ease-out infinite;
+}
+
+.cmd-leading {
+  display: inline-grid;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  place-items: center;
+  color: var(--dsh-muted);
+}
+
+.cmd-icon,
+.cmd-chevron {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cmd-chevron {
+  opacity: 0;
+  transition: transform 0.15s ease;
+}
+
+/* 可展开时:hover 用箭头替换图标(网页端 context ↔ disclosure 图标切换同款) */
+.cmd-row[data-expandable="true"] .cmd-row-btn:hover .cmd-icon,
+.cmd-row[data-expandable="true"] .cmd-row-btn:focus-visible .cmd-icon,
+.cmd-row[data-expandable="true"][data-expanded="true"] .cmd-icon {
+  opacity: 0;
+}
+
+.cmd-row[data-expandable="true"] .cmd-row-btn:hover .cmd-chevron,
+.cmd-row[data-expandable="true"] .cmd-row-btn:focus-visible .cmd-chevron,
+.cmd-row[data-expandable="true"][data-expanded="true"] .cmd-chevron {
+  opacity: 1;
+}
+
+.cmd-row[data-expanded="true"] .cmd-chevron {
+  transform: rotate(90deg);
+}
+
+.cmd-title {
+  flex: none;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsh-fg);
+  font-size: 13px;
+  opacity: 0.86;
+}
+
+.cmd-sep {
+  flex: none;
+  width: 2px;
+  height: 2px;
+  margin: 0 8px;
+  border-radius: 1px;
+  background: var(--dsh-muted);
+}
+
+.cmd-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsh-muted);
+  font-size: 13px;
+}
+
+.cmd-row[data-state="error"] .cmd-summary,
+.cmd-row[data-state="error"] .cmd-title {
+  color: var(--vscode-errorForeground, #f48771);
+}
+
+.cmd-body {
+  padding: 4px 6px 6px 22px;
+  color: var(--dsh-muted);
+  font-size: 12px;
+  line-height: 1.55;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.cmd-body[hidden] {
+  display: none;
+}
+
+.cmd-body h1,
+.cmd-body h2,
+.cmd-body h3 {
+  margin: 6px 0 4px;
+  font-size: 12.5px;
+}
+
+.cmd-body p,
+.cmd-body ul,
+.cmd-body ol {
+  margin: 4px 0;
+}
+
+/* ---------- 系统提示词卡片 ---------- */
 .msg-note.system-note {
   align-self: stretch;
   border: none;

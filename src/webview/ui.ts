@@ -57,7 +57,7 @@ interface JobView {
 }
 
 interface WireEvent {
-  event: { type: string; seq: number; time: number; data: any };
+  event: { type: string; seq: number; time: number; data: any; surfaceOp?: unknown };
   view?: any;
 }
 
@@ -142,7 +142,7 @@ interface BlockState {
 }
 
 interface NodeState {
-  kind: "user" | "assistant" | "tool" | "queued" | "note" | "files" | "attach" | "turn-divider";
+  kind: "user" | "assistant" | "tool" | "queued" | "note" | "files" | "attach" | "turn-divider" | "command";
   key: string;
   el: HTMLElement | null;
   blocks?: BlockState[];
@@ -187,6 +187,30 @@ interface NodeState {
   presented?: { path: string; description?: string }[];
   /** 收尾答案的事件时间(回合尾本地时钟) */
   time?: number;
+  /**
+   * 节点锚定的会话事件 seq:压缩检查点以 surfaceOp=replace 覆盖历史区间时,
+   * 按范围移除已折叠的条目(网页端 surface 语义)。
+   */
+  anchorSeq?: number;
+  /** 命令行的命令 id(command/run ↔ command/done 关联) */
+  commandId?: string;
+  /** 命令名(压缩上下文为 compact) */
+  cmdName?: string;
+  /** 压缩事务 id(compaction/start ↔ summary ↔ end ↔ 检查点关联) */
+  compactionId?: string;
+  /** 命令行状态:running(进行中)→ done / error */
+  cmdStatus?: "running" | "done" | "error";
+  /** 自动压缩(无来源命令):标题为「上下文已压缩」,手动压缩标题为命令名 */
+  autoCompaction?: boolean;
+  /** 压缩掉的历史条数 / token 数(compaction/summary 同源,网页端「已压缩 N 条历史记录」) */
+  shadowedItems?: number;
+  shadowedTokens?: number;
+  /** 压缩摘要正文(点击行展开,网页端 compactionSummary 正文同款) */
+  summaryText?: string;
+  /** 命令结果文本(command/done.text,作为摘要的回退显示) */
+  outcomeText?: string;
+  /** 摘要展开状态(用户点击切换) */
+  expanded?: boolean;
 }
 
 // ---------- 状态 ----------
@@ -696,6 +720,13 @@ const EN_TEXT: Record<string, string> = {
   "🗑️ 清除目标(取消)": "🗑️ Clear goal (cancel)",
   "计划模式": "Plan mode",
   "压缩上下文": "Compact context",
+  "立即执行 /compact;压缩进度显示在对话中": "Run /compact immediately; progress appears in the conversation",
+  "命令": "Command",
+  "压缩摘要不可用": "Compaction summary unavailable",
+  "点击展开压缩摘要": "Click to view the compaction summary",
+  "上下文已压缩": "Context compacted",
+  "已压缩 {items} 条历史记录(约 {tokens} tokens)": "Compacted {items} history items (~{tokens} tokens)",
+  "正在压缩上下文…": "Compacting context…",
   "设置目标": "Set goal",
   "记录反馈": "Record feedback",
   "切换权限(插入命令)": "Switch permission (inserts command)",
@@ -999,7 +1030,6 @@ const EN_TEXT: Record<string, string> = {
   "插入 /plan 到输入框,回车后进入计划模式": "Insert /plan into the input; press Enter to enter plan mode",
   "插入 /plan off 到输入框,回车后退出计划模式": "Insert /plan off into the input; press Enter to leave plan mode",
   "退出计划模式": "Exit plan mode",
-  "插入 /compact 到输入框,回车执行": "Insert /compact into the input; press Enter to run",
   "插入 /goal 命令,补全目标描述后回车": "Insert /goal, complete the objective, then press Enter",
   "插入 /feedback 命令记录会话反馈": "Insert /feedback to record session feedback",
   "请列出当前所有动态 Cordis 插件及其运行状态(cordis_inspect)": "List all dynamic Cordis plugins and their run states (cordis_inspect)",
@@ -2158,6 +2188,14 @@ function renderSlashMenu() {
 /** 用所选命令/技能替换当前部分 /token。 */
 function selectSlash(token: string) {
   if (!slashState) return;
+  // 压缩上下文是无参数命令:与网页端菜单项一致 —— 选中即执行,
+  // 不再插入文本等待回车(进度由对话内的压缩命令行呈现实时状态)
+  if (token.trim() === "/compact") {
+    closeSlash();
+    input.focus();
+    vscode.postMessage({ kind: "command", line: "/compact" });
+    return;
+  }
   const pos = input.selectionStart ?? input.value.length;
   input.value = input.value.slice(0, slashState.start) + token + input.value.slice(pos);
   closeSlash();
@@ -2550,7 +2588,12 @@ function renderPlusMenu() {
   } else {
     item("📝", t("计划模式"), () => insert("/plan"), t("插入 /plan 到输入框,回车后进入计划模式"));
   }
-  item("🗜️", t("压缩上下文"), () => insert("/compact"), t("插入 /compact 到输入框,回车执行"));
+  item(
+    "🗜️",
+    t("压缩上下文"),
+    () => vscode.postMessage({ kind: "command", line: "/compact" }),
+    t("立即执行 /compact;压缩进度显示在对话中"),
+  );
   item("🎯", t("设置目标"), () => insert("/goal "), t("插入 /goal 命令,补全目标描述后回车"));
   item("💬", t("记录反馈"), () => insert("/feedback "), t("插入 /feedback 命令记录会话反馈"));
   // 插件(Cordis)管理:由 agent 的 cordis 工具执行,插入指令让 agent 操作
@@ -2737,11 +2780,25 @@ function autoResize() {
 
 // ---------- 渲染:消息 ----------
 
+/**
+ * 当前正在折叠的事件 seq:appendNode 用它给节点打上锚点(anchorSeq),
+ * 供压缩检查点的 surface 替换按区间移除已折叠条目。事件之外创建的节点
+ * (排队消息等)不设锚点,因而永远不会被移除。
+ */
+let currentEventSeq: number | undefined;
+
 function appendNode(node: NodeState) {
+  if (node.anchorSeq === undefined && currentEventSeq !== undefined) node.anchorSeq = currentEventSeq;
   node.el = renderNode(node);
   messages.appendChild(node.el);
   state.nodes.push(node);
   scrollToBottom();
+}
+
+/** 内联子节点(助手消息里的工具行)入列:同样打锚点,但不单独挂到消息容器。 */
+function pushInlineNode(node: NodeState) {
+  if (node.anchorSeq === undefined && currentEventSeq !== undefined) node.anchorSeq = currentEventSeq;
+  state.nodes.push(node);
 }
 
 /**
@@ -2760,8 +2817,149 @@ function buildImageRow(node: NodeState): HTMLElement {
   return imgRow;
 }
 
+// ---------- 命令行(压缩上下文等长任务命令:网页端 command/compaction 行同款) ----------
+
+/**
+ * 构建命令行节点(单行:图标 + 名称 + 圆点 + 摘要 + 展开箭头)。
+ * 与网页端 CompactionItem / GenericCommandCard 结构一致:24px 行高、13px 摘要、
+ * 可展开时正文另起一段;运行中由 CSS 扫光表示进度。
+ */
+function buildCommandRow(node: NodeState): HTMLElement {
+  const wrap = el("div", "msg cmd-row");
+  const btn = el("button", "cmd-row-btn") as HTMLButtonElement;
+  btn.type = "button";
+  const leading = el("span", "cmd-leading");
+  const icon = el("span", "cmd-icon");
+  icon.append(lineIcon(ICONS.database, 14));
+  const chevron = el("span", "cmd-chevron");
+  chevron.append(lineIcon(ICONS.chevronRight, 12));
+  leading.append(icon, chevron);
+  const title = el("span", "cmd-title", node.autoCompaction ? t("上下文已压缩") : (node.cmdName ?? t("命令")));
+  const sep = el("span", "cmd-sep");
+  const summary = el("span", "cmd-summary");
+  btn.append(leading, title, sep, summary);
+  const body = el("div", "cmd-body");
+  body.hidden = true;
+  wrap.append(btn, body);
+  btn.addEventListener("click", () => {
+    // 无摘要正文时行不可展开(与网页端 expandable = node.summary !== null 一致)
+    if (!commandExpandable(node)) return;
+    node.expanded = node.expanded !== true;
+    updateCommandRow(node);
+  });
+  node.el = wrap;
+  updateCommandRow(node);
+  return wrap;
+}
+
+/** 是否有可展开的摘要正文。 */
+function commandExpandable(node: NodeState): boolean {
+  return typeof node.summaryText === "string" && node.summaryText.trim() !== "";
+}
+
+/** 摘要文本:运行中 → 已压缩条数/token → 命令结果 → 可展开提示(网页端回退链同款)。 */
+function commandSummaryText(node: NodeState): string {
+  if (node.cmdStatus === "running") return t("正在压缩上下文…");
+  if (typeof node.shadowedItems === "number" && typeof node.shadowedTokens === "number") {
+    return t("已压缩 {items} 条历史记录(约 {tokens} tokens)", {
+      items: String(node.shadowedItems),
+      tokens: String(node.shadowedTokens),
+    });
+  }
+  if (node.outcomeText) return node.outcomeText;
+  if (commandExpandable(node)) return t("点击展开压缩摘要");
+  return t("压缩摘要不可用");
+}
+
+/** 就地刷新命令行状态/摘要/展开体(不重建节点,便于流式期间多次调用)。 */
+function updateCommandRow(node: NodeState) {
+  const root = node.el;
+  if (!root) return;
+  const status = node.cmdStatus ?? "running";
+  root.dataset.state = status;
+  root.dataset.expandable = commandExpandable(node) ? "true" : "false";
+  const summary = root.querySelector(".cmd-summary");
+  if (summary) summary.textContent = commandSummaryText(node);
+  const btn = root.querySelector(".cmd-row-btn") as HTMLElement | null;
+  if (btn) {
+    const expanded = node.expanded === true && commandExpandable(node);
+    btn.setAttribute("aria-expanded", String(expanded));
+    btn.title = commandExpandable(node) ? t("点击展开压缩摘要") : "";
+  }
+  const body = root.querySelector(".cmd-body") as HTMLElement | null;
+  if (body) {
+    const expanded = node.expanded === true && commandExpandable(node);
+    root.dataset.expanded = expanded ? "true" : "false";
+    body.hidden = !expanded;
+    if (expanded) setHtml(body, node.summaryText ?? "");
+    else body.innerHTML = "";
+  }
+}
+
+/** 按命令 id 定位命令行节点(command/run 创建、command/done 结算)。 */
+function findCommandNode(commandId: string): NodeState | undefined {
+  return state.nodes.find((n) => n.kind === "command" && n.commandId === commandId);
+}
+
+/** 按压缩事务 id 定位命令行节点(自动压缩没有命令 id,只能按 compactionId 关联)。 */
+function findCompactionNode(compactionId: string): NodeState | undefined {
+  return state.nodes.find((n) => n.kind === "command" && n.compactionId === compactionId);
+}
+
+/** 手动压缩命令名(宿主 /compact;网页端 COMPACT_PLUGIN 同款常量)。 */
+const COMPACT_COMMAND = "compact";
+
+/**
+ * 识别压缩检查点(user/message 且来源为 compact 插件)。
+ * 该事件的正文是压缩摘要,渲染由命令行节点负责(网页端 compactSource 同款判定)。
+ */
+function compactCheckpointSource(data: any): { compactionId?: string; sourceCommandId?: string } | undefined {
+  const source = data?.source;
+  if (!source || typeof source !== "object") return undefined;
+  if (source.kind !== "plugin" || source.plugin !== COMPACT_COMMAND) return undefined;
+  return {
+    ...(typeof source.compactionId === "string" ? { compactionId: source.compactionId } : {}),
+    ...(typeof source.sourceCommandId === "string" ? { sourceCommandId: source.sourceCommandId } : {}),
+  };
+}
+
+/**
+ * 应用 surface 替换(压缩检查点):移除已被折叠进摘要的历史条目,
+ * 让对话里只剩一条压缩行 —— 与网页端 surface 语义一致。
+ * 正在流式输出的助手节点永不移除(压缩只覆盖空闲/已结算区间)。
+ */
+function applySurfaceReplace(ev: { surfaceOp?: unknown }) {
+  const op = ev.surfaceOp as { op?: string; startSeq?: number; endSeq?: number } | undefined;
+  if (op?.op !== "replace") return;
+  const start = op.startSeq;
+  const end = op.endSeq;
+  if (typeof start !== "number" || typeof end !== "number" || end < start) return;
+  const live = state.streamBlock?.owner;
+  const dropped = new Set<NodeState>();
+  for (const node of [...state.nodes]) {
+    if (node === live || dropped.has(node)) continue;
+    const anchor = node.anchorSeq;
+    if (typeof anchor !== "number" || anchor < start || anchor > end) continue;
+    dropNode(node, dropped);
+  }
+  if (dropped.size > 0) state.turnStarts = state.turnStarts.filter((seq) => seq < start || seq > end);
+}
+
+/** 移除节点(含其内联工具行)并从渲染列表摘除。 */
+function dropNode(node: NodeState, dropped = new Set<NodeState>()) {
+  if (dropped.has(node)) return;
+  dropped.add(node);
+  for (const child of node.tools ?? []) dropNode(child, dropped);
+  node.el?.remove();
+  const idx = state.nodes.indexOf(node);
+  if (idx >= 0) state.nodes.splice(idx, 1);
+}
+
 function renderNode(node: NodeState): HTMLElement {
   switch (node.kind) {
+    case "command": {
+      return buildCommandRow(node);
+    }
     case "user": {
       const wrap = el("div", "msg msg-user");
       const body = el("div", "msg-body");
@@ -3498,8 +3696,24 @@ function handleEvent(wire: WireEvent) {
   state.seqs.add(ev.seq);
   state.rawEvents.push(wire);
   const data = ev.data ?? {};
+  currentEventSeq = ev.seq;
+  // 压缩检查点以 surfaceOp=replace 覆盖被压缩区间:先摘掉已折叠的历史条目
+  if (ev.surfaceOp !== undefined) applySurfaceReplace(ev);
 
   switch (ev.type) {    case "user/message": {
+      // 压缩检查点(compaction checkpoint):正文即压缩摘要,已由命令行节点呈现,
+      // 不再落成「系统提示词」卡片(网页端同款:检查点只更新压缩行)
+      const checkpoint = compactCheckpointSource(data);
+      if (checkpoint) {
+        const node =
+          (checkpoint.sourceCommandId !== undefined ? findCommandNode(checkpoint.sourceCommandId) : undefined) ??
+          (checkpoint.compactionId !== undefined ? findCompactionNode(checkpoint.compactionId) : undefined);
+        if (node) {
+          node.cmdStatus = "done";
+          updateCommandRow(node);
+        }
+        break;
+      }
       const text = extractText(data?.content);
       const id: string | undefined = data?.id;
       if (id && state.queuedIds.has(id)) {
@@ -3542,6 +3756,92 @@ function handleEvent(wire: WireEvent) {
           appendNode({ kind: "note", key: `n:${ev.seq}`, el: null, text });
         }
       }
+      break;
+    }
+    // ---------- 斜杠命令生命周期(网页端 command/run ↔ command/done) ----------
+    case "command/run": {
+      // 仅压缩上下文渲染为对话内的命令行(其余命令沿用既有小字命令行/芯片呈现)
+      const commandId = typeof data?.commandId === "string" ? data.commandId : "";
+      const name = typeof data?.name === "string" ? data.name : "";
+      if (commandId === "" || name !== COMPACT_COMMAND) break;
+      if (findCommandNode(commandId)) break;
+      appendNode({
+        kind: "command",
+        key: `cmd:${commandId}`,
+        el: null,
+        commandId,
+        cmdName: name,
+        cmdStatus: "running",
+        anchorSeq: ev.seq,
+      });
+      break;
+    }
+    case "command/done": {
+      const commandId = typeof data?.commandId === "string" ? data.commandId : "";
+      const node = commandId === "" ? undefined : findCommandNode(commandId);
+      if (!node) break;
+      // 压缩行有检查点时,结果文本只作为回退摘要(与网页端 CompactionItem 一致)
+      node.cmdStatus = data?.kind === "error" ? "error" : "done";
+      if (typeof data?.text === "string" && data.text) node.outcomeText = data.text;
+      updateCommandRow(node);
+      break;
+    }
+    // ---------- 压缩事务(手动 /compact 与自动压缩共用) ----------
+    case "compaction/start": {
+      const compactionId = typeof data?.compactionId === "string" ? data.compactionId : "";
+      if (compactionId === "") break;
+      const sourceCommandId = typeof data?.sourceCommandId === "string" ? data.sourceCommandId : undefined;
+      let node = sourceCommandId !== undefined ? findCommandNode(sourceCommandId) : findCompactionNode(compactionId);
+      if (!node) {
+        // 自动压缩(无来源命令):独立命令行,标题为「上下文已压缩」
+        node = {
+          kind: "command",
+          key: `cp:${compactionId}`,
+          el: null,
+          commandId: sourceCommandId,
+          compactionId,
+          autoCompaction: sourceCommandId === undefined,
+          cmdStatus: "running",
+          anchorSeq: ev.seq,
+        };
+        appendNode(node);
+        break;
+      }
+      node.compactionId = compactionId;
+      updateCommandRow(node);
+      break;
+    }
+    case "compaction/summary": {
+      const compactionId = typeof data?.compactionId === "string" ? data.compactionId : "";
+      const sourceCommandId = typeof data?.sourceCommandId === "string" ? data.sourceCommandId : undefined;
+      const node =
+        (sourceCommandId !== undefined ? findCommandNode(sourceCommandId) : undefined) ??
+        (compactionId !== "" ? findCompactionNode(compactionId) : undefined);
+      if (!node) break;
+      if (Array.isArray(data?.shadowedSeqs)) node.shadowedItems = data.shadowedSeqs.length;
+      if (typeof data?.shadowedTokenCount === "number") node.shadowedTokens = data.shadowedTokenCount;
+      // 摘要正文(summary 为 text 块数组,网页端 compactSummary 同款抽取)
+      if (Array.isArray(data?.summary)) {
+        const summary = data.summary
+          .map((block: any) => (block?.type === "text" && typeof block.text === "string" ? block.text : ""))
+          .join("");
+        if (summary.trim() !== "") node.summaryText = summary;
+      }
+      updateCommandRow(node);
+      break;
+    }
+    case "compaction/end": {
+      // 失败关闭(无检查点):命令行落到 error,摘要文本回退到错误原因
+      if (data?.error === undefined) break;
+      const compactionId = typeof data?.compactionId === "string" ? data.compactionId : "";
+      const sourceCommandId = typeof data?.sourceCommandId === "string" ? data.sourceCommandId : undefined;
+      const node =
+        (sourceCommandId !== undefined ? findCommandNode(sourceCommandId) : undefined) ??
+        (compactionId !== "" ? findCompactionNode(compactionId) : undefined);
+      if (!node || node.cmdStatus === "done") break;
+      node.cmdStatus = "error";
+      if (!node.outcomeText) node.outcomeText = String(data.error?.message ?? data.error);
+      updateCommandRow(node);
       break;
     }
     case "assistant/chunk": {
@@ -3606,7 +3906,7 @@ function handleEvent(wire: WireEvent) {
       };
       node.el = renderNode(node);
       assistant.tools.push(node);
-      state.nodes.push(node);
+      pushInlineNode(node);
       if (!state.replaying) refreshAssistantNode(assistant, undefined, true);
       break;
     }
@@ -3785,7 +4085,7 @@ function handleEvent(wire: WireEvent) {
       };
       node.el = renderNode(node);
       assistant.tools.push(node);
-      state.nodes.push(node);
+      pushInlineNode(node);
       // 重放时跳过中间重绘,assistant/message 最终一次性渲染内联工具行
       if (!state.replaying) refreshAssistantNode(assistant, undefined, true);
       scrollToBottom();
@@ -3922,6 +4222,8 @@ function handleEvent(wire: WireEvent) {
     default:
       break;
   }
+  // 事件折叠结束后清除锚点:事件之外创建的节点(排队消息等)不得继承上一个事件的 seq
+  currentEventSeq = undefined;
 }
 
 function removeNode(node: NodeState) {

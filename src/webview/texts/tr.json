@@ -252,7 +252,6 @@
   "跟随 VS Code 显示语言": "VS Code görüntüleme dilini izle",
   "切换后界面就地重渲染;默认跟随 VS Code 显示语言。": "Değiştirdikten sonra arayüz yerinde yeniden işlenir; varsayılan olarak VS Code görüntüleme dilini izler.",
   "插入 /plan 到输入框,回车后进入/退出计划模式": "/plan ifadesini giriş kutusuna ekleyin; plan moduna girmek/çıkmak için Enter'a basın",
-  "插入 /compact 到输入框,回车执行": "/compact ifadesini giriş kutusuna ekleyin; çalıştırmak için Enter'a basın",
   "插入 /goal 命令,补全目标描述后回车": "/goal ifadesini ekleyin, hedef açıklamasını tamamlayıp Enter'a basın",
   "插入 /feedback 命令记录会话反馈": "Oturum geri bildirimi kaydetmek için /feedback ifadesini ekleyin",
   "请列出当前所有动态 Cordis 插件及其运行状态(cordis_inspect)": "Tüm dinamik Cordis eklentilerini ve çalışma durumlarını listele (cordis_inspect)",
@@ -538,5 +537,12 @@
   "读取图片": "Görsel okuma",
   "失败": "Başarısız",
   "产物": "Çıktı",
-  "代码": "Kod"
+  "代码": "Kod",
+  "正在压缩上下文…": "Bağlam sıkıştırılıyor…",
+  "已压缩 {items} 条历史记录(约 {tokens} tokens)": "{items} geçmiş öğesi sıkıştırıldı (~{tokens} tokens)",
+  "上下文已压缩": "Bağlam sıkıştırıldı",
+  "点击展开压缩摘要": "Sıkıştırma özetini görmek için tıklayın",
+  "压缩摘要不可用": "Sıkıştırma özeti kullanılamıyor",
+  "命令": "Komut",
+  "立即执行 /compact;压缩进度显示在对话中": "/compact hemen çalıştırılır; ilerleme sohbette görünür"
 }

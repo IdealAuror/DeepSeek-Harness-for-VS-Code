@@ -252,7 +252,6 @@
   "跟随 VS Code 显示语言": "Der Anzeigesprache von VS Code folgen",
   "切换后界面就地重渲染;默认跟随 VS Code 显示语言。": "Nach dem Wechsel wird die Oberfläche direkt neu gerendert; standardmäßig folgt sie der Anzeigesprache von VS Code.",
   "插入 /plan 到输入框,回车后进入/退出计划模式": "/plan in die Eingabe einfügen; mit Enter in den Planungsmodus wechseln oder ihn verlassen",
-  "插入 /compact 到输入框,回车执行": "/compact in die Eingabe einfügen; mit Enter ausführen",
   "插入 /goal 命令,补全目标描述后回车": "/goal einfügen, die Zielbeschreibung vervollständigen und dann Enter drücken",
   "插入 /feedback 命令记录会话反馈": "/feedback einfügen, um Sitzungsfeedback aufzuzeichnen",
   "请列出当前所有动态 Cordis 插件及其运行状态(cordis_inspect)": "Alle dynamischen Cordis-Plugins und ihre Ausführungszustände auflisten (cordis_inspect)",
@@ -538,5 +537,12 @@
   "读取图片": "Bild lesen",
   "失败": "Fehlgeschlagen",
   "产物": "Artefakt",
-  "代码": "Code"
+  "代码": "Code",
+  "正在压缩上下文…": "Kontext wird komprimiert…",
+  "已压缩 {items} 条历史记录(约 {tokens} tokens)": "{items} Verlaufseinträge komprimiert (~{tokens} Tokens)",
+  "上下文已压缩": "Kontext komprimiert",
+  "点击展开压缩摘要": "Klicken, um die Komprimierungszusammenfassung zu öffnen",
+  "压缩摘要不可用": "Komprimierungszusammenfassung nicht verfügbar",
+  "命令": "Befehl",
+  "立即执行 /compact;压缩进度显示在对话中": "/compact sofort ausführen; Fortschritt erscheint im Verlauf"
 }
