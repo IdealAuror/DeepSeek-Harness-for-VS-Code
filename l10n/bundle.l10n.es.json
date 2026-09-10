@@ -182,5 +182,7 @@
   "server.updating": "Actualizando servidor DSH (descargando @deepseek-ai/dsh@latest)…",
   "server.updateFailed": "No se pudo actualizar el servidor DSH. Consulta el registro de salida.",
   "server.updated": "Servidor DSH actualizado y reiniciado.",
-  "server.updateRestartFailed": "Servidor DSH actualizado, pero el reinicio falló: {message}"
+  "server.updateRestartFailed": "Servidor DSH actualizado, pero el reinicio falló: {message}",
+  "notice.permissionBusy": "Hay un turno en ejecución: el preajuste de permisos se aplicará en el siguiente turno; vuelve a intentarlo cuando la sesión esté inactiva.",
+  "hub.modelNoImages": "El modelo actual \"{model}\" no admite imágenes: quita los adjuntos de imagen o cambia a un modelo compatible con imágenes con el botón de modelo de la esquina superior derecha del cuadro de entrada."
 }

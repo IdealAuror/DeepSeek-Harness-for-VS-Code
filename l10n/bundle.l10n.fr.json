@@ -182,5 +182,7 @@
   "server.updating": "Mise à jour du serveur DSH (téléchargement de @deepseek-ai/dsh@latest)…",
   "server.updateFailed": "Échec de la mise à jour du serveur DSH. Voir le journal de sortie.",
   "server.updated": "Serveur DSH mis à jour et redémarré.",
-  "server.updateRestartFailed": "Serveur DSH mis à jour, mais le redémarrage a échoué : {message}"
+  "server.updateRestartFailed": "Serveur DSH mis à jour, mais le redémarrage a échoué : {message}",
+  "notice.permissionBusy": "Un tour est en cours : le préréglage de permissions s'appliquera au tour suivant ; réessayez lorsque la session est inactive.",
+  "hub.modelNoImages": "Le modèle actuel « {model} » ne prend pas en charge les images : retirez les pièces jointes ou choisissez un modèle compatible via le bouton de modèle en haut à droite de la zone de saisie."
 }

@@ -3406,42 +3406,152 @@ body {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
 }
 
-.context-bar {
-  flex: 1;
-  min-width: 0;
+/* ---------- 上下文进度环 + 分类面板(网页端 composer ContextMeter 同款) ---------- */
+
+.send-row {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.context-label {
-  font-size: 10px;
-  color: var(--dsh-muted);
-  white-space: nowrap;
+.context-meter {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
 }
 
-.context-fill-wrap {
-  flex: 1;
+.context-meter[hidden] {
+  display: none;
+}
+
+.context-meter-trigger {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsh-muted);
+  cursor: pointer;
+}
+
+.context-meter-trigger:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.18));
+}
+
+.context-meter-track {
+  fill: none;
+  stroke: var(--dsh-border);
+  stroke-width: 2px;
+}
+
+.context-meter-fill {
+  fill: none;
+  stroke: var(--dsh-muted);
+  stroke-width: 2px;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.4s ease;
+}
+
+.context-meter-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 130;
+  box-sizing: border-box;
+  width: 264px;
+  padding: 12px;
+  border: 1px solid var(--dsh-border);
+  border-radius: 12px;
+  background: var(--vscode-menu-background, #252526);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: var(--dsh-muted);
+  font-size: 12px;
+  line-height: 20px;
+  cursor: default;
+}
+
+.context-meter-panel[hidden] {
+  display: none;
+}
+
+.cm-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cm-headline {
+  color: var(--dsh-muted);
+}
+
+.cm-headline:empty {
+  display: none;
+}
+
+.cm-percent {
+  color: var(--dsh-fg);
+  font-weight: 500;
+}
+
+.cm-figures {
+  margin-left: auto;
+  color: var(--dsh-fg);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.cm-bar {
+  display: flex;
+  gap: 1px;
   height: 4px;
-  border-radius: 2px;
-  background: var(--dsh-border);
+  margin: 10px 0 12px;
+  border-radius: 999px;
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.18));
   overflow: hidden;
 }
 
-.context-fill {
-  display: block;
+.cm-segment {
+  flex: none;
+  min-width: 2px;
   height: 100%;
+  border-radius: 1px;
+  background: var(--dsh-muted);
+}
+
+.cm-rows {
+  margin: 6px 0 0;
+}
+
+.cm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+}
+
+.cm-row dt {
+  display: flex;
+  align-items: center;
+  color: var(--dsh-muted);
+}
+
+.cm-row dd {
+  margin: 0;
+  color: var(--dsh-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.cm-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
   border-radius: 2px;
-  background: #4ec9b0;
-  transition: width 0.4s ease;
-}
-
-.context-fill.warm {
-  background: #dcdcaa;
-}
-
-.context-fill.hot {
-  background: #f48771;
+  flex-shrink: 0;
 }
 
 /* ---------- 窄侧栏适配(辅助侧栏等) ---------- */

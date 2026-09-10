@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.7
+- Adapt to DSH 0.1.5-rc.1: commands/execute attachment parameter renamed to submittedAttachments, required subagents/prompt delivery, per-command attachment gating, token deltas via assistant-stream frames, image tool results; new web-style context meter ring with system/tools/messages breakdown
+- 适配 DSH 0.1.5-rc.1:commands/execute 附件参数改名 submittedAttachments、subagents/prompt 必填 delivery、按命令声明裁决附件、逐 token 增量改走 assistant-stream 瞬态帧、工具结果图片渲染;新增网页同款上下文进度环与分类面板(系统提示词/工具定义/对话消息)
+
 ## 0.13.6
 - Preset descriptions are now localized by id unconditionally for the built-in presets (standard / code / minimal / creator): presetDisplayText no longer depends on the trust field — some deployments or entry points may not supply it, or ship Chinese built-in metadata, which made the popup fall back to raw metadata and show Chinese on non-Chinese UIs. Behavior: built-in ids always resolve through the per-language dictionary (13 languages) with the EN fallback; only user presets keep their file metadata. Verified: all preset name/description keys exist in every language dictionary.
 - 内置预设的名称与描述改为**按 id 无条件本地化**(标准/编码/极简/创造):presetDisplayText 不再依赖 trust 字段 —— 部分部署/入口可能不返回 trust,或内置元数据本身是中文,此前会导致非中文界面回退到原始元数据而显示中文。现在:内置 id 一律走当前语言词典(13 种语言)+ 英文回退;仅用户预设保留文件元数据。已校验:全部预设名/描述键在每份语言词典中都存在。

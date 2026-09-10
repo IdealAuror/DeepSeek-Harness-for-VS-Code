@@ -461,7 +461,7 @@ export class ServerManager {
 
   /**
    * 升级扩展自有目录的直接安装(@deepseek-ai/dsh@latest 强制重装)。
-   * 用于服务器版本落后(latest 通道 = 最新已发布版本,0.1.2-rc.1)时手动升级;
+   * 用于服务器版本落后(latest 通道 = 最新已发布版本,0.1.5-rc.1)时手动升级;
    * 返回是否成功。调用方负责停服/重启编排。
    */
   async updateDirectInstall(): Promise<boolean> {

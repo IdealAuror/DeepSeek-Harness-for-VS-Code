@@ -331,6 +331,9 @@
   "在 VS Code 中打开记忆文件": "Buka file memori di VS Code",
   "智能体": "Agen",
   "系统提示词": "Prompt sistem",
+  "工具定义": "Definisi alat",
+  "对话消息": "Pesan percakapan",
+  "上下文已用 {p}": "{p} konteks terpakai",
   "已注入模型 · 点击展开": "Disuntikkan ke model · klik untuk meluaskan",
   "撤销本回合文件改动": "Batalkan perubahan file giliran ini",
   "查看检查点": "Lihat titik pemeriksaan",
@@ -486,5 +489,16 @@
   "Session": "Sesi",
   "（无工作目录）": "（tanpa direktori kerja）",
   "正在加载文件资源…": "Memuat file…",
-  "正在加载会话列表…": "Memuat daftar sesi…"
+  "正在加载会话列表…": "Memuat daftar sesi…",
+  "⚠️ 最多一次添加 8 张图片": "⚠️ Maksimal 8 gambar sekaligus",
+  "⚠️ 非图片附件请从资源管理器复制(未提供本地路径)": "⚠️ Salin lampiran non-gambar dari File Explorer (tidak ada jalur lokal)",
+  "模型与思考(推理强度)": "Model dan pemikiran (tingkat penalaran)",
+  "应如何批准操作?": "Bagaimana operasi harus disetujui?",
+  "了解更多": "Pelajari lebih lanjut",
+  "会话已开始,预设不可切换(新会话可选)": "Sesi sudah dimulai: praset tidak dapat diganti (tersedia untuk sesi baru)",
+  "选择 Agent 预设(新会话生效)": "Pilih praset Agent (berlaku untuk sesi baru)",
+  "只读访问:不能修改文件或执行命令;外部文件与网络访问按策略询问": "Hanya baca: tidak dapat mengubah berkas atau menjalankan perintah; akses berkas eksternal dan jaringan diminta sesuai kebijakan",
+  "可修改工作区内的文件;外部文件与网络访问按策略询问": "Berkas di dalam ruang kerja dapat diubah; akses berkas eksternal dan jaringan diminta sesuai kebijakan",
+  "可不受限制地访问互联网和你电脑上的任何文件": "Akses tanpa batas ke internet dan berkas apa pun di komputer Anda",
+  "自定义组合(在设置中编辑)": "Kombinasi khusus (edit di pengaturan)"
 }

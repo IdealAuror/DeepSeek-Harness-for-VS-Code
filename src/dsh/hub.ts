@@ -41,7 +41,7 @@ export interface HubDeps {
 
 const HISTORY_PAGE_MESSAGES = 60;
 
-/** 中枢:服务器 + API 客户端 + 会话存储的统一入口(0.1.2-rc.1 线协议)。 */
+/** 中枢:服务器 + API 客户端 + 会话存储的统一入口(0.1.5-rc.1 线协议,兼容 0.1.2 参数名)。 */
 export class DshHub {
   readonly store = new SessionStore();
   readonly client: DshApiClient;
@@ -286,6 +286,14 @@ export class DshHub {
         if (values.contextPressure !== undefined) {
           this.store.context.set(item.sessionId, values.contextPressure as { pressureTokens?: number; projectedTokens?: number; contextWindow?: number });
         }
+        if (values.contextBreakdown !== undefined) {
+          const raw = values.contextBreakdown as { systemTokens?: number; toolsTokens?: number; messageTokens?: number };
+          this.store.breakdown.set(item.sessionId, {
+            systemTokens: raw.systemTokens ?? 0,
+            toolsTokens: raw.toolsTokens ?? 0,
+            messageTokens: raw.messageTokens ?? 0,
+          });
+        }
         if (values.permissions !== undefined) {
           this.store.permissions.set(item.sessionId, values.permissions as { options: { value: string; name: string }[]; currentValue: string });
         }
@@ -321,13 +329,15 @@ export class DshHub {
    * 归档会话)若不单独 follow 就收不到 turnEnd 等事件,等待方会一直超时。返回关闭句柄。
    */
   watchSession(sessionId: string): RemoteStreamHandle {
-    return this.client.openStream("session/follow", { request: { address: { kind: "session", sessionId }, maxMessages: HISTORY_PAGE_MESSAGES } }, {
+    return this.client.openStream("session/follow", { request: { address: { kind: "session", sessionId }, maxMessages: HISTORY_PAGE_MESSAGES, assistantStream: true } }, {
       onItem: (value) => {
         const frame = value as SessionFollowFrame;
         if (frame.type === "snapshot") {
           this.followCursor.set(sessionId, frame.cursor);
           this.followSource.set(sessionId, "session");
           this.store.handleFollowSnapshot(frame);
+        } else if (frame.type === "assistant-stream") {
+          this.store.handleAssistantStreamFrame(sessionId, frame.frame);
         } else {
           this.store.handleFollowEvent(sessionId, frame);
         }
@@ -361,7 +371,7 @@ export class DshHub {
     if (this.followedSession === sessionId && this.followHandle) return;
     this.followHandle?.cancel();
     this.followedSession = sessionId;
-    this.followHandle = this.client.openStream("session/follow", { request: { address: { kind: "session", sessionId }, maxMessages: HISTORY_PAGE_MESSAGES } }, {
+    this.followHandle = this.client.openStream("session/follow", { request: { address: { kind: "session", sessionId }, maxMessages: HISTORY_PAGE_MESSAGES, assistantStream: true } }, {
       onItem: (value) => {
         const frame = value as SessionFollowFrame;
         if (frame.type === "snapshot") {
@@ -369,6 +379,8 @@ export class DshHub {
           this.followSource.set(sessionId, "session");
           this.store.handleFollowSnapshot(frame);
           this.notifyFollowReady(sessionId);
+        } else if (frame.type === "assistant-stream") {
+          this.store.handleAssistantStreamFrame(sessionId, frame.frame);
         } else {
           this.store.handleFollowEvent(sessionId, frame);
         }
@@ -404,7 +416,7 @@ export class DshHub {
           resolve({ events: [], hasMore: false });
         }
       }, 10_000);
-      const handle = this.client.openStream("session/follow", { request: { address: { kind: "subagent", parentSessionId, childSessionId, mode }, maxMessages: HISTORY_PAGE_MESSAGES } }, {
+      const handle = this.client.openStream("session/follow", { request: { address: { kind: "subagent", parentSessionId, childSessionId, mode }, maxMessages: HISTORY_PAGE_MESSAGES, assistantStream: true } }, {
         onItem: (value) => {
           const frame = value as SessionFollowFrame;
           if (frame.type === "snapshot") {
@@ -558,28 +570,40 @@ export class DshHub {
     return intercepted;
   }
 
-  /** 宿主命令名缓存(sessionId → 名称集合),供 /token 路由判定:命令走命令通道,技能 token 走普通 prompt。 */
-  private readonly commandNames = new Map<string, Set<string>>();
+  /** 宿主命令表缓存(sessionId → 小写命令名 → 是否声明接受附件),供 /token 路由判定。 */
+  private readonly commandNames = new Map<string, Map<string, boolean>>();
 
-  /** 判断一个(不带斜杠的)名称是否为宿主命令;同时探测 commands/execute 的 images 能力。 */
-  async isKnownCommand(sessionId: string, name: string): Promise<boolean> {
-    const lower = name.toLowerCase();
-    let set = this.commandNames.get(sessionId);
-    if (!set) {
-      try {
-        const { names } = await this.client.listCommands(sessionId);
-        set = new Set(names.map((n) => n.toLowerCase()));
-        this.commandNames.set(sessionId, set);
-      } catch (error) {
-        console.error("[dsh] commands/list failed:", error);
-        // 无法确认时保守视为命令:走命令通道,失败会取消回合并提示,不会误发给模型
-        return true;
-      }
+  /** 读取(并缓存)某会话的宿主命令表。 */
+  private async commandTable(sessionId: string): Promise<Map<string, boolean> | undefined> {
+    const cached = this.commandNames.get(sessionId);
+    if (cached) return cached;
+    try {
+      const { names, attachmentCommands } = await this.client.listCommands(sessionId);
+      const table = new Map<string, boolean>();
+      for (const name of names) table.set(name.toLowerCase(), attachmentCommands.has(name.toLowerCase()));
+      this.commandNames.set(sessionId, table);
+      return table;
+    } catch (error) {
+      console.error("[dsh] commands/list failed:", error);
+      return undefined;
     }
-    return set.has(lower);
   }
 
-  /** commands/execute 是否接受 images 参数(rc.8+;由 commands/list 描述符探测)。 */
+  /** 判断一个(不带斜杠的)名称是否为宿主命令。 */
+  async isKnownCommand(sessionId: string, name: string): Promise<boolean> {
+    const table = await this.commandTable(sessionId);
+    // 无法确认时保守视为命令:走命令通道,失败会取消回合并提示,不会误发给模型
+    return table === undefined ? true : table.has(name.toLowerCase());
+  }
+
+  /** 该宿主命令是否声明接受附件(0.1.5 input.attachments / 0.1.2 input.images)。 */
+  async commandAcceptsAttachments(sessionId: string, name: string): Promise<boolean> {
+    const table = await this.commandTable(sessionId);
+    if (table === undefined) return this.client.commandImagesSupported();
+    return table.get(name.toLowerCase()) === true;
+  }
+
+  /** 命令目录中是否存在接受附件的命令(兼容旧调用)。 */
   commandImagesSupported(): boolean {
     return this.client.commandImagesSupported();
   }

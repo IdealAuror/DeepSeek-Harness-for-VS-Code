@@ -182,5 +182,7 @@
   "server.updating": "DSH 서버 업데이트 중(@deepseek-ai/dsh@latest 다운로드)…",
   "server.updateFailed": "DSH 서버 업데이트에 실패했습니다. 자세한 내용은 출력 로그를 참조하세요.",
   "server.updated": "DSH 서버가 업데이트되고 다시 시작되었습니다.",
-  "server.updateRestartFailed": "DSH 서버가 업데이트되었지만 다시 시작하지 못했습니다:{message}"
+  "server.updateRestartFailed": "DSH 서버가 업데이트되었지만 다시 시작하지 못했습니다:{message}",
+  "notice.permissionBusy": "턴이 실행 중입니다. 권한 프리셋은 다음 턴부터 적용됩니다. 세션이 유휴해진 뒤 다시 시도하세요.",
+  "hub.modelNoImages": "현재 모델 \"{model}\"은(는) 이미지 입력을 지원하지 않습니다. 이미지 첨부를 제거하거나 입력창 오른쪽 위의 모델 버튼에서 이미지 지원 모델로 전환하세요."
 }

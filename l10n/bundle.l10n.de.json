@@ -182,5 +182,7 @@
   "server.updating": "DSH-Server wird aktualisiert (lädt @deepseek-ai/dsh@latest herunter)…",
   "server.updateFailed": "DSH-Server-Update fehlgeschlagen. Details finden Sie im Ausgabelog.",
   "server.updated": "DSH-Server aktualisiert und neu gestartet.",
-  "server.updateRestartFailed": "DSH-Server aktualisiert, aber Neustart fehlgeschlagen: {message}"
+  "server.updateRestartFailed": "DSH-Server aktualisiert, aber Neustart fehlgeschlagen: {message}",
+  "notice.permissionBusy": "Ein Turn läuft: Das Berechtigungs-Preset gilt ab dem nächsten Turn. Versuchen Sie es erneut, wenn die Sitzung idle ist.",
+  "hub.modelNoImages": "Das aktuelle Modell \"{model}\" unterstützt keine Bildeingabe: Bildanhänge entfernen oder über die Modelltaste oben rechts im Eingabefeld zu einem bildfähigen Modell wechseln."
 }

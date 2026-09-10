@@ -74,10 +74,18 @@ export interface RemoteStreamHandle {
 }
 
 /**
- * DSH Web API 客户端(0.1.2-rc.1 线协议):
+ * DSH Web API 客户端(0.1.5-rc.1 线协议,兼容 0.1.2 的参数名差异):
  * - 一元:POST /api/<namespace>/<method>,信封 payload 为 {args:{...}};
  * - 流:/api/remote.mux 单 WebSocket 多路(session/follow、session/control、workspace/follow、$events);
  * - 认证:GET /?token=<启动 token> 交换签名 cookie,所有请求携带。
+ *
+ * 0.1.2-rc.1 → 0.1.5-rc.1 与本客户端相关的线协议差异:
+ * - commands/execute 第三参数由 images 改名 submittedAttachments(图片/文件内容块同构);
+ * - commands/list 描述符 input.images 改为 input.attachments;
+ * - subagents/prompt 新增必填 delivery("queue"|"steer");
+ * - session/follow 快照 header 的 seedLength 改为 isSeeded;
+ * - session/page 不再返回压缩的 chunks 记录(历史即原始事件;V3 日志不保存逐 token 增量);
+ * - 新增 fileUploads/upload(文件先上传取 receiptId,再以 {type:"file",receiptId} 发送)。
  */
 export class DshApiClient {
   readonly baseUrl: string;
@@ -422,15 +430,22 @@ export class DshApiClient {
   }
 
   private commandImagesCapability = false;
+  /** 已确认可用的 commands/execute 附件参数名(0.1.5=submittedAttachments;0.1.2=images)。 */
+  private commandAttachmentsField: "submittedAttachments" | "images" | undefined;
 
-  /** 由 commands/list 描述符探测:rc.8 起命令描述符含 input.images(布尔)。 */
+  /** 由 commands/list 描述符探测:命令是否接受附件(input.images / input.attachments)。 */
   setCommandImagesSupported(supported: boolean) {
     this.commandImagesCapability = supported;
   }
 
-  /** commands/execute 是否接受 images 参数(0.1.2 网关始终声明,此能力一致保留)。 */
+  /** commands/execute 是否接受附件参数(0.1.2 网关始终声明,能力探测仅用于描述符一致性)。 */
   commandImagesSupported(): boolean {
     return this.commandImagesCapability;
+  }
+
+  /** 该错误是否为"网关按描述符精确校验参数名"导致的失配(可换名重试)。 */
+  private isArgumentNameMismatch(error: unknown): boolean {
+    return error instanceof DshApiError && (error.code === "gateway/arguments-invalid" || /arguments-invalid/.test(error.code));
   }
 
   listSessions() {
@@ -463,17 +478,59 @@ export class DshApiClient {
   /**
    * 会话级斜杠命令执行(与网页端 live.command() 完全一致的通道):
    * 端点 /api/commands/execute,信封 {type:"client-request", rpcId, method:"commands/execute",
-   * payload:{args:{agentId, line, images}}};result.value === undefined 表示未匹配任何命令。
-   * 0.1.2 契约:commands/execute 的描述符固定含 images 参数,缺失即以
-   * gateway/arguments-invalid 拒绝 —— 与命令目录是否声明 input.images 无关,必须始终携带。
+   * payload:{args:{agentId, line, submittedAttachments}}};result.value === undefined 表示未匹配任何命令。
+   * 0.1.5-rc.1 契约:第三参数名为 submittedAttachments(图片 + 文件内容块);0.1.2-rc.1 名为 images,
+   * 网关按描述符精确校验参数名并按需拒绝,因此这里"新名优先、旧名回退",并记住可用名,避免重复探测。
    */
   async executeCommand(
     sessionId: string,
     line: string,
-    images: { mediaType: string; data: string; name?: string }[] = [],
+    attachments: ({ type: "image"; mediaType: string; data: string; name?: string } | { type: "file"; receiptId: string })[] | { mediaType: string; data: string; name?: string }[] = [],
   ): Promise<{ matched: boolean; execution?: CommandExecutionView }> {
+    const fields: ("submittedAttachments" | "images")[] = this.commandAttachmentsField
+      ? [this.commandAttachmentsField]
+      : ["submittedAttachments", "images"];
+    // 0.1.2 的 images 参数只接受图片块,调用方传入的裸图片结构在两条通道上都要归一化
+    const parts = (attachments as any[]).map((item) =>
+      item && typeof item === "object" && typeof item.type === "string"
+        ? item
+        : { type: "image" as const, mediaType: (item as any).mediaType, data: (item as any).data, ...((item as any).name ? { name: (item as any).name } : {}) },
+    );
+    let lastError: unknown;
+    for (const field of fields) {
+      try {
+        const value = await this.executeCommandWith(field, sessionId, line, parts);
+        this.commandAttachmentsField = field;
+        const matched = value !== undefined;
+        if (!matched || !value.result || typeof value.result.kind !== "string") return { matched };
+        return {
+          matched,
+          execution: {
+            commandId: typeof value.commandId === "string" ? value.commandId : undefined,
+            result: {
+              kind: value.result.kind === "error" ? "error" : "success",
+              ...(typeof value.result.text === "string" ? { text: value.result.text } : {}),
+            },
+          },
+        };
+      } catch (error) {
+        if (!this.isArgumentNameMismatch(error) || fields.length === 1) throw error;
+        console.warn(`[dsh] commands/execute rejected "${field}", retrying with the other attachment parameter name:`, error);
+        lastError = error;
+      }
+    }
+    throw lastError ?? new Error("commands/execute failed");
+  }
+
+  /** 以指定附件参数名实际发起一次 commands/execute。 */
+  private async executeCommandWith(
+    field: "submittedAttachments" | "images",
+    sessionId: string,
+    line: string,
+    parts: unknown[],
+  ): Promise<{ commandId?: string; result?: { kind?: string; text?: string } } | undefined> {
     const endpoint = "commands/execute";
-    const args: Record<string, unknown> = { agentId: sessionId, line, images };
+    const args: Record<string, unknown> = { agentId: sessionId, line, [field]: parts };
     const message: ClientRequest = {
       type: "client-request",
       rpcId: randomUUID(),
@@ -488,7 +545,7 @@ export class DshApiClient {
     });
     if (res.status === 401 || res.status === 403) {
       await this.ensureAuth(true);
-      return this.executeCommand(sessionId, line, images);
+      return this.executeCommandWith(field, sessionId, line, parts);
     }
     if (!res.ok) throw new Error(`DSH transport failure for commands/execute: HTTP ${res.status}`);
     const full = (await res.json()) as {
@@ -502,25 +559,11 @@ export class DshApiClient {
     if (!full.result.ok) {
       throw new DshApiError(full.result.error?.code ?? "command-error", full.result.error?.message ?? "commands/execute failed");
     }
-    const value = full.result.value as
-      | { commandId?: string; result?: { kind?: string; text?: string } }
-      | undefined;
-    const matched = value !== undefined;
-    if (!matched || !value.result || typeof value.result.kind !== "string") return { matched };
-    return {
-      matched,
-      execution: {
-        commandId: typeof value.commandId === "string" ? value.commandId : undefined,
-        result: {
-          kind: value.result.kind === "error" ? "error" : "success",
-          ...(typeof value.result.text === "string" ? { text: value.result.text } : {}),
-        },
-      },
-    };
+    return full.result.value as { commandId?: string; result?: { kind?: string; text?: string } } | undefined;
   }
 
-  /** 列出某会话可用的宿主命令;同时探测 commands/execute 的 images 能力。 */
-  async listCommands(sessionId: string): Promise<{ names: string[]; imagesSupported: boolean }> {
+  /** 列出某会话可用的宿主命令;同时返回声明接受附件的命令集合(0.1.5=attachments / 0.1.2=images)。 */
+  async listCommands(sessionId: string): Promise<{ names: string[]; imagesSupported: boolean; attachmentCommands: Set<string> }> {
     const endpoint = "commands/list";
     const message: ClientRequest = {
       type: "client-request",
@@ -543,11 +586,16 @@ export class DshApiClient {
     if (full.type !== "server-response" || full.rpcId !== message.rpcId || !full.result || !full.result.ok) {
       throw new Error(`DSH unexpected response for commands/list`);
     }
-    const value = full.result.value as { name?: string; input?: { images?: boolean } }[] | undefined;
+    // 0.1.5-rc.1 描述符为 input.attachments;0.1.2-rc.1 为 input.images(两者含义相同)
+    const value = full.result.value as { name?: string; input?: { images?: boolean; attachments?: boolean } }[] | undefined;
     const rows = value ?? [];
-    const imagesSupported = rows.some((d) => typeof d.input?.images === "boolean");
-    this.commandImagesCapability = imagesSupported;
-    return { names: rows.map((d) => String(d.name ?? "")).filter(Boolean), imagesSupported };
+    const attachmentCommands = new Set<string>();
+    for (const row of rows) {
+      const name = String(row.name ?? "").toLowerCase();
+      if (name && (row.input?.attachments === true || row.input?.images === true)) attachmentCommands.add(name);
+    }
+    this.commandImagesCapability = attachmentCommands.size > 0;
+    return { names: rows.map((d) => String(d.name ?? "")).filter(Boolean), imagesSupported: this.commandImagesCapability, attachmentCommands };
   }
 
   cancelSession(sessionId: string) {
@@ -697,16 +745,26 @@ export class DshApiClient {
       },
     });
   }
-  subagentPrompt(parentSessionId: string, childSessionId: string, text: string) {
-    return this.request<SubagentPromptReceipt>("subagents/prompt", {
-      request: {
-        requestId: randomUUID(),
-        parentSessionId,
-        childSessionId,
-        mode: "continuable",
-        content: [{ type: "text", text }],
-      },
-    });
+  /**
+   * 给可继续对话的子代理补发消息。
+   * 0.1.5-rc.1 起 delivery 为必填(队列/插话语义);旧版服务器没有该字段,
+   * 若网关按描述符拒绝则去掉 delivey 重试一次。
+   */
+  async subagentPrompt(parentSessionId: string, childSessionId: string, text: string, delivery: "queue" | "steer" = "queue") {
+    const payload = {
+      requestId: randomUUID(),
+      parentSessionId,
+      childSessionId,
+      mode: "continuable" as const,
+      content: [{ type: "text" as const, text }],
+    };
+    try {
+      return await this.request<SubagentPromptReceipt>("subagents/prompt", { request: { ...payload, delivery } });
+    } catch (error) {
+      if (!this.isArgumentNameMismatch(error)) throw error;
+      console.warn("[dsh] subagents/prompt rejected delivery, retrying without it (pre-0.1.5 server):", error);
+      return this.request<SubagentPromptReceipt>("subagents/prompt", { request: payload });
+    }
   }
   subagentInterrupt(parentSessionId: string, childSessionId: string) {
     return this.request<{ accepted: true }>("subagents/interruptByParent", {

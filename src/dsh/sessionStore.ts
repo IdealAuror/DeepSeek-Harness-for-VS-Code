@@ -1,5 +1,6 @@
 import type {
   AskUserQuestionItem,
+  AssistantStreamFrame,
   JobView,
   QueueItem,
   SessionControlFrame,
@@ -72,7 +73,9 @@ export class SessionStore {
   /** 会话的目标状态(session.list / 投影帧的 goal 投影) */
   readonly goals = new Map<string, unknown>();
   /** 上下文压力(contextPressure 投影) */
-  readonly context = new Map<string, { pressureTokens?: number; projectedTokens?: number; contextWindow?: number }>();
+  readonly context = new Map<string, { pressureTokens?: number; projectedTokens?: number; surfaceTokens?: number; contextWindow?: number }>();
+  /** 上下文构成(contextBreakdown 投影:系统提示词/工具定义/对话消息的启发式估算) */
+  readonly breakdown = new Map<string, { systemTokens: number; toolsTokens: number; messageTokens: number }>();
   /** 权限预设(permissions 投影) */
   readonly permissions = new Map<string, { options: { value: string; name: string; description?: string }[]; currentValue: string }>();
   /** 会话统计(sessionStats / tokenUsage 投影) */
@@ -104,6 +107,9 @@ export class SessionStore {
   on(name: "agentError", fn: (sessionId: string, message: string) => void): () => void;
   on(name: "goal", fn: (sessionId: string, value: unknown) => void): () => void;
   on(name: "context", fn: (sessionId: string, value: unknown) => void): () => void;
+  on(name: "breakdown", fn: (sessionId: string, value: unknown) => void): () => void;
+  on(name: "streamChunk", fn: (sessionId: string, value: unknown) => void): () => void;
+  on(name: "streamEnd", fn: (sessionId: string, value: unknown) => void): () => void;
   on(name: "permissions", fn: (sessionId: string, value: unknown) => void): () => void;
   on(name: "stats", fn: (sessionId: string, value: unknown) => void): () => void;
   on(name: "todos", fn: (sessionId: string, value: unknown) => void): () => void;
@@ -151,6 +157,53 @@ export class SessionStore {
   /** session/follow 的逐条事件(传入被跟随的 sessionId)。 */
   handleFollowEvent(sessionId: string, frame: Extract<SessionFollowFrame, { type: "event" }>) {
     this.addEvent(sessionId, frame.event);
+  }
+
+  // ---------- 帧消费(0.1.5:assistant-stream 瞬态帧) ----------
+
+  /**
+   * 进行中的模型尝试(sessionId → attemptId/turn/step/下一个期望的帧序号)。
+   * 0.1.5 的逐 token 增量只以 assistant-stream 帧下发,且帧带序号:
+   * 只有序号连续才转发给 UI,断号说明中途挂载,直接丢弃该帧直到下一次 start。
+   */
+  private readonly assistantAttempts = new Map<string, { attemptId: string; turn: number; step: number; nextIndex: number }>();
+
+  /**
+   * 处理一帧 assistant-stream:
+   * - start:登记尝试(turn/step 随后的 chunk 帧不再重复携带);
+   * - chunk:序号连续时以瞬态事件转发(UI 与 0.1.2 的 assistant/chunk 走同一条渲染路径);
+   * - end:committed 交给随后的 assistant/message 结算;abandoned 通知 UI 丢弃已流出的内容。
+   */
+  handleAssistantStreamFrame(sessionId: string, frame: AssistantStreamFrame) {
+    if (frame.type === "start") {
+      this.assistantAttempts.set(sessionId, { attemptId: frame.attemptId, turn: frame.turn, step: frame.step, nextIndex: 0 });
+      return;
+    }
+    if (frame.type === "chunk") {
+      const attempt = this.assistantAttempts.get(sessionId);
+      if (attempt === undefined || attempt.attemptId !== frame.attemptId) return;
+      if (frame.index !== attempt.nextIndex) return; // 断号:等待下一次 start 重新同步
+      attempt.nextIndex += 1;
+      this.emit("streamChunk", sessionId, {
+        attemptId: frame.attemptId,
+        turn: attempt.turn,
+        step: attempt.step,
+        index: frame.index,
+        time: frame.time,
+        chunk: frame.chunk,
+      });
+      return;
+    }
+    const attempt = this.assistantAttempts.get(sessionId);
+    if (attempt === undefined || attempt.attemptId !== frame.attemptId) return;
+    this.assistantAttempts.delete(sessionId);
+    this.emit("streamEnd", sessionId, {
+      attemptId: frame.attemptId,
+      turn: attempt.turn,
+      step: attempt.step,
+      abandoned: frame.outcome.kind === "abandoned",
+      ...(frame.outcome.kind === "committed" ? { committedSeq: frame.outcome.seq, eventType: frame.outcome.eventType } : {}),
+    });
   }
 
   private toStored(record: SessionHistoryRecord): StoredEvent {
@@ -396,8 +449,18 @@ export class SessionStore {
       return;
     }
     if (key === "contextPressure") {
-      this.context.set(sessionId, value as { pressureTokens?: number; projectedTokens?: number; contextWindow?: number });
+      this.context.set(sessionId, value as { pressureTokens?: number; projectedTokens?: number; surfaceTokens?: number; contextWindow?: number });
       this.emit("context", sessionId, value);
+      return;
+    }
+    if (key === "contextBreakdown") {
+      const raw = (value ?? {}) as { systemTokens?: number; toolsTokens?: number; messageTokens?: number };
+      this.breakdown.set(sessionId, {
+        systemTokens: typeof raw.systemTokens === "number" ? raw.systemTokens : 0,
+        toolsTokens: typeof raw.toolsTokens === "number" ? raw.toolsTokens : 0,
+        messageTokens: typeof raw.messageTokens === "number" ? raw.messageTokens : 0,
+      });
+      this.emit("breakdown", sessionId, value);
       return;
     }
     if (key === "permissions") {
@@ -547,6 +610,8 @@ export class SessionStore {
     this.archivedSessionIds.clear();
     this.goals.clear();
     this.context.clear();
+    this.breakdown.clear();
+    this.assistantAttempts.clear();
     this.permissions.clear();
     this.stats.clear();
     this.todos.clear();

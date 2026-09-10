@@ -214,6 +214,17 @@ export class ChatChannel {
         }),
       },
       {
+        // 0.1.5 的 assistant-stream 瞬态帧:逐 token 增量(不再作为会话事件下发)
+        dispose: store.on("streamChunk", (sid: string, value: unknown) => {
+          if (sid === store.currentSessionId) this.post({ kind: "streamChunk", sessionId: sid, value });
+        }),
+      },
+      {
+        dispose: store.on("streamEnd", (sid: string, value: unknown) => {
+          if (sid === store.currentSessionId) this.post({ kind: "streamEnd", sessionId: sid, value });
+        }),
+      },
+      {
         dispose: store.on("running", (sid: string, running: boolean) => {
           if (sid === store.currentSessionId) this.post({ kind: "running", sessionId: sid, running });
         }),
@@ -266,6 +277,12 @@ export class ChatChannel {
       {
         dispose: store.on("context", (sid: string, value: unknown) => {
           if (sid === store.currentSessionId) this.post({ kind: "context", sessionId: sid, value });
+        }),
+      },
+      {
+        // 上下文构成(0.1.5 contextBreakdown 投影:系统提示词/工具定义/对话消息)
+        dispose: store.on("breakdown", (sid: string, value: unknown) => {
+          if (sid === store.currentSessionId) this.post({ kind: "breakdown", sessionId: sid, value });
         }),
       },
       {
@@ -528,6 +545,7 @@ export class ChatChannel {
       running: current ? (store.sessions.get(current)?.running ?? false) : false,
       goal: current ? store.goals.get(current) : undefined,
       context: current ? store.context.get(current) : undefined,
+      breakdown: current ? store.breakdown.get(current) : undefined,
       permissions: current ? store.permissions.get(current) : undefined,
       stats: current ? store.stats.get(current) : undefined,
       todos: current ? store.todos.get(current) : undefined,
@@ -625,7 +643,9 @@ export class ChatChannel {
               const isCmdLine = isCommandLine(raw) && !(msg.attachments?.length > 0);
               if (isCmdLine) {
                 const cmdName = raw.split(/\s+/)[0].slice(1);
-                if ((await this.hub.isKnownCommand(current, cmdName)) && this.hub.commandImagesSupported()) {
+                // 0.1.5:命令是否接受附件由该命令自身的描述符声明(input.attachments)决定,
+                // 不再以"目录中存在任一支持附件的命令"作为全局判据
+                if ((await this.hub.isKnownCommand(current, cmdName)) && (await this.hub.commandAcceptsAttachments(current, cmdName))) {
                   await this.runCommandAndNotify(current, raw, images);
                 } else {
                   const text = await this.composeWithAttachments(baseText, msg.attachments, contextParts);

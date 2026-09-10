@@ -182,5 +182,7 @@
   "server.updating": "Memperbarui server DSH (mengunduh @deepseek-ai/dsh@latest)…",
   "server.updateFailed": "Gagal memperbarui server DSH. Lihat log keluaran untuk detailnya.",
   "server.updated": "Server DSH diperbarui dan dimulai ulang.",
-  "server.updateRestartFailed": "Server DSH diperbarui, tetapi mulai ulang gagal:{message}"
+  "server.updateRestartFailed": "Server DSH diperbarui, tetapi mulai ulang gagal:{message}",
+  "notice.permissionBusy": "Ada turn yang sedang berjalan: praset izin akan berlaku pada turn berikutnya; coba lagi saat sesi menganggur.",
+  "hub.modelNoImages": "Model saat ini \"{model}\" tidak mendukung masukan gambar: hapus lampiran gambar, atau beralih ke model yang mendukung gambar lewat tombol model di kanan atas kotak masukan."
 }

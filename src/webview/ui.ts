@@ -175,7 +175,7 @@ interface NodeState {
   cmd?: boolean;
   /** 工具调用失败(结果 isError) */
   failed?: boolean;
-  /** 用户消息携带的图片引用(官方 image 内容块) */
+  /** 用户消息 / 工具结果携带的图片引用(官方 image 内容块) */
   images?: { attachmentId: string; mediaType?: string }[];
 }
 
@@ -199,7 +199,9 @@ const state = {
   models: null as ModelsValue | null,
   presets: null as PresetInfo[] | null,
   goal: undefined as any,
-  context: undefined as { pressureTokens?: number; projectedTokens?: number; contextWindow?: number } | undefined,
+  context: undefined as { pressureTokens?: number; projectedTokens?: number; surfaceTokens?: number; contextWindow?: number } | undefined,
+  /** 上下文构成(contextBreakdown 投影,0.1.5:系统提示词 / 工具定义 / 对话消息) */
+  breakdown: undefined as { systemTokens: number; toolsTokens: number; messageTokens: number } | undefined,
   permissions: undefined as { options: { value: string; name: string; description?: string }[]; currentValue: string } | undefined,
   /** 各轮 turn/start 的 seq,用于"回退到上一轮" */
   turnStarts: [] as number[],
@@ -235,6 +237,8 @@ const state = {
   currentStreamTurn: undefined as number | undefined,
   /** 已流式输出的块键 `${turn}:${step}:${index}`,避免 assistant/message 重复追加 */
   streamedBlockKeys: new Set<string>(),
+  /** 每 (turn:step) 的流式块(index → 块对象),结算时由 message content 原位覆盖 */
+  streamedBlocks: new Map<string, Map<number, BlockState>>(),
   /** 压缩历史行(chunkrow/text-chunks 等)按 (turn,step) 累积的最终块:index → {kind,text} */
   rowBlocks: new Map<string, Map<number, { kind: "text" | "reasoning"; text: string }>>(),
   /** 本回合的过程(工具调用)折叠组 */
@@ -722,6 +726,11 @@ const EN_TEXT: Record<string, string> = {
   "暂无会话": "No sessions",
   "智能体": "Agents",
   "系统提示词": "System prompt",
+  "工具定义": "Tool definitions",
+  "对话消息": "Messages",
+  "上下文已用 {p}": "{p} of context used",
+  "⚠️ 最多一次添加 8 张图片": "⚠️ Up to 8 images can be added at once",
+  "⚠️ 非图片附件请从资源管理器复制(未提供本地路径)": "⚠️ Copy non-image attachments from the file explorer (no local path was provided)",
   "已注入模型 · 点击展开": "Injected into the model · click to expand",
   "提交回答": "Submit answer",
   "🔧 过程": "🔧 Process",
@@ -1685,11 +1694,46 @@ const inputWrap = el("div", "input-wrap");
 const input = el("textarea", "input");
 input.placeholder = t("向 DeepSeek Harness 发送消息…");
 const sendCol = el("div", "send-col");
+const sendRow = el("div", "send-row");
+
+// 上下文进度环(网页端 composer 的 ContextMeter 同款):圆环显示占用百分比,
+// 点击弹出面板查看"上下文已用"读数与 系统提示词 / 工具定义 / 对话消息 的分类构成。
+const CTX_RING_RADIUS = 5.5;
+const CTX_RING_CIRCUMFERENCE = 2 * Math.PI * CTX_RING_RADIUS;
+const SVG_NS = "http://www.w3.org/2000/svg";
+const contextMeter = el("div", "context-meter");
+contextMeter.hidden = true;
+const contextMeterBtn = el("button", "context-meter-trigger");
+contextMeterBtn.type = "button";
+const contextMeterSvg = document.createElementNS(SVG_NS, "svg");
+contextMeterSvg.setAttribute("viewBox", "0 0 14 14");
+contextMeterSvg.setAttribute("width", "14");
+contextMeterSvg.setAttribute("height", "14");
+contextMeterSvg.setAttribute("aria-hidden", "true");
+const contextMeterTrack = document.createElementNS(SVG_NS, "circle");
+contextMeterTrack.setAttribute("class", "context-meter-track");
+contextMeterTrack.setAttribute("cx", "7");
+contextMeterTrack.setAttribute("cy", "7");
+contextMeterTrack.setAttribute("r", String(CTX_RING_RADIUS));
+const contextMeterFill = document.createElementNS(SVG_NS, "circle");
+contextMeterFill.setAttribute("class", "context-meter-fill");
+contextMeterFill.setAttribute("cx", "7");
+contextMeterFill.setAttribute("cy", "7");
+contextMeterFill.setAttribute("r", String(CTX_RING_RADIUS));
+contextMeterFill.setAttribute("transform", "rotate(-90 7 7)");
+contextMeterSvg.append(contextMeterTrack, contextMeterFill);
+contextMeterBtn.append(contextMeterSvg);
+const contextMeterPanel = el("div", "context-meter-panel");
+contextMeterPanel.hidden = true;
+contextMeterPanel.setAttribute("role", "dialog");
+contextMeter.append(contextMeterBtn, contextMeterPanel);
+
 // 发送/停止共用一个按钮:空闲显示 ➤ 发送;运行中且无输入显示 ⏹ 停止;运行中输入文字变回 ➤(消息将排队)
 const btnSendStop = el("button", "btn-icon-btn send-btn");
 btnSendStop.append(lineIcon(ICONS.send, 16));
 btnSendStop.title = "发送(Enter)";
-sendCol.append(btnSendStop);
+sendRow.append(contextMeter, btnSendStop);
+sendCol.append(sendRow);
 inputWrap.append(input, sendCol);
 
 // 对话底部操作行(对话左下方):模式指示芯片 + 回到主线 + 上下文进度
@@ -1704,9 +1748,7 @@ todoPanel.hidden = true;
 /** 会话统计行:位于输入框最底部(网页端 composer.dock 同款),始终可见 */
 const statsLine = el("div", "stats-line");
 statsLine.hidden = true;
-const contextBar = el("div", "context-bar");
-contextBar.hidden = true;
-conversationBottom.append(btnBackToMain, todoPanel, contextBar);
+conversationBottom.append(btnBackToMain, todoPanel);
 
 // 状态行:回合活动指示(深度思考中… 3秒)与 计划模式/目标 芯片同行(位于输入框上方)
 const statusRow = el("div", "status-row");
@@ -2340,6 +2382,27 @@ permissionPillHead.addEventListener("click", (e) => {
   permissionPillPop.hidden = !opening;
   permissionPill.classList.toggle("open", opening);
 });
+contextMeterBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (contextMeter.hidden) return;
+  renderContextMeter(); // 每次展开都重建面板,避免首次点击展开为空
+  const opening = contextMeterPanel.hidden;
+  contextMeterPanel.hidden = !opening;
+  contextMeter.classList.toggle("open", opening);
+});
+// 点击弹层外部或 Esc 关闭
+document.addEventListener("click", (e) => {
+  if (!contextMeterPanel.hidden && !contextMeter.contains(e.target as Node)) {
+    contextMeterPanel.hidden = true;
+    contextMeter.classList.remove("open");
+  }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !contextMeterPanel.hidden) {
+    contextMeterPanel.hidden = true;
+    contextMeter.classList.remove("open");
+  }
+});
 ppMore.addEventListener("click", (e) => {
   e.stopPropagation();
   permissionPillPop.hidden = true;
@@ -2596,6 +2659,22 @@ function appendNode(node: NodeState) {
   scrollToBottom();
 }
 
+/**
+ * 图片引用行(用户消息与工具结果共用):每个引用先占位,再向宿主请求内容
+ * (session/attachment 取回 base64 后由 applyAttachmentData 原地替换)。
+ */
+function buildImageRow(node: NodeState): HTMLElement {
+  const imgRow = el("div", "msg-images");
+  for (const img of node.images ?? []) {
+    const frame = el("div", "msg-image-frame");
+    frame.dataset.attachmentId = img.attachmentId;
+    frame.append(el("div", "msg-image-placeholder", "🖼️ …"));
+    imgRow.append(frame);
+    vscode.postMessage({ kind: "attachmentRead", attachmentId: img.attachmentId, messageId: node.key });
+  }
+  return imgRow;
+}
+
 function renderNode(node: NodeState): HTMLElement {
   switch (node.kind) {
     case "user": {
@@ -2603,18 +2682,7 @@ function renderNode(node: NodeState): HTMLElement {
       const body = el("div", "msg-body");
       setHtml(body, node.text ?? "");
       wrap.append(body);
-      if (node.images && node.images.length > 0) {
-        const imgRow = el("div", "msg-images");
-        for (const img of node.images) {
-          const frame = el("div", "msg-image-frame");
-          const placeholder = el("div", "msg-image-placeholder", "🖼️ …");
-          frame.dataset.attachmentId = img.attachmentId;
-          frame.append(placeholder);
-          imgRow.append(frame);
-          vscode.postMessage({ kind: "attachmentRead", attachmentId: img.attachmentId, messageId: node.key });
-        }
-        wrap.append(imgRow);
-      }
+      if (node.images && node.images.length > 0) wrap.append(buildImageRow(node));
       return wrap;
     }
     case "note": {
@@ -2746,6 +2814,8 @@ function renderNode(node: NodeState): HTMLElement {
       if (node.result !== undefined) {
         body.append(el("div", "tool-label", t("结果")), el("pre", "tool-pre", node.result));
       }
+      // 0.1.5:工具结果里的图片(read_image 等)直接渲染,不再只显示文本
+      if (node.images && node.images.length > 0) body.append(buildImageRow(node));
       wrap.append(summary, body);
       return wrap;
     }
@@ -2830,6 +2900,31 @@ function findAssistantTail(): NodeState | undefined {
   return undefined;
 }
 
+/**
+ * 消费一次模型流增量。
+ * 两个来源共用这条路径:0.1.2 的 `assistant/chunk` 会话事件,以及 0.1.5 的
+ * assistant-stream 瞬态帧(宿主已在 sessionStore 里翻译为同构的 data)。
+ */
+function applyAssistantChunk(data: any, timeMs: number) {
+  const chunk = data?.chunk ?? {};
+  switch (chunk.type) {
+    case "block-start":
+      beginAssistantBlock(data?.turn ?? 0, data?.step ?? 0, chunk.index ?? 0, chunk.blockType ?? "text", timeMs);
+      // 输入框上方活动指示:推理 → 深度思考中…,文本 → 生成回答…
+      if (state.running && turnStatus.hidden) startTurnStatus(timeMs);
+      setTurnStatusActivity(chunk.blockType === "reasoning" || chunk.blockType === "text" ? chunk.blockType : "reasoning");
+      break;
+    case "text-delta":
+      appendToStream("text", chunk.text ?? "");
+      break;
+    case "reasoning-delta":
+      appendToStream("reasoning", chunk.text ?? "");
+      break;
+    default:
+      break;
+  }
+}
+
 function beginAssistantBlock(turn: number, step: number, index: number, blockType: string, startTime?: number) {
   state.streamBlock = null;
   state.streamKey = null;
@@ -2849,6 +2944,12 @@ function beginAssistantBlock(turn: number, step: number, index: number, blockTyp
   const block: BlockState = { type: blockType === "reasoning" ? "reasoning" : "text", text: "", el: null };
   assistant.blocks!.push(block);
   state.streamedBlockKeys.add(`${turn}:${step}:${index}`);
+  // 按 (turn:step) 登记流式块:结算时用 message content 的权威文本原位覆盖,
+  // 避免"流式文本 + 结算文本"两份重复渲染
+  const stepKey = `${turn}:${step}`;
+  let bucket = state.streamedBlocks.get(stepKey);
+  if (!bucket) state.streamedBlocks.set(stepKey, (bucket = new Map()));
+  bucket.set(index, block);
   // 先把 streamBlock 指向新块再渲染:推理块开始时 detail 默认展开(思考中),文本块开始后自动收起
   state.streamBlock = block;
   refreshAssistantNode(assistant, block);
@@ -3071,9 +3172,7 @@ function handleEvent(wire: WireEvent) {
         if (queuedAttach) removeNode(queuedAttach);
       }
       // 图片内容块(官方 image 附件通道)
-      const images: { attachmentId: string; mediaType?: string }[] = (data?.message?.content ?? data?.content ?? [])
-        .filter((b: any) => b?.type === "image" && b?.attachment?.attachmentId)
-        .map((b: any) => ({ attachmentId: b.attachment.attachmentId, mediaType: b.attachment.mediaType }));
+      const images = extractImageRefs(data);
       if (!text && !id && images.length === 0) break;
       if (data?.source?.kind === "user") {
         const split = splitAttachmentContext(text);
@@ -3107,23 +3206,7 @@ function handleEvent(wire: WireEvent) {
       break;
     }
     case "assistant/chunk": {
-      const chunk = data?.chunk ?? {};
-      switch (chunk.type) {
-        case "block-start":
-          beginAssistantBlock(data?.turn ?? 0, data?.step ?? 0, chunk.index ?? 0, chunk.blockType ?? "text", ev.time);
-          // 输入框上方活动指示:推理 → 深度思考中…,文本 → 生成回答…
-          if (state.running && turnStatus.hidden) startTurnStatus(ev.time);
-          setTurnStatusActivity(chunk.blockType === "reasoning" || chunk.blockType === "text" ? chunk.blockType : "reasoning");
-          break;
-        case "text-delta":
-          appendToStream("text", chunk.text ?? "");
-          break;
-        case "reasoning-delta":
-          appendToStream("reasoning", chunk.text ?? "");
-          break;
-        default:
-          break;
-      }
+      applyAssistantChunk(data, ev.time);
       break;
     }
     // 压缩历史行(网页端同源消费):持久层把逐 token 增量打包为 chunkrow 行,
@@ -3209,32 +3292,45 @@ function handleEvent(wire: WireEvent) {
         assistant = { kind: "assistant", key: `a:${turn}:${state.nodes.length}`, el: null, blocks: [], turn };
         appendNode(assistant);
       }
-      // 先落盘 chunkrow 压缩行(旧历史无逐条 chunk 事件,文本/推理以行存在;
-      // 行 index 与 message content 的块位置一致,行已覆盖的键由 part 循环跳过)
+      // 结算权威文本(message content)按块 index 归并:
+      // - 本步已流出的块:原位覆盖文本(不新增块,避免重复渲染,也不打乱工具行的块位);
+      // - 旧历史(rc.1)的压缩行:仅在 content 未覆盖的 index 上补齐;
+      // - 其余(历史重放/无流式):按 index 升序追加为新块。
       let addedText = "";
       const pushBlock = (type: "text" | "reasoning", text: string) => {
-        // 与最后一块内容相同则视为重复(行/流式/部件三种来源去重);
-        // 否则无条件追加 —— 不以 streamedBlockKeys 为门槛,任何来源的真实内容都会渲染
         const last = assistant.blocks!.at(-1);
         if (last && last.type === type && last.text === text) return;
         assistant.blocks!.push({ type, text, el: null });
         if (type === "text") addedText += text + "\n";
       };
-      const rowBucket = state.rowBlocks.get(`${turn}:${step}`);
+      const stepKey = `${turn}:${step}`;
+      const authoritative = new Map<number, { type: "text" | "reasoning"; text: string }>();
+      const rowBucket = state.rowBlocks.get(stepKey);
       if (rowBucket) {
-        state.rowBlocks.delete(`${turn}:${step}`);
-        const sorted = [...rowBucket.entries()].sort((a, b) => a[0] - b[0]);
-        for (const [, block] of sorted) {
-          if (!block.text) continue;
-          pushBlock(block.kind, block.text);
+        state.rowBlocks.delete(stepKey);
+        for (const [index, block] of rowBucket) {
+          if (block.text) authoritative.set(index, { type: block.kind, text: block.text });
         }
       }
-      // 追加 message content 中的文本/推理块(内容比对去重,不再依赖流式键)
-      for (let i = 0; i < content.length; i++) {
-        const block = content[i];
-        if (block?.type !== "text" && block?.type !== "reasoning") continue;
-        if (typeof block.text !== "string" || !block.text) continue;
-        pushBlock(block.type === "reasoning" ? "reasoning" : "text", block.text);
+      const streamed = state.streamedBlocks.get(stepKey);
+      if (streamed) state.streamedBlocks.delete(stepKey);
+      content.forEach((block, index) => {
+        if (block?.type !== "text" && block?.type !== "reasoning") return;
+        if (typeof block.text !== "string" || !block.text) return;
+        authoritative.set(index, { type: block.type === "reasoning" ? "reasoning" : "text", text: block.text });
+      });
+      const covered = new Set<number>();
+      if (streamed) {
+        for (const [index, block] of streamed) {
+          const next = authoritative.get(index);
+          if (next === undefined) continue; // 流式有内容但权威为空(中断回合):保留流式文本
+          block.type = next.type;
+          block.text = next.text;
+          covered.add(index);
+        }
+      }
+      for (const [, block] of [...authoritative.entries()].filter(([index]) => !covered.has(index)).sort((a, b) => a[0] - b[0])) {
+        pushBlock(block.type, block.text);
       }
       if (addedText) assistant.plainText = ((assistant.plainText ?? "") + "\n" + addedText.trim()).trim();
       refreshAssistantNode(assistant, undefined, true); // 重放/实时均在此一次性渲染最终内容
@@ -3321,6 +3417,10 @@ function handleEvent(wire: WireEvent) {
       const existing = findToolNode(callId);
       if (existing) {
         existing.result = truncateResult(text);
+        // 0.1.5:工具结果可携带 image 内容块(read_image / PTC 嵌套调用):
+        // 与用户消息图片同样走 session/attachment 取回通道
+        const images = extractImageRefs(data);
+        if (images.length > 0) existing.images = images;
         // 与网页端一致:content[0].isError 才是失败标志(顶层 isError 仅兜底)
         const isError = data?.message?.isError === true || data?.isError === true || data?.message?.content?.[0]?.isError === true;
         existing.failed = isError;
@@ -3329,9 +3429,12 @@ function handleEvent(wire: WireEvent) {
         existing.el?.classList.add(existing.failed ? "tool-failed" : "tool-done");
         if (existing.el) {
           const pres = existing.el.querySelectorAll(".tool-pre");
+          const body = existing.el.querySelector(".tool-body");
           if (pres.length === 1) {
-            const body = existing.el.querySelector(".tool-body");
             body?.append(el("div", "tool-label", t("结果")), el("pre", "tool-pre", existing.result ?? ""));
+          }
+          if (images.length > 0 && body && body.querySelector(".msg-images") === null) {
+            body.append(buildImageRow(existing));
           }
           updateToolSummary(existing);
         }
@@ -3471,6 +3574,25 @@ function extractToolResultText(data: any): string {
     .filter((b: any) => b?.type === "text" && typeof b.text === "string")
     .map((b: any) => b.text)
     .join("\n");
+}
+
+/**
+ * 收集一条消息 / 工具结果里引用的图片块。
+ * 兼容两种位置:工具结果嵌套在 content[0].content(0.1.5 的 read_image 图片结果),
+ * 以及消息自身的 content(用户消息或模型直接产出的图片)。
+ */
+function extractImageRefs(data: any): { attachmentId: string; mediaType?: string }[] {
+  const nested: any[] = [];
+  const outer = data?.message?.content ?? data?.content;
+  if (Array.isArray(outer)) {
+    for (const block of outer) {
+      if (Array.isArray(block?.content)) nested.push(...block.content);
+      nested.push(block);
+    }
+  }
+  return nested
+    .filter((block: any) => block?.type === "image" && block?.attachment?.attachmentId)
+    .map((block: any) => ({ attachmentId: String(block.attachment.attachmentId), mediaType: block.attachment.mediaType }));
 }
 
 function truncateResult(text: string): string {
@@ -4053,25 +4175,89 @@ function renderPermissionPill() {
   }
 }
 
-function renderContextBar() {
+/**
+ * 紧凑 token 计数(网页端 context 面板同款):<1000 原样,<1e6 用 K,否则用 M;
+ * 缩放后 ≥100 取整,否则保留一位小数。
+ */
+function fmtCompactTokens(value: number): string {
+  const scaled = (candidate: number) => (candidate >= 100 ? String(Math.round(candidate)) : String(Math.round(candidate * 10) / 10));
+  if (!Number.isFinite(value) || value < 0) return "0";
+  if (value < 1e3) return String(Math.round(value));
+  if (value < 1e6) return `${scaled(value / 1e3)}K`;
+  return `${scaled(value / 1e6)}M`;
+}
+
+/** 上下文进度环的分段配色(与网页端 ContextMeter 的三个色相同一取值)。 */
+const CONTEXT_SEGMENTS: { key: "systemTokens" | "toolsTokens" | "messageTokens"; tint: string; label: () => string }[] = [
+  { key: "systemTokens", tint: "#adb2b8", label: () => t("系统提示词") },
+  { key: "toolsTokens", tint: "#a78bfa", label: () => t("工具定义") },
+  { key: "messageTokens", tint: "#4d93f8", label: () => t("对话消息") },
+];
+
+/**
+ * 渲染上下文进度环与分类面板(网页端 composer ContextMeter 同款):
+ * 读数取 contextPressure 投影(projectedTokens 优先,退化到 pressureTokens),
+ * 分类取 0.1.5 的 contextBreakdown 投影(系统提示词 / 工具定义 / 对话消息);
+ * 两者缺一即隐藏整个控件(与网页端"没有容量就不显示"一致)。
+ */
+function renderContextMeter() {
   const c = state.context;
-  if (!c || typeof c.pressureTokens !== "number" || typeof c.contextWindow !== "number" || c.contextWindow <= 0) {
-    contextBar.hidden = true;
+  const used = typeof c?.projectedTokens === "number" ? c.projectedTokens : c?.pressureTokens;
+  if (used === undefined || typeof c?.contextWindow !== "number" || c.contextWindow <= 0) {
+    contextMeter.hidden = true;
+    contextMeterPanel.hidden = true;
+    contextMeter.classList.remove("open");
     return;
   }
-  contextBar.hidden = false;
-  const pct = Math.max(0, Math.min(100, Math.round((c.pressureTokens / c.contextWindow) * 100)));
-  contextBar.innerHTML = "";
-  contextBar.title =
-    t("已用 {a} / {b} tokens", { a: c.pressureTokens.toLocaleString(), b: c.contextWindow.toLocaleString() }) +
-    (typeof c.projectedTokens === "number" ? t("(预计本轮后 {n})", { n: c.projectedTokens.toLocaleString() }) : "");
-  const label = el("span", "context-label", t("上下文 {p}%", { p: String(pct) }));
-  const bar = el("span", "context-fill-wrap");
-  const fill = el("span", "context-fill");
-  fill.style.width = `${pct}%`;
-  fill.className = pct > 85 ? "context-fill hot" : pct > 60 ? "context-fill warm" : "context-fill";
-  bar.append(fill);
-  contextBar.append(label, bar);
+  contextMeter.hidden = false;
+  const percent = Math.max(0, Math.min(100, Math.round((used / c.contextWindow) * 100)));
+  // 圆环填充:strokeDasharray = 周长 * 百分比
+  contextMeterFill.setAttribute("stroke-dasharray", `${(CTX_RING_CIRCUMFERENCE * percent) / 100} ${CTX_RING_CIRCUMFERENCE}`);
+  const reading = `${percent}%`;
+  // 本地化读数模板(en: "{p} of context used" / zh: "上下文已用 {p}"),按 {p} 拆出前后缀,
+  // 百分比单独着色,词序仍由各语言词典决定
+  const template = t("上下文已用 {p}");
+  const [headBefore = "", headAfter = ""] = template.split("{p}").map((part) => part.trim());
+  contextMeterBtn.title = template.replace("{p}", reading);
+  contextMeterBtn.setAttribute("aria-label", contextMeterBtn.title);
+  contextMeterPanel.setAttribute("aria-label", template.replace("{p}", "").trim());
+
+  const breakdown = state.breakdown;
+  const breakdownTotal = breakdown === undefined ? 0 : breakdown.systemTokens + breakdown.toolsTokens + breakdown.messageTokens;
+  const segments: { key: string; tint?: string; width: number }[] =
+    breakdown === undefined || breakdownTotal === 0
+      ? [{ key: "total", width: percent }]
+      : CONTEXT_SEGMENTS.map((row) => ({ key: row.key, tint: row.tint, width: (percent * breakdown[row.key]) / breakdownTotal })).filter((part) => part.width > 0);
+
+  contextMeterPanel.innerHTML = "";
+  const header = el("div", "cm-header");
+  const headlineBefore = el("span", "cm-headline", headBefore);
+  const percentEl = el("span", "cm-percent", reading);
+  const headlineAfter = el("span", "cm-headline", headAfter);
+  const figures = el("span", "cm-figures", `~${fmtCompactTokens(used)} / ${fmtCompactTokens(c.contextWindow)}`);
+  header.append(headlineBefore, percentEl, headlineAfter, figures);
+  const bar = el("div", "cm-bar");
+  for (const segment of segments) {
+    const part = el("div", "cm-segment");
+    if (segment.tint) part.style.background = segment.tint;
+    part.style.width = `${segment.width}%`;
+    bar.append(part);
+  }
+  contextMeterPanel.append(header, bar);
+  if (breakdown !== undefined) {
+    const rows = el("dl", "cm-rows");
+    for (const row of CONTEXT_SEGMENTS) {
+      const line = el("div", "cm-row");
+      const term = el("dt");
+      const swatch = el("span", "cm-swatch");
+      swatch.style.background = row.tint;
+      term.append(swatch, document.createTextNode(row.label()));
+      const value = el("dd", undefined, `~${fmtCompactTokens(breakdown[row.key])}`);
+      line.append(term, value);
+      rows.append(line);
+    }
+    contextMeterPanel.append(rows);
+  }
 }
 
 // ---------- 会话统计行(上下文条上方) ----------
@@ -4992,6 +5178,7 @@ function applyLanguage() {
   state.stepStarts = new Map();
   state.currentStreamTurn = undefined;
   state.streamedBlockKeys = new Set();
+  state.streamedBlocks = new Map();
   state.rowBlocks = new Map();
   turnProduced = [];
   turnProducedSet.clear();
@@ -5009,7 +5196,7 @@ function applyLanguage() {
   renderPermissionPill();
   renderGoal();
   renderModeChips();
-  renderContextBar();
+  renderContextMeter();
   renderStatsLine();
   renderTodos();
   renderAttachments();
@@ -5040,6 +5227,7 @@ function handleMessage(msg: any) {
       state.streamKey = null;
       state.goal = msg.goal;
       state.context = msg.context;
+      state.breakdown = msg.breakdown;
       state.permissions = msg.permissions;
       state.stats = msg.stats;
       state.todos = msg.todos;
@@ -5067,6 +5255,7 @@ function handleMessage(msg: any) {
       state.stepStarts = new Map();
       state.currentStreamTurn = undefined;
       state.streamedBlockKeys = new Set();
+      state.streamedBlocks = new Map();
       state.rowBlocks = new Map();
       state.turnToolGroup = null;
       messages.innerHTML = "";
@@ -5094,7 +5283,7 @@ function handleMessage(msg: any) {
       renderModelPill();
       renderPresetPill();
       renderPermissionPill();
-      renderContextBar();
+      renderContextMeter();
       renderStatsLine();
       renderTodos();
       updateRunning();
@@ -5154,6 +5343,31 @@ function handleMessage(msg: any) {
         dshAgents: [],
         dshMemory: [],
       };
+      break;
+    }
+    case "streamChunk": {
+      // 0.1.5 assistant-stream 瞬态帧(宿主已翻译为与 assistant/chunk 同构的载荷)
+      const value = msg.value as { turn?: number; step?: number; time?: number; chunk?: unknown } | undefined;
+      if (!value || (msg.sessionId && msg.sessionId !== state.current)) break;
+      applyAssistantChunk(
+        { turn: value.turn ?? 0, step: value.step ?? 0, chunk: value.chunk },
+        typeof value.time === "number" ? value.time : Date.now(),
+      );
+      break;
+    }
+    case "streamEnd": {
+      // 尝试被放弃(重试/中断):丢弃该步已流出的内容,避免残留半截回答
+      const value = msg.value as { turn?: number; step?: number; abandoned?: boolean } | undefined;
+      if (!value || (msg.sessionId && msg.sessionId !== state.current)) break;
+      if (value.abandoned === true && typeof value.turn === "number" && typeof value.step === "number") {
+        const bucket = state.streamedBlocks.get(`${value.turn}:${value.step}`);
+        state.streamBlock = null;
+        if (bucket) {
+          for (const block of bucket.values()) block.text = "";
+          const node = [...state.nodes].reverse().find((n) => n.kind === "assistant" && n.turn === value.turn);
+          if (node) refreshAssistantNode(node, undefined, true);
+        }
+      }
       break;
     }
     case "mentionCandidates": {
@@ -5228,7 +5442,13 @@ function handleMessage(msg: any) {
     case "context": {
       if (msg.sessionId && msg.sessionId !== state.current) break;
       state.context = msg.value;
-      renderContextBar();
+      renderContextMeter();
+      break;
+    }
+    case "breakdown": {
+      if (msg.sessionId && msg.sessionId !== state.current) break;
+      state.breakdown = msg.value;
+      renderContextMeter();
       break;
     }
     case "stats": {

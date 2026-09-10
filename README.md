@@ -6,7 +6,7 @@
 > npx @deepseek-ai/dsh web
 > ```
 
-[中文版](#chinese) | Publisher: Jager · Latest: 0.13.6
+[中文版](#chinese) | Publisher: Jager · Latest: 0.13.7
 
 Use [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) directly in VS Code, alongside ChatGPT / Copilot: the built-in `@dsh` chat participant, secondary sidebar / standalone chat windows, workspaces / jobs / trajectory / settings panels, turn-level Git rollback, and a **multi-language UI** (简体中文 / 繁體中文 / English / 日本語 / 한국어 / Deutsch / Français / Español / Português / ไทย / Bahasa Indonesia / Türkçe / Русский / العربية — follows the VS Code display language or switch manually).
 
@@ -17,7 +17,7 @@ Use [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) 
 - **Built-in chat participant `@dsh`**: type `@` in the native Chat panel (Ctrl+Alt+I); streamed replies with tool calls and approval buttons; slash commands `/new`, `/session <ID>`, `/preset <name>`.
 - **Secondary sidebar tab**: container appears in the Secondary Side Bar on VS Code ≥ 1.106 (falls back to the Activity Bar on older versions).
 - **Standalone chat window**: `DSH: Open Standalone Chat Window`.
-- **Modern chat UI**: large rounded input box, pill toolbar (thinking depth / model / preset / permission), session stats line (turns · steps · LLM/tool time · first token · tok/s · cache hit · in/out tokens), context usage bar.
+- **Modern chat UI**: large rounded input box, pill toolbar (thinking depth / model / preset / permission), session stats line (turns · steps · LLM/tool time · first token · tok/s · cache hit · in/out tokens), and a **context meter ring** beside the send button (web parity: click for "context used", the ~used / window reading, and the system-prompt / tool-definition / conversation breakdown with colour-coded bar segments and per-category token counts).
 - **Per-message actions** (minimal line icons): copy (double-rectangle icon) / branch (forked line icon; menu: counter-clockwise arrow "Rewind here" · forked icon "Branch from here" · up-left fold "Branch and rewind earlier" · up-left arrow "Back to main") / thumbs up/down (line icons, official `/feedback`) / message header shows model · thinking time · per-step tokens.
 - **Turn-level Git rollback** (↩ button on each assistant turn + branch-menu entries): the DSH server-side plugin `dsh-git-rollback` snapshots the workspace's git state (tracked + untracked files) at every turn start into hidden refs (`refs/dsh/checkpoints/<sid>`, zero pollution of your branch history) and records them under `.dsh/rollback`; the button restores the workspace to the state before that turn. Commands `/rollback [N]`, `/redo`, `/checkpoints` work in both the web command panel and the VS Code chat (rollback is non-destructive: the pre-rollback state is saved first, `/redo` restores it, ignored files are never touched). Each message's ⋯/branch menu also offers **"Undo this turn's file changes"** (preview-and-confirm review dialog, reverses only the files that turn changed — your own commits and HEAD stay untouched), **"View checkpoints"**, and "Undo this turn's changes and branch from here". The web chat gets the same Copilot-style turn dividers and a floating restore dialog out of the box (plugin web half, served via the DSH client-modules pipeline).
 
@@ -100,6 +100,7 @@ Prerequisites: VS Code ≥ 1.90 (built-in chat ≥ 1.95; secondary sidebar conta
 - Service worker error in the webview → VS Code 1.100.x platform bug: update VS Code or clear `%APPDATA%\Code\Service Worker\CacheStorage`.
 - "agent preset is fixed" → started sessions cannot switch presets; the preset pill only shows for new sessions.
 - Not connected → run `DSH: Start Server`; check `dsh.url`.
+- Server version: this build targets **DSH 0.1.5-rc.1** and negotiates the changed attachment parameter names, so a 0.1.2-rc.1 server keeps working (commands, subagent prompts, streaming); upgrading the server to 0.1.5 additionally brings live streaming frames, V3 session logs, and the context breakdown projection.
 - Server does not auto-start → the extension retries every 15 s and connects as soon as the server is up; see the `[server]` log in the "DeepSeek Harness" output channel. If the error mentions `0xC0000142`/`EPERM`, VS Code was launched from a DSH session or a restricted terminal (child process creation blocked) — launch VS Code normally, or set that session's permission to `danger-full-access`.
 
 ## Development
@@ -128,7 +129,7 @@ npm run package     # → Releases/
 > npx @deepseek-ai/dsh web
 > ```
 
-[English version](#) | 发布者:Jager · 最新版本:0.13.6
+[English version](#) | 发布者:Jager · 最新版本:0.13.7
 
 在 VS Code 中直接使用 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)(`dsh`),与 ChatGPT / Copilot 一样融入 VS Code 聊天体系:内置聊天参与者 `@dsh`、辅助侧栏 / 独立聊天窗口、工作区 / 后台任务 / 轨迹 / 设置面板、回合级 Git 回退,以及**多语言界面**(简体中文 / 繁體中文 / English / 日本語 / 한국어 / Deutsch / Français / Español / Português / ไทย / Bahasa Indonesia / Türkçe / Русский / العربية,跟随 VS Code 显示语言或手动切换)。
 
@@ -137,7 +138,7 @@ npm run package     # → Releases/
 - **内置聊天参与者 `@dsh`**:VS Code 原生 Chat 面板(Ctrl+Alt+I)输入 `@` 选择 `dsh`;助手回复流式渲染,含工具调用与审批按钮;支持 `/new`、`/session <ID>`、`/preset <名>` 斜杠命令。
 - **辅助侧栏子 tab**:VS Code ≥ 1.106 时容器直接出现在辅助侧栏(与 ChatGPT 等并列);旧版本自动回退到活动栏图标。
 - **独立聊天窗口**:编辑器区 WebviewPanel,命令 `DSH: 打开独立聊天窗口`。
-- **现代聊天界面**:大号圆角输入框、胶囊工具栏(思考深度 / 模型 / 预设 / 权限)、会话统计行(轮数 · 步骤 · LLM/工具耗时 · 首 token · tok/s · 缓存命中 · 输入/输出 token)、上下文用量进度条。
+- **现代聊天界面**:大号圆角输入框、胶囊工具栏(思考深度 / 模型 / 预设 / 权限)、会话统计行(轮数 · 步骤 · LLM/工具耗时 · 首 token · tok/s · 缓存命中 · 输入/输出 token),以及发送键左侧的**上下文进度环**(与网页端一致:点击展开「上下文已用」读数 ~已用 / 上限,以及 系统提示词 / 工具定义 / 对话消息 三段彩色构成与各自 token 数)。
 - **消息操作条**(每条回答下方,简约线条图标):复制(双层矩形图标)/ 分支(分叉线条图标,点击展开菜单:逆时针箭头"回退到此处" · 分叉图标"从此处新建分支" · 左上折线"分支并回退到更早位置" · 左上箭头"回到主线")/ 点赞、点踩(拇指线条图标,官方 `/feedback` 记录)/ 消息头显示模型名 · 思考耗时 · 本步 token 消耗。
 - **回合级 Git 回退**(每条助手回答上的 ↩ 按钮 + 「分支/回退」菜单项):DSH 服务端插件 `dsh-git-rollback` 在每个回合开始时把工作区 git 状态(含未跟踪文件)快照到隐藏引用(`refs/dsh/checkpoints/<sid>`,用户分支历史零污染)并记录在 `.dsh/rollback`;点击按钮即可把工作区恢复到该回合之前的状态。`/rollback [N]`、`/redo`、`/checkpoints` 命令在 web 命令面板与 VS Code 聊天面板通用——回退非破坏性(先存保存点,`/redo` 可恢复,ignored 文件永不触碰)。每条消息的 ⋯/分支菜单另提供 **「撤销本回合改动」**(先预览后确认的审核弹窗,只反向应用该回合自身产生的文件改动——你自己的提交与 HEAD 完全不受影响)、**「查看检查点」** 与「撤销本回合变更并从此处新建分支」。网页端聊天开箱即用地获得同款 Copilot 风格回合分隔线与悬浮还原弹窗(插件 web 半区,经 DSH client-modules 管线分发)。
 
@@ -242,6 +243,7 @@ npm run watch
 - **Webview 报 Service Worker 错误**:VS Code 1.100.x 平台缺陷,升级 VS Code 或清空 `%APPDATA%\Code\Service Worker\CacheStorage`。
 - **"agent preset is fixed"**:已开始的会话不可切换预设,预设胶囊只在新会话显示。
 - **未连接**:执行 `DSH: 启动服务器`;检查 `dsh.url` 端口。
+- **服务器版本**:本版本面向 **DSH 0.1.5-rc.1**,并会对改名的附件参数做协商,因此 0.1.2-rc.1 服务器同样可用(命令、子代理消息、流式输出);服务器升级到 0.1.5 后另有逐 token 流式帧、V3 会话日志与上下文构成投影。
 - **启动时无法自动启动服务器**:扩展会在 VS Code 启动时自动启动 `dsh web`(失败后每 15 秒重探,服务器上线即自动连接);具体失败原因见输出通道 "DeepSeek Harness" 的 `[server]` 日志。若报错含 `0xC0000142`/`EPERM`,说明 VS Code 是从 DSH 会话或受限终端启动的(子进程创建被拦截)——改用普通方式启动 VS Code,或把该会话权限调为 `danger-full-access`。
 
 ## 开发

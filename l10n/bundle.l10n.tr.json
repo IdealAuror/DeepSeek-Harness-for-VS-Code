@@ -182,5 +182,7 @@
   "server.updating": "DSH sunucusu güncelleniyor (@deepseek-ai/dsh@latest indiriliyor)…",
   "server.updateFailed": "DSH sunucusu güncellenemedi. Ayrıntılar için çıktı günlüğüne bakın.",
   "server.updated": "DSH sunucusu güncellendi ve yeniden başlatıldı.",
-  "server.updateRestartFailed": "DSH sunucusu güncellendi ancak yeniden başlatılamadı:{message}"
+  "server.updateRestartFailed": "DSH sunucusu güncellendi ancak yeniden başlatılamadı:{message}",
+  "notice.permissionBusy": "Bir tur çalışıyor: izin ön ayarı sonraki turda geçerli olacak; oturum boştayken yeniden deneyin.",
+  "hub.modelNoImages": "Geçerli model \"{model}\" görsel girişini desteklemiyor: görsel eklerini kaldırın veya giriş kutusunun sağ üst köşesindeki model düğmesinden görsel destekli bir modele geçin."
 }

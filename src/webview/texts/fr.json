@@ -331,6 +331,9 @@
   "在 VS Code 中打开记忆文件": "Ouvrir le fichier mémoire dans VS Code",
   "智能体": "Agents",
   "系统提示词": "Invite système",
+  "工具定义": "Définitions d'outils",
+  "对话消息": "Messages",
+  "上下文已用 {p}": "{p} du contexte utilisé",
   "已注入模型 · 点击展开": "Injecté dans le modèle · cliquer pour déplier",
   "撤销本回合文件改动": "Annuler les modifications de fichiers de ce tour",
   "查看检查点": "Voir les points de contrôle",
@@ -486,5 +489,16 @@
   "Session": "Session",
   "（无工作目录）": "（aucun répertoire de travail）",
   "正在加载文件资源…": "Chargement des fichiers…",
-  "正在加载会话列表…": "Chargement des sessions…"
+  "正在加载会话列表…": "Chargement des sessions…",
+  "⚠️ 最多一次添加 8 张图片": "⚠️ Vous pouvez ajouter jusqu'à 8 images à la fois",
+  "⚠️ 非图片附件请从资源管理器复制(未提供本地路径)": "⚠️ Copiez les pièces jointes non-images depuis l'explorateur de fichiers (aucun chemin local fourni)",
+  "模型与思考(推理强度)": "Modèle et réflexion (effort de raisonnement)",
+  "应如何批准操作?": "Comment les opérations doivent-elles être approuvées ?",
+  "了解更多": "En savoir plus",
+  "会话已开始,预设不可切换(新会话可选)": "Session déjà démarrée : le préréglage n'est pas modifiable (disponible pour les nouvelles sessions)",
+  "选择 Agent 预设(新会话生效)": "Choisir un préréglage d'agent (s'applique aux nouvelles sessions)",
+  "只读访问:不能修改文件或执行命令;外部文件与网络访问按策略询问": "Lecture seule : impossible de modifier des fichiers ou d'exécuter des commandes ; l'accès aux fichiers externes et au réseau est demandé selon la politique",
+  "可修改工作区内的文件;外部文件与网络访问按策略询问": "Les fichiers de l'espace de travail peuvent être modifiés ; l'accès aux fichiers externes et au réseau est demandé selon la politique",
+  "可不受限制地访问互联网和你电脑上的任何文件": "Accès illimité à Internet et à tous les fichiers de votre ordinateur",
+  "自定义组合(在设置中编辑)": "Combinaison personnalisée (à modifier dans les paramètres)"
 }

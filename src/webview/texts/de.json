@@ -331,6 +331,9 @@
   "在 VS Code 中打开记忆文件": "Speicherdatei in VS Code öffnen",
   "智能体": "Agenten",
   "系统提示词": "System-Prompt",
+  "工具定义": "Werkzeugdefinitionen",
+  "对话消息": "Nachrichten",
+  "上下文已用 {p}": "{p} des Kontexts verwendet",
   "已注入模型 · 点击展开": "Ins Modell eingespielt · zum Aufklappen klicken",
   "撤销本回合文件改动": "Dateiänderungen dieser Runde rückgängig machen",
   "查看检查点": "Checkpoints anzeigen",
@@ -486,5 +489,16 @@
   "Session": "Session",
   "（无工作目录）": "（kein Arbeitsverzeichnis）",
   "正在加载文件资源…": "Dateien werden geladen…",
-  "正在加载会话列表…": "Sessions werden geladen…"
+  "正在加载会话列表…": "Sessions werden geladen…",
+  "⚠️ 最多一次添加 8 张图片": "⚠️ Es können höchstens 8 Bilder auf einmal hinzugefügt werden",
+  "⚠️ 非图片附件请从资源管理器复制(未提供本地路径)": "⚠️ Nicht-Bild-Anhänge aus dem Datei-Explorer kopieren (kein lokaler Pfad vorhanden)",
+  "模型与思考(推理强度)": "Modell und Denken (Reasoning-Aufwand)",
+  "应如何批准操作?": "Wie sollen Aktionen genehmigt werden?",
+  "了解更多": "Mehr erfahren",
+  "会话已开始,预设不可切换(新会话可选)": "Sitzung bereits gestartet: Preset nicht umschaltbar (für neue Sitzungen verfügbar)",
+  "选择 Agent 预设(新会话生效)": "Agent-Preset wählen (gilt für neue Sitzungen)",
+  "只读访问:不能修改文件或执行命令;外部文件与网络访问按策略询问": "Nur Lesen: Dateien können nicht geändert und Befehle nicht ausgeführt werden; externer Datei- und Netzwerkzugriff wird richtlinienabhängig abgefragt",
+  "可修改工作区内的文件;外部文件与网络访问按策略询问": "Dateien im Arbeitsbereich können geändert werden; externer Datei- und Netzwerkzugriff wird richtlinienabhängig abgefragt",
+  "可不受限制地访问互联网和你电脑上的任何文件": "Uneingeschränkter Zugriff auf das Internet und beliebige Dateien auf diesem Computer",
+  "自定义组合(在设置中编辑)": "Benutzerdefinierte Kombination (in den Einstellungen bearbeiten)"
 }

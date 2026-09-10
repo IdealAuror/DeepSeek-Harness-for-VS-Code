@@ -1,5 +1,16 @@
 /**
- * DSH Web API 的 wire 类型(对齐 @deepseek-ai/dsh 0.1.2-rc.1 的 Typert Remote 契约)。
+ * DSH Web API 的 wire 类型(对齐 @deepseek-ai/dsh 0.1.5-rc.1 的 Typert Remote 契约,
+ * 同时兼容 0.1.2-rc.1 的参数名差异)。
+ *
+ * 0.1.2-rc.1 → 0.1.5-rc.1 与本扩展相关的契约变化(已按发布包逐一核对端点/流/事件):
+ * - commands/execute 第三参数 images → submittedAttachments;commands/list 描述符
+ *   input.images → input.attachments(按命令自身声明裁决是否接受附件);
+ * - subagents/prompt 新增必填 delivery("queue"|"steer");
+ * - session/prompt / updateQueue 的内容块新增 file({receiptId},先经 fileUploads/upload 上传);
+ * - session/follow 打开参数新增 assistantStream(逐 token 增量改走瞬态 assistant-stream 帧),
+ *   快照 header 的 seedLength → isSeeded,快照新增 assistantStream 基线;
+ * - session/page 不再返回压缩的 chunks 记录:V3 日志不保存逐 token 增量,历史即原始事件;
+ * - session/list、session/control 结果新增 subagentCatalog(附加字段,忽略即可)。
  *
  * 0.1.1-rc.2 → 0.1.2-rc.1 协议变更(alpha.4 → rc.1 无线协议变化,已按发布的
  * rc.1(0.1.2-rc.1)核对全部端点/流/认证契约):
@@ -64,7 +75,11 @@ export interface SessionSummary {
   projections?: { asOfSeq: number; values: Record<string, any> };
 }
 
-/** session/page 或 session/follow 的一条历史记录:原始事件或压缩的 chunk 序列。 */
+/**
+ * session/page 或 session/follow 的一条历史记录。
+ * 0.1.2-rc.1:持久层会把逐 token 增量打包为 `chunkrow/*` 的 chunks 记录;
+ * 0.1.5-rc.1:V3 日志不再保存逐 token 增量,历史就是原始事件(仅 event 记录)。
+ */
 export type SessionHistoryRecord =
   | { type: "event"; event: SessionEvent }
   | { type: "chunks"; event: SessionEvent };
@@ -89,7 +104,7 @@ export interface SessionPageValue {
   hasMore: boolean;
 }
 
-/** session/follow 打开帧:完整基线,随后逐条会话事件。 */
+/** session/follow 打开帧:完整基线,随后逐条会话事件,以及(可选开启的)assistant-stream 帧。 */
 export type SessionFollowFrame =
   | {
       type: "snapshot";
@@ -99,6 +114,8 @@ export type SessionFollowFrame =
         createdAt: number;
         cwd?: string;
         parentSession?: string;
+        /** 0.1.5-rc.1 起快照 header 用 isSeeded 取代旧版的 seedLength。 */
+        isSeeded?: boolean;
         seedLength?: number;
         origin?: "subagent";
         delegationDepth?: number;
@@ -108,8 +125,36 @@ export type SessionFollowFrame =
       records: SessionHistoryRecord[];
       hasMore: boolean;
       projections: { asOfSeq: number; values: Record<string, any> };
+      /** 0.1.5:开启 assistantStream 时的进行中尝试基线(可重建已流出的内容)。 */
+      assistantStream?: { revision: number; activeAttempt?: { attemptId: string; startedAfterSeq: number; turn: number; step: number; nextIndex: number; stream: unknown[] } };
     }
-  | { type: "event"; event: SessionEvent };
+  | { type: "event"; event: SessionEvent }
+  | { type: "assistant-stream"; frame: AssistantStreamFrame };
+
+/**
+ * 0.1.5 起逐 token 增量不再作为会话事件下发(V3 日志不保存逐 token 增量),
+ * 改为 follow 流上的瞬态帧:仅当打开的 args 带 assistantStream: true 时推送。
+ */
+export type AssistantStreamFrame =
+  | { type: "start"; attemptId: string; revision: number; startedAfterSeq: number; turn: number; step: number }
+  | { type: "chunk"; attemptId: string; revision: number; index: number; time: number; chunk: AssistantStreamChunk }
+  | {
+      type: "end";
+      attemptId: string;
+      revision: number;
+      index: number;
+      outcome: { kind: "committed"; eventType: "assistant/message" | "assistant/attempt"; seq: number } | { kind: "abandoned" };
+    };
+
+/** 模型流的一次增量(与 0.1.2 assistant/chunk 事件的 data.chunk 同构)。 */
+export type AssistantStreamChunk =
+  | { type: "block-start"; index: number; blockType: string }
+  | { type: "text-delta"; index: number; text: string }
+  | { type: "reasoning-delta"; index: number; text: string }
+  | { type: "tool-call-delta"; index: number; id: string; name?: string; argumentsDelta: string }
+  | { type: "block-end"; index: number; block: unknown }
+  | { type: "usage"; usage: unknown }
+  | { type: "finish"; reason: unknown };
 
 // ---------- session/control(0.1.2 起队列/任务/投影的单一控制流) ----------
 

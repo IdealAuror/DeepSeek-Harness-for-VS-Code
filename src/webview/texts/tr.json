@@ -331,6 +331,9 @@
   "在 VS Code 中打开记忆文件": "Bellek dosyasını VS Code'da aç",
   "智能体": "Ajanlar",
   "系统提示词": "Sistem istemi",
+  "工具定义": "Araç tanımları",
+  "对话消息": "Mesajlar",
+  "上下文已用 {p}": "Bağlamın {p} kadarı kullanıldı",
   "已注入模型 · 点击展开": "Modele enjekte edildi · genişletmek için tıkla",
   "撤销本回合文件改动": "Bu turdaki dosya değişikliklerini geri al",
   "查看检查点": "Kontrol noktalarını görüntüle",
@@ -486,5 +489,16 @@
   "Session": "Oturum",
   "（无工作目录）": "（çalışma dizini yok）",
   "正在加载文件资源…": "Dosyalar yükleniyor…",
-  "正在加载会话列表…": "Oturum listesi yükleniyor…"
+  "正在加载会话列表…": "Oturum listesi yükleniyor…",
+  "⚠️ 最多一次添加 8 张图片": "⚠️ Tek seferde en fazla 8 görsel eklenebilir",
+  "⚠️ 非图片附件请从资源管理器复制(未提供本地路径)": "⚠️ Görsel olmayan ekleri dosya gezgininden kopyalayın (yerel yol yok)",
+  "模型与思考(推理强度)": "Model ve düşünme (akıl yürütme düzeyi)",
+  "应如何批准操作?": "İşlemler nasıl onaylanmalı?",
+  "了解更多": "Daha fazla bilgi",
+  "会话已开始,预设不可切换(新会话可选)": "Oturum başladı: ön ayar değiştirilemez (yeni oturumlarda seçilebilir)",
+  "选择 Agent 预设(新会话生效)": "Agent ön ayarını seçin (yeni oturumlarda geçerli)",
+  "只读访问:不能修改文件或执行命令;外部文件与网络访问按策略询问": "Salt okunur: dosyalar değiştirilemez ve komut çalıştırılamaz; harici dosya ve ağ erişimi politikaya göre sorulur",
+  "可修改工作区内的文件;外部文件与网络访问按策略询问": "Çalışma alanındaki dosyalar değiştirilebilir; harici dosya ve ağ erişimi politikaya göre sorulur",
+  "可不受限制地访问互联网和你电脑上的任何文件": "İnternete ve bilgisayarınızdaki her dosyaya sınırsız erişim",
+  "自定义组合(在设置中编辑)": "Özel bileşim (ayarlardan düzenleyin)"
 }

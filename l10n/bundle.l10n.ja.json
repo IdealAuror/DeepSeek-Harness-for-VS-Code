@@ -182,5 +182,7 @@
   "server.updating": "DSH サーバーを更新中(@deepseek-ai/dsh@latest をダウンロード)…",
   "server.updateFailed": "DSH サーバーの更新に失敗しました。詳細は出力ログを参照してください。",
   "server.updated": "DSH サーバーを更新して再起動しました。",
-  "server.updateRestartFailed": "DSH サーバーは更新されましたが、再起動に失敗しました:{message}"
+  "server.updateRestartFailed": "DSH サーバーは更新されましたが、再起動に失敗しました:{message}",
+  "notice.permissionBusy": "ターンが実行中です:権限プリセットは次のターンから適用されます。セッションが空いてから再試行してください。",
+  "hub.modelNoImages": "現在のモデル「{model}」は画像入力に対応していません:画像の添付を外すか、入力欄右上のモデルボタンから画像対応モデルに切り替えてください。"
 }

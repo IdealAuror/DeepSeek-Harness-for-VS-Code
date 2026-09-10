@@ -182,5 +182,7 @@
   "server.updating": "جارٍ تحديث خادم DSH (تنزيل @deepseek-ai/dsh@latest)…",
   "server.updateFailed": "فشل تحديث خادم DSH. راجع سجل الإخراج للتفاصيل.",
   "server.updated": "تم تحديث خادم DSH وإعادة تشغيله.",
-  "server.updateRestartFailed": "تم تحديث خادم DSH، لكن فشلت إعادة التشغيل:{message}"
+  "server.updateRestartFailed": "تم تحديث خادم DSH، لكن فشلت إعادة التشغيل:{message}",
+  "notice.permissionBusy": "هناك دور قيد التنفيذ: سيُطبَّق إعداد الأذونات في الدور التالي؛ أعد المحاولة عندما تصبح الجلسة خاملة.",
+  "hub.modelNoImages": "الطراز الحالي \"{model}\" لا يدعم إدخال الصور: أزل مرفقات الصور، أو بدّل إلى طراز يدعم الصور من زر الطراز أعلى يمين مربع الإدخال."
 }
