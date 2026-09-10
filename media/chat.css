@@ -1656,63 +1656,129 @@ body {
 
 /* ---------- 会话统计行(上下文条上方) ---------- */
 
-/* ---------- 待办事项面板(Codex 风格) ---------- */
+/* ---------- 任务清单(网页端 TodoPanel 同款:圆角提示卡 + 头部摘要 + 折叠清单) ---------- */
 .todo-panel {
   flex-basis: 100%;
+  box-sizing: border-box;
   border: 1px solid var(--dsh-border);
-  border-radius: 8px;
-  padding: 0;
-  background: transparent;
+  border-radius: 12px;
+  background: var(--vscode-editorWidget-background, var(--dsh-input-bg));
+  overflow: hidden;
 }
 
-.todo-panel-summary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 8px;
-  cursor: pointer;
-  font-size: 11px;
-  color: var(--dsh-fg);
-  user-select: none;
-  list-style: none;
-}
-
-.todo-panel-summary::-webkit-details-marker {
+.todo-panel[hidden] {
   display: none;
 }
 
-.todo-panel-body {
-  padding: 2px 8px 8px;
+.todo-body {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 8px;
+  padding: 6px 12px;
 }
 
-.todo-row {
+.todo-header {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: 11.5px;
-  line-height: 1.45;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.todo-status {
-  flex-shrink: 0;
-}
-
-.todo-row.active {
-  color: #dcdcaa;
-}
-
-.todo-row.done {
+.todo-lead {
+  display: grid;
+  place-items: center;
+  flex: none;
   color: var(--dsh-muted);
-  text-decoration: line-through;
-  opacity: 0.8;
+}
+
+.todo-title {
+  flex: none;
+  color: var(--dsh-fg);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.todo-progress {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsh-muted);
+  font-size: 13px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.todo-chevron {
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--dsh-muted);
+}
+
+.todo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 180px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--dsh-fg);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.todo-glyph {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+/* 三种状态图标配色与网页端一致:完成 = 成功绿,进行中 = 强调蓝(旋转),待处理 = 次要灰 */
+.todo-glyph-completed {
+  color: var(--vscode-charts-green, #89d185);
+}
+
+.todo-glyph-progress {
+  color: var(--dsh-accent);
+  animation: todo-progress-spin 1s linear infinite;
+}
+
+@keyframes todo-progress-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.todo-glyph-pending {
+  color: var(--vscode-disabledForeground, var(--dsh-muted));
 }
 
 .todo-content {
-  overflow-wrap: break-word;
   min-width: 0;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* 会话统计行:聊天窗口最底部、输入框之外(网页端 composer.dock 同款),始终可见 */
 .stats-line {
@@ -3408,16 +3474,11 @@ body {
 
 /* ---------- 上下文进度环 + 分类面板(网页端 composer ContextMeter 同款) ---------- */
 
-.send-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .context-meter {
   position: relative;
   display: inline-flex;
   flex-shrink: 0;
+  align-self: center;
 }
 
 .context-meter[hidden] {
@@ -3427,8 +3488,8 @@ body {
 .context-meter-trigger {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   border: 0;
   border-radius: 999px;

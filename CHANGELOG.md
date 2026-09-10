@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.8
+- To-do panel restyled as the web TodoPanel (title + non-zero-only progress summary + collapsible list + the three status glyphs); context meter ring moved to the top-right of the input box, right of the preset pill
+- 任务清单改为网页端 TodoPanel 风格(标题 + 只列非零状态的进度摘要 + 折叠清单 + 三种状态图标);上下文进度环移到输入框右上角(预设胶囊右侧)
+
 ## 0.13.7
 - Adapt to DSH 0.1.5-rc.1: commands/execute attachment parameter renamed to submittedAttachments, required subagents/prompt delivery, per-command attachment gating, token deltas via assistant-stream frames, image tool results; new web-style context meter ring with system/tools/messages breakdown
 - 适配 DSH 0.1.5-rc.1:commands/execute 附件参数改名 submittedAttachments、subagents/prompt 必填 delivery、按命令声明裁决附件、逐 token 增量改走 assistant-stream 瞬态帧、工具结果图片渲染;新增网页同款上下文进度环与分类面板(系统提示词/工具定义/对话消息)

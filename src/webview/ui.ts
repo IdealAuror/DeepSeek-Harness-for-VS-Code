@@ -726,6 +726,10 @@ const EN_TEXT: Record<string, string> = {
   "暂无会话": "No sessions",
   "智能体": "Agents",
   "系统提示词": "System prompt",
+  "任务": "To-dos",
+  "{n} 已完成": "{n} completed",
+  "{n} 进行中": "{n} in progress",
+  "{n} 待处理": "{n} pending",
   "工具定义": "Tool definitions",
   "对话消息": "Messages",
   "上下文已用 {p}": "{p} of context used",
@@ -746,7 +750,6 @@ const EN_TEXT: Record<string, string> = {
   "共 {n} 轮": "{n} rounds total",
   "等待推进": "awaiting progression",
   "第 {n} 轮": "round {n}",
-  "☑ 任务 · {a} 进行中 · {b} 待处理": "☑ Tasks · {a} in progress · {b} pending",
   "插件(Cordis)": "Plugins (Cordis)",
   "列出插件状态": "List plugin status",
   "运行插件 <id>": "Run plugin <id>",
@@ -1694,7 +1697,6 @@ const inputWrap = el("div", "input-wrap");
 const input = el("textarea", "input");
 input.placeholder = t("向 DeepSeek Harness 发送消息…");
 const sendCol = el("div", "send-col");
-const sendRow = el("div", "send-row");
 
 // 上下文进度环(网页端 composer 的 ContextMeter 同款):圆环显示占用百分比,
 // 点击弹出面板查看"上下文已用"读数与 系统提示词 / 工具定义 / 对话消息 的分类构成。
@@ -1732,8 +1734,7 @@ contextMeter.append(contextMeterBtn, contextMeterPanel);
 const btnSendStop = el("button", "btn-icon-btn send-btn");
 btnSendStop.append(lineIcon(ICONS.send, 16));
 btnSendStop.title = "发送(Enter)";
-sendRow.append(contextMeter, btnSendStop);
-sendCol.append(sendRow);
+sendCol.append(btnSendStop);
 inputWrap.append(input, sendCol);
 
 // 对话底部操作行(对话左下方):模式指示芯片 + 回到主线 + 上下文进度
@@ -1743,7 +1744,8 @@ btnBackToMain.title = t("回到主线(父会话)");
 btnBackToMain.append(lineIcon(ICONS.backMain));
 btnBackToMain.hidden = true;
 const modeChips = el("div", "mode-chips");
-const todoPanel = el("details", "todo-panel");
+// 任务清单(网页端 TodoPanel 同款:内容由 renderTodos 构建)
+const todoPanel = el("section", "todo-panel");
 todoPanel.hidden = true;
 /** 会话统计行:位于输入框最底部(网页端 composer.dock 同款),始终可见 */
 const statsLine = el("div", "stats-line");
@@ -1794,7 +1796,8 @@ const composerTop = el("div", "composer-top");
 attachmentsRow.append(btnAddAttach);
 const presetTag = el("span", "preset-tag");
 presetTag.hidden = true;
-composerTop.append(attachmentsRow, presetPill, presetTag);
+// 上下文进度环固定在输入框右上角、预设胶囊右侧(弹层向上展开到对话区)
+composerTop.append(attachmentsRow, presetPill, presetTag, contextMeter);
 composer.append(composerTop, inputWrap, composerBottom, hintRow);
 
 // 添加文件/文件夹选择菜单(挂在 composer 内)
@@ -4260,9 +4263,75 @@ function renderContextMeter() {
   }
 }
 
-// ---------- 会话统计行(上下文条上方) ----------
+// ---------- 任务清单(网页端 TodoPanel 同款:标题 + 进度摘要 + 可折叠清单) ----------
 
-/** 待办事项面板(Codex 风格:任务进度摘要 + 清单)。 */
+/** 任务清单是否展开(与网页端一致默认收起;跨重渲染保留用户选择)。 */
+let todoExpanded = false;
+let todoGlyphSeq = 0;
+
+/**
+ * 任务状态图标(网页端 TodoPanel 的 14×14 三种图元):
+ * completed = 实线圆 + 对勾;in_progress = 渐变缺口圆环(CSS 旋转);pending = 虚线圆。
+ */
+function todoStatusGlyph(status: string): SVGElement {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("width", "14");
+  svg.setAttribute("height", "14");
+  svg.setAttribute("viewBox", "0 0 14 14");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("aria-hidden", "true");
+  if (status === "in_progress") {
+    const gradientId = `todo-spin-${(todoGlyphSeq += 1)}`;
+    const defs = document.createElementNS(SVG_NS, "defs");
+    const gradient = document.createElementNS(SVG_NS, "linearGradient");
+    gradient.setAttribute("id", gradientId);
+    gradient.setAttribute("x1", "2.5");
+    gradient.setAttribute("y1", "12");
+    gradient.setAttribute("x2", "10.5");
+    gradient.setAttribute("y2", "3.5");
+    gradient.setAttribute("gradientUnits", "userSpaceOnUse");
+    const stopStart = document.createElementNS(SVG_NS, "stop");
+    stopStart.setAttribute("stop-color", "currentColor");
+    const stopEnd = document.createElementNS(SVG_NS, "stop");
+    stopEnd.setAttribute("offset", "1");
+    stopEnd.setAttribute("stop-color", "currentColor");
+    stopEnd.setAttribute("stop-opacity", "0");
+    gradient.append(stopStart, stopEnd);
+    defs.append(gradient);
+    const ring = document.createElementNS(SVG_NS, "circle");
+    ring.setAttribute("cx", "7");
+    ring.setAttribute("cy", "7");
+    ring.setAttribute("r", "6.4");
+    ring.setAttribute("stroke", `url(#${gradientId})`);
+    ring.setAttribute("stroke-width", "1.2");
+    svg.setAttribute("class", "todo-glyph-progress");
+    svg.append(defs, ring);
+    return svg;
+  }
+  const circle = document.createElementNS(SVG_NS, "circle");
+  circle.setAttribute("cx", "7");
+  circle.setAttribute("cy", "7");
+  circle.setAttribute("r", "6.4");
+  circle.setAttribute("stroke", "currentColor");
+  circle.setAttribute("stroke-width", "1.2");
+  svg.append(circle);
+  if (status === "completed") {
+    const check = document.createElementNS(SVG_NS, "path");
+    check.setAttribute(
+      "d",
+      "M10.9631 5.71411L7.70154 8.97571C7.48011 9.19714 7.27736 9.40099 7.09229 9.54993C6.89742 9.70669 6.66314 9.85279 6.3634 9.90027C6.2049 9.92534 6.04339 9.92534 5.88489 9.90027C5.58515 9.85279 5.35087 9.70669 5.15601 9.54993C4.97093 9.40099 4.76818 9.19714 4.54675 8.97571L3.03516 7.46411L3.96313 6.53613L5.47473 8.04773C5.7169 8.28989 5.86196 8.43389 5.97888 8.52795C6.08597 8.61409 6.10875 8.60701 6.08997 8.604C6.11259 8.60758 6.13571 8.60758 6.15833 8.604C6.13954 8.60701 6.16232 8.61409 6.26941 8.52795C6.38633 8.43389 6.53139 8.28989 6.77356 8.04773L10.0352 4.78613L10.9631 5.71411Z",
+    );
+    check.setAttribute("fill", "currentColor");
+    svg.setAttribute("class", "todo-glyph-completed");
+    svg.append(check);
+    return svg;
+  }
+  circle.setAttribute("stroke-dasharray", "2.4 2.4");
+  svg.setAttribute("class", "todo-glyph-pending");
+  return svg;
+}
+
+/** 待办事项面板(网页端 TodoPanel 同款:14px 图标 + 标题 + 进度摘要 + 折叠清单)。 */
 function renderTodos() {
   todoPanel.innerHTML = "";
   const list = state.todos;
@@ -4271,21 +4340,44 @@ function renderTodos() {
     return;
   }
   todoPanel.hidden = false;
-  const inProgress = list.filter((t) => t.status === "in_progress").length;
-  const pending = list.filter((t) => t.status === "pending").length;
-  const summary = el("summary", "todo-panel-summary");
-  summary.append(lineIcon(ICONS.box, 12), el("span", undefined, t("☑ 任务 · {a} 进行中 · {b} 待处理", { a: String(inProgress), b: String(pending) })));
-  todoPanel.append(summary);
-  const body = el("div", "todo-panel-body");
-  for (const item of list) {
-    const row = el("div", "todo-row" + (item.status === "completed" ? " done" : item.status === "in_progress" ? " active" : ""));
-    const statusEl = el("span", "todo-status");
-    if (item.status === "completed") statusEl.textContent = "✅";
-    else if (item.status === "in_progress") statusEl.append(runningEmoji());
-    else statusEl.textContent = "○";
-    row.append(statusEl);
-    row.append(el("span", "todo-content", item.content));
-    body.append(row);
+  todoPanel.setAttribute("aria-label", t("任务"));
+  const done = list.filter((item) => item.status === "completed").length;
+  const active = list.filter((item) => item.status === "in_progress").length;
+  const pending = list.length - done - active;
+  // 与网页端一致:只列出非零的状态,用 · 连接
+  const progress = [
+    ...(done > 0 ? [t("{n} 已完成", { n: String(done) })] : []),
+    ...(active > 0 ? [t("{n} 进行中", { n: String(active) })] : []),
+    ...(pending > 0 ? [t("{n} 待处理", { n: String(pending) })] : []),
+  ].join(" · ");
+
+  const body = el("div", "todo-body");
+  const header = el("button", "todo-header");
+  header.type = "button";
+  header.setAttribute("aria-expanded", String(todoExpanded));
+  const lead = el("span", "todo-lead");
+  lead.append(lineIcon(ICONS.list, 13));
+  const title = el("span", "todo-title", t("任务"));
+  const progressEl = el("span", "todo-progress", progress);
+  const chevron = el("span", "todo-chevron");
+  chevron.append(lineIcon(todoExpanded ? ICONS.up2 : ICONS.down2, 12));
+  header.append(lead, title, progressEl, chevron);
+  header.addEventListener("click", () => {
+    todoExpanded = !todoExpanded;
+    renderTodos();
+  });
+  body.append(header);
+  if (todoExpanded) {
+    const ul = el("ul", "todo-list");
+    for (const item of list) {
+      const li = el("li", "todo-item");
+      li.dataset.status = item.status;
+      const glyph = el("span", "todo-glyph");
+      glyph.append(todoStatusGlyph(item.status));
+      li.append(glyph, el("span", "todo-content", item.content));
+      ul.append(li);
+    }
+    body.append(ul);
   }
   todoPanel.append(body);
 }
