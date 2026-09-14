@@ -68,7 +68,6 @@
   "完整历史请到 DSH 网页版查看": "Tam geçmişi DSH web GUI'sinde görün",
   "子代理最近回复": "Alt ajanın son yanıtı",
   "上下文 {pct}%": "Bağlam {pct}%",
-  "{turns} 轮 · {steps} 步": "{turns} tur · {steps} adım",
   "LLM {llm} · 工具 {tool}": "LLM {llm} · araçlar {tool}",
   "首 token 平均 {avg}s": "Ortalama ilk token {avg}s",
   "{tps} tok/s": "{tps} tok/s",
@@ -280,11 +279,7 @@
   "已用 {a} / {b} tokens": "{a} / {b} token kullanıldı",
   "(预计本轮后 {n})": "(bu turdan sonra {n} öngörülüyor)",
   "上下文 {p}%": "Bağlam {p}%",
-  "{n} 轮 · {m} 步": "{n} tur · {m} adım",
-  "LLM {d} · 工具 {t}": "LLM {d} · araçlar {t}",
-  "首 token 平均 {s}s": "ortalama ilk token {s}s",
   "缓存命中 {p}%": "önbellek isabeti {p}%",
-  "输入 {i} tok · 输出 {o} tok": "giriş {i} tok · çıkış {o} tok",
   "文件夹": "Klasör",
   "文件": "Dosya",
   "移除附件": "Eki kaldır",
@@ -544,5 +539,11 @@
   "点击展开压缩摘要": "Sıkıştırma özetini görmek için tıklayın",
   "压缩摘要不可用": "Sıkıştırma özeti kullanılamıyor",
   "命令": "Komut",
-  "立即执行 /compact;压缩进度显示在对话中": "/compact hemen çalıştırılır; ilerleme sohbette görünür"
+  "立即执行 /compact;压缩进度显示在对话中": "/compact hemen çalıştırılır; ilerleme sohbette görünür",
+  "{turns} 轮 {steps} 步": "{turns} tur {steps} adım",
+  "会话统计": "Oturum istatistikleri",
+  "模型用时": "Model süresi",
+  "工具调用用时": "Araç çağrısı süresi",
+  "首 token 平均（TTFT）": "Ortalama ilk token süresi (TTFT)",
+  "Token 用量": "Token kullanımı"
 }

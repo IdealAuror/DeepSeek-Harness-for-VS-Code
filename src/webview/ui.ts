@@ -450,6 +450,8 @@ const ICONS = {
   box: "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z|M3.27 6.96 12 12.01l8.73-5.05|M12 22.08V12",
   // 时钟(回合用时)
   clock: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z|M12 6v6l4 2",
+  // 仪表盘(会话统计胶囊,网页端 IconGaugeOutline16 同款语义)
+  gauge: "M4.6 19.5a9 9 0 1 1 14.8 0|M12 13.8l4.2-4.2|M12 18h.01",
   // 终端(命令类工具)
   terminal: "M4 17l6-5-6-5|M12 19h8",
   // 文件(读取 / 写入类工具)
@@ -741,7 +743,6 @@ const EN_TEXT: Record<string, string> = {
   "完整历史请到 DSH 网页版查看": "See the full history in the DSH web GUI",
   "子代理最近回复": "Subagent recent reply",
   "上下文 {pct}%": "Context {pct}%",
-  "{turns} 轮 · {steps} 步": "{turns} turns · {steps} steps",
   "LLM {llm} · 工具 {tool}": "LLM {llm} · tools {tool}",
   "首 token 平均 {avg}s": "Avg first token {avg}s",
   "{tps} tok/s": "{tps} tok/s",
@@ -1059,11 +1060,13 @@ const EN_TEXT: Record<string, string> = {
   "已用 {a} / {b} tokens": "{a} / {b} tokens used",
   "(预计本轮后 {n})": "(projected {n} after this turn)",
   "上下文 {p}%": "Context {p}%",
-  "{n} 轮 · {m} 步": "{n} turns · {m} steps",
-  "LLM {d} · 工具 {t}": "LLM {d} · tools {t}",
-  "首 token 平均 {s}s": "first token avg {s}s",
   "缓存命中 {p}%": "cache hit {p}%",
-  "输入 {i} tok · 输出 {o} tok": "in {i} tok · out {o} tok",
+  "Token 用量": "Token usage",
+  "首 token 平均（TTFT）": "Avg time to first token (TTFT)",
+  "工具调用用时": "Tool time",
+  "模型用时": "LLM time",
+  "会话统计": "Session statistics",
+  "{turns} 轮 {steps} 步": "{turns} turns {steps} steps",
   "文件夹": "Folder",
   "文件": "File",
   "移除附件": "Remove attachment",
@@ -3633,7 +3636,9 @@ function buildTurnUsageStat(bucket: TurnUsageBucket, total: number): HTMLElement
       };
       if (bucket.routes.size > 0) addRow(t("提供方 / 模型"), [...bucket.routes].join(", "));
       const promptSide = total - bucket.output;
-      if (bucket.cacheRead > 0 && promptSide > 0) addRow(t("缓存命中"), `${Math.round((bucket.cacheRead / promptSide) * 1000) / 10}%`);
+      // 与网页端一致:部分命中绝不显示成 100%(逐位提高精度)
+      const cacheHit = cacheHitPercentText(bucket.cacheRead, promptSide);
+      if (cacheHit !== null) addRow(t("缓存命中"), `${cacheHit}%`);
       addRow(t("未缓存输入"), bucket.uncachedInput.toLocaleString());
       if (bucket.cacheRead > 0) addRow(t("缓存读取"), bucket.cacheRead.toLocaleString());
       if (bucket.cacheWrite > 0) addRow(t("缓存写入"), bucket.cacheWrite.toLocaleString());
@@ -3662,30 +3667,24 @@ function buildTurnTimeStat(turn: number, bucket: TurnUsageBucket | undefined, ru
       menu.append(title, el("div", "ts-rule"));
       const rows = el("dl", "ts-rows");
       const addRow = (label: string, value: string) => rows.append(el("dt", undefined, label), el("dd", undefined, value));
-      addRow(t("本轮总用时"), formatRunDuration(runMs));
+      addRow(t("本轮总用时"), formatCompactDuration(runMs));
       // 首 token 用时(TTFT)= 回合起点 → 首个文本/推理增量(仅实时回合可测,历史重放无从测得)
       const firstTokenMs = state.turnFirstTokenMs.get(turn);
       const startMs = state.turnStartMs.get(turn);
       if (firstTokenMs !== undefined && startMs !== undefined) {
-        addRow(t("首 token 用时（TTFT）"), t("{seconds}秒", { seconds: formatLatencySeconds(firstTokenMs - startMs) }));
+        addRow(t("首 token 用时（TTFT）"), formatCompactDuration(firstTokenMs - startMs));
       }
       // 输出速度(TPS)= 输出 token / 解码窗口(首个 → 末个增量),与网页端 decodeMs 同源
       const lastDeltaMs = state.turnLastDeltaMs.get(turn);
       if (bucket !== undefined && bucket.output > 0 && firstTokenMs !== undefined && lastDeltaMs !== undefined && lastDeltaMs > firstTokenMs) {
         const tps = bucket.output / ((lastDeltaMs - firstTokenMs) / 1000);
-        addRow(t("输出速度（TPS）"), t("{tps} tok/s", { tps: String(tps >= 10 ? Math.round(tps) : Math.round(tps * 10) / 10) }));
+        addRow(t("输出速度（TPS）"), t("{tps} tok/s", { tps: formatTokensPerSecond(tps) }));
       }
       menu.append(rows);
     });
   });
   wrap.append(btn);
   return wrap;
-}
-
-/** 亚秒级延迟(网页端 formatLatencySeconds 同款):<10 秒保留一位小数,否则取整。 */
-function formatLatencySeconds(ms: number): string {
-  const seconds = Math.max(0, ms) / 1000;
-  return seconds < 10 ? String(Math.round(seconds * 10) / 10) : String(Math.round(seconds));
 }
 
 // ---------- 事件折叠 ----------
@@ -4293,16 +4292,23 @@ function truncateResult(text: string): string {
 
 // ---------- 模式指示芯片(计划模式 / 目标模式) ----------
 
-/** 当前打开的锚定弹层(全局唯一,避免重复堆叠)。 */
+/** 当前打开的锚定弹层(全局唯一,避免重复堆叠)及其关闭回调。 */
 let activePopover: HTMLElement | null = null;
+let activePopoverOnClose: (() => void) | undefined;
 
 function closeActivePopover() {
   activePopover?.remove();
   activePopover = null;
+  const onClose = activePopoverOnClose;
+  activePopoverOnClose = undefined;
+  onClose?.();
 }
 
-/** 在锚点下方打开一个固定定位弹层(挂载到根节点,不受芯片重渲染影响)。 */
-function openAnchoredMenu(anchor: HTMLElement, build: (menu: HTMLElement) => void): HTMLElement {
+/**
+ * 在锚点下方打开一个固定定位弹层(挂载到根节点,不受芯片重渲染影响)。
+ * onClose 在关闭(点击外部 / 被新弹层替换)时回调,用于复位触发按钮的展开态。
+ */
+function openAnchoredMenu(anchor: HTMLElement, build: (menu: HTMLElement) => void, onClose?: () => void): HTMLElement {
   closeActivePopover();
   const menu = el("div", "msg-popover anchored-popover");
   build(menu);
@@ -4316,11 +4322,14 @@ function openAnchoredMenu(anchor: HTMLElement, build: (menu: HTMLElement) => voi
   const height = menu.offsetHeight;
   menu.style.top = `${Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - height - 10))}px`;
   activePopover = menu;
+  activePopoverOnClose = onClose;
   menu.addEventListener("click", (ev) => ev.stopPropagation());
   const close = () => {
     if (activePopover === menu) {
       menu.remove();
       activePopover = null;
+      activePopoverOnClose = undefined;
+      onClose?.();
     }
   };
   setTimeout(() => document.addEventListener("click", close, { once: true }), 0);
@@ -5278,26 +5287,150 @@ function renderStatsLine() {
     const derived = deriveStatsFromEvents(state.rawEvents);
     return derived.steps > 0 ? derived : undefined;
   })();
-  const parts: string[] = [];
-  if (st) {
-    if (typeof st.turns === "number") parts.push(t("{n} 轮 · {m} 步", { n: String(st.turns), m: String(st.steps ?? 0) }));
-    if (typeof st.llmMs === "number") parts.push(t("LLM {d} · 工具 {t}", { d: fmtDuration(st.llmMs), t: fmtDuration(st.toolMs ?? 0) }));
-    if (typeof st.ttftMs === "number" && (st.ttftSteps ?? 0) > 0) parts.push(t("首 token 平均 {s}s", { s: (st.ttftMs / st.ttftSteps! / 1000).toFixed(1) }));
-    if (typeof st.decodeMs === "number" && st.decodeMs > 0 && typeof st.decodeTokens === "number") {
-      parts.push(`${Math.round(st.decodeTokens / (st.decodeMs / 1000))} tok/s`);
-    }
+  const hasStats = st !== undefined && (st.steps ?? 0) > 0;
+  const hasTokens = tu !== undefined && (billedInputTokens(tu) > 0 || Number(tu.outputTokens ?? 0) > 0);
+  statsLine.innerHTML = "";
+  statsLine.hidden = hasStats === false && hasTokens === false;
+  if (!hasStats && !hasTokens) return;
+  // 网页端 StatsPills 同款:两枚胶囊(会话统计 / Token 用量),点击展开明细弹层
+  if (hasStats) statsLine.append(buildSessionStatsPill(st!));
+  if (hasTokens) statsLine.append(buildSessionUsagePill(tu!));
+}
+
+/** 提示词侧计费输入 = 未缓存输入 + 缓存读取 + 缓存写入(网页端 billedInputTokens 同款)。 */
+function billedInputTokens(usage: { uncachedInputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number }): number {
+  return Number(usage.uncachedInputTokens ?? 0) + Number(usage.cacheReadTokens ?? 0) + Number(usage.cacheWriteTokens ?? 0);
+}
+
+/** 紧凑时长(网页端 formatDuration 同款):<60 秒保留一位小数,否则「{m}分{s}秒」。 */
+function formatCompactDuration(ms: number): string {
+  const seconds = Math.max(0, ms) / 1000;
+  if (seconds < 60) return t("{seconds}秒", { seconds: String(Math.round(seconds * 10) / 10) });
+  const whole = Math.round(seconds);
+  return t("{minutes}分{seconds}秒", { minutes: String(Math.floor(whole / 60)), seconds: String(whole % 60) });
+}
+
+/** 解码速度数值(网页端 formatTokensPerSecond 同款):≥10 取整,否则保留一位小数。 */
+function formatTokensPerSecond(tps: number): string {
+  const clamped = Math.max(0, Number.isFinite(tps) ? tps : 0);
+  return clamped >= 10 ? String(Math.round(clamped)) : String(Math.round(clamped * 10) / 10);
+}
+
+/**
+ * 缓存命中占比(网页端 formatCacheHitPercent 同款):四舍五入到整数,
+ * 但**绝不把部分命中显示成 100%** —— 会逐位增加小数位直到显示值小于 100;
+ * 完全没有提示词输入时返回 null。
+ */
+function cacheHitPercentText(cacheReadTokens: number, promptTokens: number): string | null {
+  if (!Number.isFinite(cacheReadTokens) || !Number.isFinite(promptTokens) || promptTokens <= 0) return null;
+  if (promptTokens - cacheReadTokens <= 0) return "100";
+  const ratio = cacheReadTokens / promptTokens;
+  for (let places = 0; places <= 4; places += 1) {
+    const scale = 10 ** places;
+    const rounded = Math.round(ratio * 100 * scale) / scale;
+    if (rounded < 100) return String(rounded);
   }
-  if (tu) {
-    const uncached = tu.uncachedInputTokens ?? 0;
-    const cached = tu.cacheReadTokens ?? 0;
-    const input = uncached + cached;
-    if (input > 0) {
-      if (cached > 0) parts.push(t("缓存命中 {p}%", { p: String(Math.round((cached / input) * 100)) }));
-      parts.push(t("输入 {i} tok · 输出 {o} tok", { i: fmtTokens(input), o: fmtTokens(tu.outputTokens ?? 0) }));
-    }
+  return String(Math.floor(ratio * 100 * 1e4) / 1e4);
+}
+
+/** 统计弹层骨架(网页端 stat-dialog 同款:标题[+ 右侧总量] + 分隔线 + 两列明细)。 */
+function statDialog(menu: HTMLElement, icon: string, title: string, value: string | undefined, rows: [string, string][]) {
+  menu.classList.add("turn-stat-pop");
+  const head = el("div", "ts-title");
+  head.append(lineIcon(icon, 13), el("span", undefined, title));
+  if (value !== undefined) head.append(el("span", "ts-title-value", value));
+  menu.append(head, el("div", "ts-rule"));
+  const list = el("dl", "ts-rows");
+  for (const [label, text] of rows) list.append(el("dt", undefined, label), el("dd", undefined, text));
+  menu.append(list);
+}
+
+/** 会话统计胶囊:仪表盘图标 + 「{n} 轮 {m} 步 · {tps} tok/s」,点击展开模型/工具用时与 TTFT、TPS。 */
+function buildSessionStatsPill(st: {
+  steps?: number; turns?: number; llmMs?: number; toolMs?: number;
+  ttftMs?: number; ttftSteps?: number; decodeMs?: number; decodeTokens?: number;
+}): HTMLElement {
+  const wrap = el("span", "stat-pill");
+  const counts = t("{turns} 轮 {steps} 步", { turns: String(st.turns ?? 0), steps: String(st.steps ?? 0) });
+  const decodeMs = Number(st.decodeMs ?? 0);
+  const tpsText = decodeMs > 0 ? t("{tps} tok/s", { tps: formatTokensPerSecond(Number(st.decodeTokens ?? 0) / (decodeMs / 1000)) }) : null;
+  const label = el("span", "stat-pill-label");
+  label.append(el("span", undefined, counts));
+  if (tpsText !== null) label.append(el("span", "stat-pill-sep", "·"), el("span", undefined, tpsText));
+  const detailed = Number(st.llmMs ?? 0) > 0 || Number(st.toolMs ?? 0) > 0 || Number(st.ttftSteps ?? 0) > 0 || decodeMs > 0;
+  if (!detailed) {
+    // 无耗时数据:与网页端一致,渲染为不可点开的静态胶囊
+    const plain = el("span", "stat-pill-static");
+    plain.append(lineIcon(ICONS.gauge, 13), label);
+    wrap.append(plain);
+    return wrap;
   }
-  statsLine.textContent = parts.join(" | ");
-  statsLine.hidden = parts.length === 0;
+  const btn = el("button", "stat-pill-btn") as HTMLButtonElement;
+  btn.type = "button";
+  btn.title = t("会话统计");
+  btn.append(lineIcon(ICONS.gauge, 13), label);
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openAnchoredMenu(
+      btn,
+      (menu) => {
+        const rows: [string, string][] = [];
+        if (Number(st.llmMs ?? 0) > 0) rows.push([t("模型用时"), formatCompactDuration(Number(st.llmMs))]);
+        if (Number(st.toolMs ?? 0) > 0) rows.push([t("工具调用用时"), formatCompactDuration(Number(st.toolMs))]);
+        if (Number(st.ttftSteps ?? 0) > 0) rows.push([t("首 token 平均（TTFT）"), formatCompactDuration(Number(st.ttftMs ?? 0) / Number(st.ttftSteps))]);
+        if (decodeMs > 0) rows.push([t("输出速度（TPS）"), t("{tps} tok/s", { tps: formatTokensPerSecond(Number(st.decodeTokens ?? 0) / (decodeMs / 1000)) })]);
+        statDialog(menu, ICONS.gauge, t("会话统计"), undefined, rows);
+      },
+      () => setStatPillOpen(btn, false),
+    );
+    setStatPillOpen(btn, true);
+  });
+  wrap.append(btn);
+  return wrap;
+}
+
+/** Token 用量胶囊:数据库图标 + 「71M tok · 缓存命中 99.6%」,点击展开精确明细。 */
+function buildSessionUsagePill(usage: {
+  uncachedInputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number; outputTokens?: number;
+}): HTMLElement {
+  const wrap = el("span", "stat-pill");
+  const billed = billedInputTokens(usage);
+  const output = Number(usage.outputTokens ?? 0);
+  const total = billed + output;
+  const cacheHit = cacheHitPercentText(Number(usage.cacheReadTokens ?? 0), billed);
+  const exact = (value: number) => `${Math.round(value).toLocaleString()} tok`;
+  const label = el("span", "stat-pill-label");
+  label.append(el("span", undefined, `${fmtCompactTokens(total)} tok`));
+  if (cacheHit !== null) label.append(el("span", "stat-pill-sep", "·"), el("span", undefined, t("缓存命中 {p}%", { p: cacheHit })));
+  const btn = el("button", "stat-pill-btn") as HTMLButtonElement;
+  btn.type = "button";
+  btn.title = t("Token 用量");
+  btn.append(lineIcon(ICONS.database, 13), label);
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openAnchoredMenu(
+      btn,
+      (menu) => {
+        const rows: [string, string][] = [];
+        if (cacheHit !== null) rows.push([t("缓存命中"), `${cacheHit}%`]);
+        rows.push([t("未缓存输入"), exact(Number(usage.uncachedInputTokens ?? 0))]);
+        rows.push([t("缓存读取"), exact(Number(usage.cacheReadTokens ?? 0))]);
+        if (Number(usage.cacheWriteTokens ?? 0) !== 0) rows.push([t("缓存写入"), exact(Number(usage.cacheWriteTokens))]);
+        rows.push([t("输出"), exact(output)]);
+        statDialog(menu, ICONS.database, t("Token 用量"), exact(total), rows);
+      },
+      () => setStatPillOpen(btn, false),
+    );
+    setStatPillOpen(btn, true);
+  });
+  wrap.append(btn);
+  return wrap;
+}
+
+/** 同步胶囊的展开态(样式 + 无障碍属性),关闭弹层时复位。 */
+function setStatPillOpen(btn: HTMLElement, open: boolean) {
+  btn.classList.toggle("open", open);
+  btn.setAttribute("aria-expanded", String(open));
 }
 
 // ---------- 附件行 ----------

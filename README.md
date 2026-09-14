@@ -6,7 +6,7 @@
 > npx @deepseek-ai/dsh web
 > ```
 
-[中文版](#chinese) | Publisher: Jager · Latest: 0.13.16
+[中文版](#chinese) | Publisher: Jager · Latest: 0.13.17
 
 Use [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) directly in VS Code, alongside ChatGPT / Copilot: the built-in `@dsh` chat participant, secondary sidebar / standalone chat windows, workspaces / jobs / trajectory / settings panels, turn-level Git rollback, and a **multi-language UI** (简体中文 / 繁體中文 / English / 日本語 / 한국어 / Deutsch / Français / Español / Português / ไทย / Bahasa Indonesia / Türkçe / Русский / العربية — follows the VS Code display language or switch manually).
 
@@ -17,7 +17,7 @@ Use [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) 
 - **Built-in chat participant `@dsh`**: type `@` in the native Chat panel (Ctrl+Alt+I); streamed replies with tool calls and approval buttons; slash commands `/new`, `/session <ID>`, `/preset <name>`.
 - **Secondary sidebar tab**: container appears in the Secondary Side Bar on VS Code ≥ 1.106 (falls back to the Activity Bar on older versions).
 - **Standalone chat window**: `DSH: Open Standalone Chat Window`.
-- **Modern chat UI**: large rounded input box, pill toolbar (thinking depth / model / preset / permission), session stats line (turns · steps · LLM/tool time · first token · tok/s · cache hit · in/out tokens), and a **context meter ring** at the top-right of the input box, right of the preset pill (web parity: click for "context used", the ~used / window reading, and the system-prompt / tool-definition / conversation breakdown with colour-coded bar segments and per-category token counts).
+- **Modern chat UI**: large rounded input box, pill toolbar (thinking depth / model / preset / permission), and a **context meter ring** at the top-right of the input box, right of the preset pill (web parity: click for "context used", the ~used / window reading, and the system-prompt / tool-definition / conversation breakdown with colour-coded bar segments and per-category token counts). Below the input box sit two **session statistic pills** (web parity): `4 turns 285 steps · 267 tok/s` (click for session statistics — LLM time, tool time, average TTFT, output TPS) and `71M tok · 99.6% cache hit` (click for token usage — exact total, cache hit, uncached input, cache read/write, output).
 - **Per-message actions** (minimal line icons): copy (double-rectangle icon) / branch (forked line icon; menu: counter-clockwise arrow "Rewind here" · forked icon "Branch from here" · up-left fold "Branch and rewind earlier" · up-left arrow "Back to main") / thumbs up/down (line icons, official `/feedback`) / message header shows model · thinking time · per-step tokens.
 - **Turn footer stats** (web parity): a `Usage 25.8K tok` pill (click for provider/model, cache hit rate, uncached input, cache read/write, output with reasoning share), a `Ran for 5m 57s` pill (click for total turn time, output TPS, time to first token), and the local clock of the closing message at the row's right end (`HH:mm`, `M/D HH:mm` for earlier days, `Y-M-D HH:mm` for other years). While the session is running, an earlier turn's action row and stats stay hidden and fade in on hover (only the settled latest turn shows them) — the web's `data-actions-reveal` behaviour.
 - **Step timeline** (web ToolRow / ThinkRow parity): thinking and tool calls render as one-line process rows on a left rail — `思考 • <first line>` (expanded while it streams, collapsed once thinking ends, manual toggles preserved) and `Read/Write/Pwsh/Grep • <human summary>` with a status dot, a running sweep animation, and the full arguments/result (plus image results) behind a click. Long JSON no longer floods the row.
@@ -133,7 +133,7 @@ npm run package     # → Releases/
 > npx @deepseek-ai/dsh web
 > ```
 
-[English version](#) | 发布者:Jager · 最新版本:0.13.16
+[English version](#) | 发布者:Jager · 最新版本:0.13.17
 
 在 VS Code 中直接使用 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)(`dsh`),与 ChatGPT / Copilot 一样融入 VS Code 聊天体系:内置聊天参与者 `@dsh`、辅助侧栏 / 独立聊天窗口、工作区 / 后台任务 / 轨迹 / 设置面板、回合级 Git 回退,以及**多语言界面**(简体中文 / 繁體中文 / English / 日本語 / 한국어 / Deutsch / Français / Español / Português / ไทย / Bahasa Indonesia / Türkçe / Русский / العربية,跟随 VS Code 显示语言或手动切换)。
 
@@ -142,7 +142,7 @@ npm run package     # → Releases/
 - **内置聊天参与者 `@dsh`**:VS Code 原生 Chat 面板(Ctrl+Alt+I)输入 `@` 选择 `dsh`;助手回复流式渲染,含工具调用与审批按钮;支持 `/new`、`/session <ID>`、`/preset <名>` 斜杠命令。
 - **辅助侧栏子 tab**:VS Code ≥ 1.106 时容器直接出现在辅助侧栏(与 ChatGPT 等并列);旧版本自动回退到活动栏图标。
 - **独立聊天窗口**:编辑器区 WebviewPanel,命令 `DSH: 打开独立聊天窗口`。
-- **现代聊天界面**:大号圆角输入框、胶囊工具栏(思考深度 / 模型 / 预设 / 权限)、会话统计行(轮数 · 步骤 · LLM/工具耗时 · 首 token · tok/s · 缓存命中 · 输入/输出 token),以及输入框右上角、预设胶囊右侧的**上下文进度环**(与网页端一致:点击展开「上下文已用」读数 ~已用 / 上限,以及 系统提示词 / 工具定义 / 对话消息 三段彩色构成与各自 token 数)。
+- **现代聊天界面**:大号圆角输入框、胶囊工具栏(思考深度 / 模型 / 预设 / 权限),以及输入框右上角、预设胶囊右侧的**上下文进度环**(与网页端一致:点击展开「上下文已用」读数 ~已用 / 上限,以及 系统提示词 / 工具定义 / 对话消息 三段彩色构成与各自 token 数)。输入框下方是两枚**会话统计胶囊**(与网页端一致):`4 轮 285 步 · 267 tok/s`(点击展开 会话统计:模型用时 · 工具调用用时 · 首 token 平均 TTFT · 输出速度 TPS)与 `71M tok · 缓存命中 99.6%`(点击展开 Token 用量:精确总量 · 缓存命中 · 未缓存输入 · 缓存读取/写入 · 输出)。
 - **消息操作条**(每条回答下方,简约线条图标):复制(双层矩形图标)/ 分支(分叉线条图标,点击展开菜单:逆时针箭头"回退到此处" · 分叉图标"从此处新建分支" · 左上折线"分支并回退到更早位置" · 左上箭头"回到主线")/ 点赞、点踩(拇指线条图标,官方 `/feedback` 记录)/ 消息头显示模型名 · 思考耗时 · 本步 token 消耗。
 - **回合尾统计**(与网页端一致):`用量 25.8K tok` 胶囊(点击展开 提供方/模型 · 缓存命中率 · 未缓存输入 · 缓存读取/写入 · 输出(含推理占比))、`用时 5分57秒` 胶囊(点击展开 本轮总用时 · 输出速度 TPS · 首 token 用时 TTFT),最右侧显示收尾消息的本地时间(当天 `HH:mm`,更早 `M月D日 HH:mm`,跨年 `Y年M月D日 HH:mm`)。**会话运行中,历史回合的操作条与统计默认隐藏、悬停该条消息才淡入**(网页端 `data-actions-reveal` 同款),只有已结束的最新回合常显。
 - **过程时间线**(与网页端 ToolRow / ThinkRow 一致):思考与工具调用渲染为左侧导轨上的一行——`思考 • <首行摘要>`(流式期间展开,思考结束自动收起,手动开合会被保留)与 `读取 / 写入 / Pwsh / Grep • <人类可读摘要>`(状态点 + 运行中扫光),点击展开完整参数/结果(含图片结果);不再把整段 JSON 铺在行上。

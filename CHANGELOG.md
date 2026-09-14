@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.17
+- Bottom session totals now match the web StatsPills: two pills under the composer — `{turns} turns {steps} steps · {tps} tok/s` and `{total} tok · {hit}% cache hit` — each opening a stat dialog on click (session statistics: LLM time, tool time, average TTFT, output TPS; token usage: exact total, cache hit, uncached input, cache read/write, output); a partial cache hit is never rounded up to 100% (precision grows until the shown value stays honest), and the old single plain-text stats line is gone
+- 底部会话总量与网页端 StatsPills 对齐:输入框下方改为两枚胶囊 —— `{轮} 轮 {步} 步 · {tps} tok/s` 与 `{总量} tok · 缓存命中 {p}%`,点击分别展开「会话统计」(模型用时 / 工具调用用时 / 首 token 平均 TTFT / 输出速度 TPS)与「Token 用量」(精确总量 / 缓存命中 / 未缓存输入 / 缓存读取/写入 / 输出);部分命中不再被四舍五入成 100%(自动提高精度),原来那行纯文本统计已移除
+
 ## 0.13.16
 - Header toolbar buttons now follow the VS Code theme instead of the primary-button blue: transparent background, `icon.foreground` icon color, `toolbar.hoverBackground` / `toolbar.activeBackground` on hover and press, 5px radius and a focus ring — no more solid blue chips clashing with the editor UI (light, dark and high-contrast themes all follow automatically); dialog confirm buttons and the send button keep their accent fill
 - 头部工具按钮改为跟随 VS Code 主题,不再沿用主按钮蓝:透明底 + icon.foreground 图标色 + 悬停/按下用 toolbar.hoverBackground / toolbar.activeBackground + 5px 圆角 + 焦点圈,整排实心蓝按钮不再与编辑器界面冲突(浅色 / 深色 / 高对比主题自动跟随);对话框确认按钮与发送按钮仍保留强调色

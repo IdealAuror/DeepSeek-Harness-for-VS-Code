@@ -390,6 +390,85 @@ const wire = (event) => ({ event });
   );
 }
 
+// ---------- 11. 会话统计胶囊(网页端 StatsPills 同款):总量 + 点击展开明细 ----------
+{
+  const { window, document, post } = boot();
+  // 与网页端截图同源的投影:4 轮 285 步 / 71,010,432 tok / 缓存命中 99.6%
+  post({
+    kind: "stats",
+    value: {
+      sessionStats: { turns: 4, steps: 285, llmMs: 1_461_000, toolMs: 3_151_000, ttftMs: 4_840, ttftSteps: 2, decodeMs: 827_000, decodeTokens: 220_800 },
+      tokenUsage: { uncachedInputTokens: 251_298, cacheReadTokens: 70_537_984, cacheWriteTokens: 0, outputTokens: 221_150 },
+    },
+  });
+  const line = document.querySelector(".stats-line");
+  const pills = [...document.querySelectorAll(".stats-line .stat-pill")];
+  check("底部渲染两枚统计胶囊", pills.length === 2, `pills=${pills.length}`);
+  check("统计栏可见", line?.hidden === false, String(line?.hidden));
+  const statsBtn = pills[0]?.querySelector(".stat-pill-btn");
+  const usageBtn = pills[1]?.querySelector(".stat-pill-btn");
+  check(
+    "会话统计胶囊文案 =「4 轮 285 步 · 267 tok/s」",
+    statsBtn?.textContent === "4 轮 285 步·267 tok/s",
+    JSON.stringify(statsBtn?.textContent),
+  );
+  check(
+    "Token 胶囊文案 =「71M tok · 缓存命中 99.6%」",
+    usageBtn?.textContent === "71M tok·缓存命中 99.6%",
+    JSON.stringify(usageBtn?.textContent),
+  );
+
+  // 点击会话统计胶囊 → 明细弹层
+  statsBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  let pop = document.querySelector(".turn-stat-pop");
+  check("点击后弹出统计弹层", pop !== null);
+  check("弹层标题为「会话统计」", pop?.querySelector(".ts-title")?.textContent === "会话统计", pop?.querySelector(".ts-title")?.textContent);
+  const readRows = (panel) => {
+    const dts = [...(panel?.querySelectorAll(".ts-rows dt") ?? [])];
+    const dds = [...(panel?.querySelectorAll(".ts-rows dd") ?? [])];
+    return dts.map((dt, i) => `${dt.textContent}=${dds[i]?.textContent}`).join(" | ");
+  };
+  check(
+    "统计明细:模型用时 / 工具调用用时 / TTFT / TPS",
+    readRows(pop) === "模型用时=24分21秒 | 工具调用用时=52分31秒 | 首 token 平均（TTFT）=2.4秒 | 输出速度（TPS）=267 tok/s",
+    readRows(pop),
+  );
+  check("展开态 aria-expanded=true", statsBtn.getAttribute("aria-expanded") === "true", statsBtn.getAttribute("aria-expanded"));
+
+  // 点击 Token 胶囊 → 用量明细(标题右侧为精确总量,明细为精确值)
+  usageBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  pop = document.querySelector(".turn-stat-pop");
+  check("弹层标题为「Token 用量」", pop?.querySelector(".ts-title")?.textContent?.startsWith("Token 用量") === true, pop?.querySelector(".ts-title")?.textContent);
+  check(
+    "标题右侧为精确总量(千分位)",
+    pop?.querySelector(".ts-title-value")?.textContent === "71,010,432 tok",
+    pop?.querySelector(".ts-title-value")?.textContent,
+  );
+  check(
+    "用量明细:缓存命中 / 未缓存输入 / 缓存读取 / 输出",
+    readRows(pop) === "缓存命中=99.6% | 未缓存输入=251,298 tok | 缓存读取=70,537,984 tok | 输出=221,150 tok",
+    readRows(pop),
+  );
+
+  // 无数据时整行隐藏
+  const empty = boot();
+  empty.post({ kind: "stats", value: {} });
+  check("无统计时底部隐藏", empty.document.querySelector(".stats-line")?.hidden === true, String(empty.document.querySelector(".stats-line")?.hidden));
+}
+
+// ---------- 12. 缓存命中绝不把部分命中显示成 100%(网页端 formatCacheHitPercent 同款) ----------
+{
+  const { document, post } = boot();
+  const percent = (cacheRead, uncached) => {
+    post({ kind: "stats", value: { tokenUsage: { uncachedInputTokens: uncached, cacheReadTokens: cacheRead, cacheWriteTokens: 0, outputTokens: 100 } } });
+    const text = document.querySelector(".stats-line .stat-pill-btn .stat-pill-label")?.textContent ?? "";
+    return text.split("·").pop() ?? "";
+  };
+  check("部分命中 99.6% 不被进位成 100%", percent(996, 4) === "缓存命中 99.6%", percent(996, 4));
+  check("极接近 100% 时提高精度", percent(999_999, 1) === "缓存命中 99.9999%", percent(999_999, 1));
+  check("完全命中显示 100%", percent(1000, 0) === "缓存命中 100%", percent(1000, 0));
+}
+
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} 通过`);
 if (failed.length > 0) {

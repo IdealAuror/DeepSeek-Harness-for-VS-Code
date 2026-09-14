@@ -68,7 +68,6 @@
   "完整历史请到 DSH 网页版查看": "Voir l'historique complet dans l'interface DSH web",
   "子代理最近回复": "Dernière réponse du sous-agent",
   "上下文 {pct}%": "Contexte {pct}%",
-  "{turns} 轮 · {steps} 步": "{turns} tours · {steps} étapes",
   "LLM {llm} · 工具 {tool}": "LLM {llm} · outils {tool}",
   "首 token 平均 {avg}s": "Délai moyen du premier token {avg}s",
   "{tps} tok/s": "{tps} tok/s",
@@ -280,11 +279,7 @@
   "已用 {a} / {b} tokens": "{a} / {b} tokens utilisés",
   "(预计本轮后 {n})": "({n} prévu après ce tour)",
   "上下文 {p}%": "Contexte {p}%",
-  "{n} 轮 · {m} 步": "{n} tours · {m} étapes",
-  "LLM {d} · 工具 {t}": "LLM {d} · outils {t}",
-  "首 token 平均 {s}s": "délai moyen du premier token {s}s",
   "缓存命中 {p}%": "hit du cache {p}%",
-  "输入 {i} tok · 输出 {o} tok": "entrée {i} tok · sortie {o} tok",
   "文件夹": "Dossier",
   "文件": "Fichier",
   "移除附件": "Retirer la pièce jointe",
@@ -544,5 +539,11 @@
   "点击展开压缩摘要": "Cliquez pour afficher le résumé de compression",
   "压缩摘要不可用": "Résumé de compression indisponible",
   "命令": "Commande",
-  "立即执行 /compact;压缩进度显示在对话中": "Exécuter /compact immédiatement ; la progression s'affiche dans la conversation"
+  "立即执行 /compact;压缩进度显示在对话中": "Exécuter /compact immédiatement ; la progression s'affiche dans la conversation",
+  "{turns} 轮 {steps} 步": "{turns} tours {steps} étapes",
+  "会话统计": "Statistiques de session",
+  "模型用时": "Temps du modèle",
+  "工具调用用时": "Temps des outils",
+  "首 token 平均（TTFT）": "Temps moyen jusqu'au premier token (TTFT)",
+  "Token 用量": "Utilisation des tokens"
 }

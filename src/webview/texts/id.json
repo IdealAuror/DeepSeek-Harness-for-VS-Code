@@ -68,7 +68,6 @@
   "完整历史请到 DSH 网页版查看": "Lihat riwayat lengkap di GUI web DSH",
   "子代理最近回复": "Balasan terbaru subagen",
   "上下文 {pct}%": "Konteks {pct}%",
-  "{turns} 轮 · {steps} 步": "{turns} giliran · {steps} langkah",
   "LLM {llm} · 工具 {tool}": "LLM {llm} · alat {tool}",
   "首 token 平均 {avg}s": "Rata-rata token pertama {avg}s",
   "{tps} tok/s": "{tps} tok/s",
@@ -280,11 +279,7 @@
   "已用 {a} / {b} tokens": "{a} / {b} token digunakan",
   "(预计本轮后 {n})": "(diproyeksikan {n} setelah giliran ini)",
   "上下文 {p}%": "Konteks {p}%",
-  "{n} 轮 · {m} 步": "{n} giliran · {m} langkah",
-  "LLM {d} · 工具 {t}": "LLM {d} · alat {t}",
-  "首 token 平均 {s}s": "rata-rata token pertama {s}s",
   "缓存命中 {p}%": "cache hit {p}%",
-  "输入 {i} tok · 输出 {o} tok": "masuk {i} tok · keluar {o} tok",
   "文件夹": "Folder",
   "文件": "File",
   "移除附件": "Hapus lampiran",
@@ -544,5 +539,11 @@
   "点击展开压缩摘要": "Klik untuk melihat ringkasan pemadatan",
   "压缩摘要不可用": "Ringkasan pemadatan tidak tersedia",
   "命令": "Perintah",
-  "立即执行 /compact;压缩进度显示在对话中": "Jalankan /compact segera; kemajuan tampil di percakapan"
+  "立即执行 /compact;压缩进度显示在对话中": "Jalankan /compact segera; kemajuan tampil di percakapan",
+  "{turns} 轮 {steps} 步": "{turns} giliran {steps} langkah",
+  "会话统计": "Statistik sesi",
+  "模型用时": "Waktu model",
+  "工具调用用时": "Waktu panggilan alat",
+  "首 token 平均（TTFT）": "Rata-rata waktu token pertama (TTFT)",
+  "Token 用量": "Penggunaan token"
 }
