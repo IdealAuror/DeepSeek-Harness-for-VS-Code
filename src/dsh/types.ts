@@ -1,6 +1,22 @@
 /**
- * DSH Web API 的 wire 类型(对齐 @deepseek-ai/dsh 0.1.5-rc.1 的 Typert Remote 契约,
- * 同时兼容 0.1.2-rc.1 的参数名差异)。
+ * DSH Web API 的 wire 类型(对齐 @deepseek-ai/dsh 0.1.7-rc.2 的 Typert Remote 契约,
+ * 同时兼容 0.1.5-rc.1 与 0.1.2-rc.1 的参数名/端点差异)。
+ *
+ * 0.1.5-rc.1 → 0.1.7-rc.2 与本扩展相关的契约变化(已按已发布包逐一核对端点/流/事件):
+ * - 信封与流派不变:POST /api/<ns>/<method> 仍是 {type:"client-request",rpcId,method,payload},
+ *   一元载荷恒为恰好一个字段 { args: {...} };remote.mux 仍是
+ *   session/follow / session/control / workspace/follow / $events + $events/result;
+ * - 移除 subagents/list:子代理台账改由 session/list 的 subagentCatalog + session/page 地址分页提供;
+ * - 移除 settings/openAgentPresetDirectory 与 agentPresets/copy|deletePreset:
+ *   预设作者能力只剩 agentPresets/list|read|select(预设文件由客户端自行落盘);
+ * - 新增 schedule/*(定时任务:list 按会话、catalog 全局、delete 按会话、history 运行记录)
+ *   与 $events 的 schedule/changed 失效通知;
+ * - 新增 messageFeedback/*(逐消息点赞/点踩,put 用 ifVersion 做 CAS)、
+ *   sessionFeedback/record(会话级反馈,取代 /feedback 命令);
+ * - 新增 permissionPresets/catalog(进程级权限预设目录)、goals/get、session/projections|fork|rename
+ *   等端点(部分在 0.1.5 已可用);
+ * - 会话日志格式升到 V4(宿主在读取时迁移;wire 上的 SessionWireEvent 仍是
+ *   {type,seq,time,data} 泛型信封,新增 developer/message 与 tool-addition/removal 块)。
  *
  * 0.1.2-rc.1 → 0.1.5-rc.1 与本扩展相关的契约变化(已按发布包逐一核对端点/流/事件):
  * - commands/execute 第三参数 images → submittedAttachments;commands/list 描述符
@@ -500,6 +516,179 @@ export interface CreateGoalRequest {
 
 export interface CreateGoalResult {
   ref: GoalRef;
+}
+
+// ---------- 定时任务(schedule/*;0.1.7 新增,需宿主启用定时任务插件) ----------
+
+/** 一次性任务的相对延迟规则。 */
+export interface ScheduleAfterRecord {
+  id: string;
+  kind: "after";
+  title: string;
+  prompt: string;
+  afterSeconds: number;
+  scheduledAt: string;
+}
+
+/** 一次性任务的绝对时刻规则。 */
+export interface ScheduleAtRecord {
+  id: string;
+  kind: "at";
+  title: string;
+  prompt: string;
+  scheduledAt: string;
+}
+
+/** 固定间隔重复规则(最短 1 分钟)。 */
+export interface ScheduleEveryRecord {
+  id: string;
+  kind: "every";
+  title: string;
+  prompt: string;
+  everySeconds: number;
+  scheduledAt: string;
+}
+
+/** 每日墙钟规则(带显式 IANA 时区)。 */
+export interface ScheduleDailyRecord {
+  id: string;
+  kind: "daily";
+  title: string;
+  prompt: string;
+  time: string;
+  timeZone: string;
+  scheduledAt: string;
+}
+
+/** 每周墙钟规则(ISO 星期 1-7)。 */
+export interface ScheduleWeeklyRecord {
+  id: string;
+  kind: "weekly";
+  title: string;
+  prompt: string;
+  time: string;
+  timeZone: string;
+  weekdays: number[];
+  scheduledAt: string;
+}
+
+/** 五字段 cron 规则(带显式 IANA 时区)。 */
+export interface ScheduleCronRecord {
+  id: string;
+  kind: "cron";
+  title: string;
+  prompt: string;
+  expression: string;
+  timeZone: string;
+  scheduledAt: string;
+}
+
+export type ScheduleRecord =
+  | ScheduleAfterRecord
+  | ScheduleAtRecord
+  | ScheduleEveryRecord
+  | ScheduleDailyRecord
+  | ScheduleWeeklyRecord
+  | ScheduleCronRecord;
+
+/** 已投递到会话收件箱的一条记录(时间与消息 id)。 */
+export interface ScheduleDeliveryReceipt {
+  scheduledAt: string;
+  deliveredAt: string;
+  messageId: string;
+}
+
+/** 运行记录(含当次发送的提示词;旧记录可能没有 prompt)。 */
+export interface ScheduleDeliveryRecord extends ScheduleDeliveryReceipt {
+  prompt?: string;
+}
+
+/** 浏览器可见的保留任务:catalog 条目额外带绑定会话与状态。 */
+export type ScheduleCatalogEntry = ScheduleRecord & {
+  sessionId: string;
+  status: "active" | "inactive";
+  lastDelivery?: ScheduleDeliveryReceipt;
+};
+
+/** schedule/history 请求(limit 1-100;before 为上一页最旧消息 id)。 */
+export interface ScheduleHistoryRequest {
+  sessionId: string;
+  id: string;
+  limit: number;
+  before?: string;
+}
+
+export type ScheduleHistoryValue =
+  | {
+      id: string;
+      records: ScheduleDeliveryRecord[];
+      earlierRecordsUnavailable: boolean;
+      earlierRecordsPruned: boolean;
+      retention: { days: number; records: number };
+      nextBefore?: string;
+    }
+  | { id: string; code: "schedule_not_found" | "delivery_cursor_not_found" };
+
+export interface ScheduleDeleteValue {
+  id: string;
+  deleted: boolean;
+  code?: "schedule_not_found";
+}
+
+// ---------- 逐消息反馈(messageFeedback/*;0.1.7 新增) ----------
+
+export type MessageFeedbackRating = "positive" | "negative";
+
+/** 固定反馈分类(与宿主 FEEDBACK_CATEGORIES 一致)。 */
+export type FeedbackCategory =
+  | "task-result"
+  | "instruction-following"
+  | "product-interaction"
+  | "service-stability"
+  | "resource-cost"
+  | "security-privacy-permission"
+  | "other";
+
+export interface MessageFeedbackItem {
+  messageId: string;
+  rating: MessageFeedbackRating;
+  note?: string;
+  category?: FeedbackCategory;
+  version: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** 反馈操作的成功/业务失败联合(宿主返回 {ok:true,value} / {ok:false,error})。 */
+export type MessageFeedbackListResult =
+  | { ok: true; value: { items: MessageFeedbackItem[] } }
+  | { ok: false; error: { code: string; [key: string]: unknown } };
+
+export type MessageFeedbackPutResult =
+  | { ok: true; value: MessageFeedbackItem }
+  | { ok: false; error: { code: string; current?: MessageFeedbackItem | null; [key: string]: unknown } };
+
+export type MessageFeedbackDeleteResult =
+  | { ok: true; value: { absent: true } }
+  | { ok: false; error: { code: string; [key: string]: unknown } };
+
+/** 会话级反馈(sessionFeedback/record,取代 /feedback 命令)。 */
+export type SessionFeedbackRecordResult =
+  | { ok: true; value: { recorded: true } }
+  | { ok: false; error: { code: string; sessionId: string } };
+
+// ---------- 权限预设目录(permissionPresets/catalog;0.1.5 起可用) ----------
+
+export interface PermissionPresetOption {
+  value: string;
+  name: string;
+  description?: string;
+}
+
+export interface PermissionCatalog {
+  options: PermissionPresetOption[];
+  defaultOptions: PermissionPresetOption[];
+  defaultPreset: string;
 }
 
 // ---------- 流式传输(remote.mux) ----------

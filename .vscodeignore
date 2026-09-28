@@ -21,6 +21,7 @@ plan-*.json
 plan-*.mjs
 Releases/**
 src/**
+tmp/**
 node_modules/**
 esbuild.mjs
 tsconfig.json

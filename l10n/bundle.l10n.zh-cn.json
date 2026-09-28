@@ -104,7 +104,6 @@
   "commit.pickRepo": "选择 git 仓库",
   "commit.diffTruncated": "diff 已截断",
   "commit.done": "DSH: 提交信息已生成,确认后即可提交",
-  "commit.empty": "DSH: 模型未返回有效提交信息",
   "commit.cancelled": "DSH: 已取消生成提交信息",
   "commit.timeout": "DSH: 生成超时,请求已取消",
   "commit.interrupted": "DSH: 模型请求了额外交互(此处不支持),已取消",
@@ -184,5 +183,12 @@
   "server.updating": "正在升级 DSH 服务器(下载 @deepseek-ai/dsh@latest)…",
   "server.updateFailed": "DSH 服务器升级失败,详情见输出日志。",
   "server.updated": "DSH 服务器已升级并重新启动。",
-  "server.updateRestartFailed": "DSH 服务器已升级,但重启失败:{message}"
+  "server.updateRestartFailed": "DSH 服务器已升级,但重启失败:{message}",
+  "notice.feedbackConflict": "反馈已被其他界面修改,已重新载入最新值;请重新评价。",
+  "notice.feedbackFailed": "记录反馈失败: {error}",
+  "notice.presetAuthoringGone": "该宿主的预设由 Cordis 组合声明,不再提供本地预设作者能力(复制 / 删除 / 打开目录);仍可在设置中查看组合文本。",
+  "commit.diffStaged": "已暂存改动(index vs HEAD)",
+  "commit.diffUnstaged": "未暂存改动(工作区 vs index)",
+  "commit.onlyUntracked": "DSH:没有可生成的内容——有 {n} 个未跟踪文件不属于 git diff,请先 git add 后重试。",
+  "commit.empty": "DSH: 模型未返回有效提交信息(回合结束原因:{reason},事件 {events} 条,助手消息 {messages} 条)。"
 }

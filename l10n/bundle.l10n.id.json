@@ -102,7 +102,6 @@
   "commit.pickRepo": "Pilih repositori git",
   "commit.diffTruncated": "diff terpotong",
   "commit.done": "DSH: pesan commit dibuat — tinjau lalu commit",
-  "commit.empty": "DSH: model tidak mengembalikan pesan commit",
   "commit.cancelled": "DSH: pembuatan pesan commit dibatalkan",
   "commit.timeout": "DSH: pembuatan melebihi batas waktu dan permintaan dibatalkan",
   "commit.interrupted": "DSH: model meminta interaksi tambahan, yang tidak didukung di sini — dibatalkan",
@@ -184,5 +183,12 @@
   "server.updated": "Server DSH diperbarui dan dimulai ulang.",
   "server.updateRestartFailed": "Server DSH diperbarui, tetapi mulai ulang gagal:{message}",
   "notice.permissionBusy": "Ada turn yang sedang berjalan: praset izin akan berlaku pada turn berikutnya; coba lagi saat sesi menganggur.",
-  "hub.modelNoImages": "Model saat ini \"{model}\" tidak mendukung masukan gambar: hapus lampiran gambar, atau beralih ke model yang mendukung gambar lewat tombol model di kanan atas kotak masukan."
+  "hub.modelNoImages": "Model saat ini \"{model}\" tidak mendukung masukan gambar: hapus lampiran gambar, atau beralih ke model yang mendukung gambar lewat tombol model di kanan atas kotak masukan.",
+  "notice.feedbackConflict": "Umpan balik diubah di tempat lain; nilai terbaru telah dimuat ulang. Silakan menilai lagi.",
+  "notice.feedbackFailed": "Gagal mencatat umpan balik: {error}",
+  "notice.presetAuthoringGone": "Praset host ini dideklarasikan melalui komposisi Cordis; penulisan praset lokal (salin / hapus / buka folder) tidak lagi tersedia. Teks komposisi masih dapat dilihat di Pengaturan.",
+  "commit.diffStaged": "perubahan ter-staged (index vs HEAD)",
+  "commit.diffUnstaged": "perubahan belum ter-staged (working tree vs index)",
+  "commit.onlyUntracked": "DSH: tidak ada yang bisa dibuat — {n} berkas tak terlacak tidak termasuk dalam git diff. Jalankan git add lalu coba lagi.",
+  "commit.empty": "DSH: model tidak mengembalikan pesan commit yang valid (akhir turn: {reason}, {events} peristiwa, {messages} pesan asisten)."
 }

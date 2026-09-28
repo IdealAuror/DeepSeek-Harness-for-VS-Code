@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none"
+     stroke="#C5C5C5" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+  <!--
+    侧栏图标:线条机器人(与扩展头部工具栏的 ICONS.robot 同一造型语言)。
+    stroke 用中性灰仅作占位 —— 容器图标由 VS Code 按 alpha 蒙版 + 主题图标色重绘,
+    视图标题图标则跟随标题前景色,因此浅色 / 深色 / 高对比主题下都自动适配。
+  -->
+  <rect x="3.6" y="7" width="16.8" height="12.2" rx="2.8"/>
+  <path d="M12 7V2.8"/>
+  <path d="M10.1 12.4v2.6"/>
+  <path d="M13.9 12.4v2.6"/>
+</svg>

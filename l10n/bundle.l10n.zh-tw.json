@@ -104,7 +104,6 @@
   "commit.pickRepo": "選取 git 存放庫",
   "commit.diffTruncated": "diff 已截斷",
   "commit.done": "DSH: 已產生提交訊息 — 請檢視後提交",
-  "commit.empty": "DSH: 模型未傳回提交訊息",
   "commit.cancelled": "DSH: 已取消產生提交訊息",
   "commit.timeout": "DSH: 產生逾時,要求已取消",
   "commit.interrupted": "DSH: 模型要求額外互動,但此處不支援 — 已取消",
@@ -184,5 +183,12 @@
   "server.updating": "正在升級 DSH 伺服器(下載 @deepseek-ai/dsh@latest)…",
   "server.updateFailed": "DSH 伺服器升級失敗,詳情見輸出記錄。",
   "server.updated": "DSH 伺服器已升級並重新啟動。",
-  "server.updateRestartFailed": "DSH 伺服器已升級,但重新啟動失敗:{message}"
+  "server.updateRestartFailed": "DSH 伺服器已升級,但重新啟動失敗:{message}",
+  "notice.feedbackConflict": "回饋已被其他介面修改,已重新載入最新值;請重新評價。",
+  "notice.feedbackFailed": "記錄回饋失敗: {error}",
+  "notice.presetAuthoringGone": "此主機的預設由 Cordis 組合宣告,不再提供本機預設作者能力(複製 / 刪除 / 開啟目錄);仍可在設定中檢視組合文字。",
+  "commit.diffStaged": "已暫存改動(index vs HEAD)",
+  "commit.diffUnstaged": "未暫存改動(工作區 vs index)",
+  "commit.onlyUntracked": "DSH:沒有可產生的內容——有 {n} 個未追蹤檔案不屬於 git diff,請先 git add 後重試。",
+  "commit.empty": "DSH: 模型未回傳有效提交訊息(回合結束原因:{reason},事件 {events} 筆,助手訊息 {messages} 筆)。"
 }

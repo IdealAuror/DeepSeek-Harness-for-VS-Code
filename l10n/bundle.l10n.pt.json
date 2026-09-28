@@ -102,7 +102,6 @@
   "commit.pickRepo": "Selecione um repositório git",
   "commit.diffTruncated": "diff truncado",
   "commit.done": "DSH: mensagem de commit gerada — revise-a e faça o commit",
-  "commit.empty": "DSH: o modelo não retornou mensagem de commit",
   "commit.cancelled": "DSH: geração de mensagem de commit cancelada",
   "commit.timeout": "DSH: tempo limite esgotado na geração e a solicitação foi cancelada",
   "commit.interrupted": "DSH: o modelo solicitou interação extra, o que não é suportado aqui — cancelado",
@@ -184,5 +183,12 @@
   "server.updated": "Servidor DSH atualizado e reiniciado.",
   "server.updateRestartFailed": "Servidor DSH atualizado, mas a reinicialização falhou: {message}",
   "notice.permissionBusy": "Há um turno em execução: o preset de permissões será aplicado no próximo turno; tente novamente quando a sessão estiver ociosa.",
-  "hub.modelNoImages": "O modelo atual \"{model}\" não aceita imagens: remova os anexos de imagem ou mude para um modelo compatível pelo botão de modelo no canto superior direito da caixa de entrada."
+  "hub.modelNoImages": "O modelo atual \"{model}\" não aceita imagens: remova os anexos de imagem ou mude para um modelo compatível pelo botão de modelo no canto superior direito da caixa de entrada.",
+  "notice.feedbackConflict": "O feedback foi alterado em outro lugar; o valor mais recente foi recarregado. Avalie novamente.",
+  "notice.feedbackFailed": "Não foi possível registrar o feedback: {error}",
+  "notice.presetAuthoringGone": "Os presets deste host são declarados por composição do Cordis; a edição local (copiar / excluir / abrir pasta) não é mais oferecida. O texto de composição continua visível nas configurações.",
+  "commit.diffStaged": "alterações preparadas (index vs HEAD)",
+  "commit.diffUnstaged": "alterações não preparadas (árvore de trabalho vs index)",
+  "commit.onlyUntracked": "DSH: nada para gerar — {n} arquivo(s) não rastreado(s) não fazem parte de um git diff. Execute git add e tente novamente.",
+  "commit.empty": "DSH: o modelo não retornou uma mensagem de commit válida (fim do turno: {reason}, {events} eventos, {messages} mensagens do assistente)."
 }

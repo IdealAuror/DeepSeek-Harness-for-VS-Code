@@ -11,12 +11,24 @@ import type {
   CreateGoalResult,
   CredentialView,
   DiscoveredModelView,
+  FeedbackCategory,
   GoalRef,
   HostDescribeValue,
+  MessageFeedbackDeleteResult,
+  MessageFeedbackItem,
+  MessageFeedbackListResult,
+  MessageFeedbackPutResult,
+  MessageFeedbackRating,
+  PermissionCatalog,
   PromptContentPart,
   RemoteEventFrame,
   RemoteEventOutcome,
   RemoteMuxServerMessage,
+  ScheduleCatalogEntry,
+  ScheduleDeleteValue,
+  ScheduleHistoryRequest,
+  ScheduleHistoryValue,
+  ScheduleRecord,
   SessionCreateRequest,
   SessionCreateValue,
   SessionHistoryRequest,
@@ -29,6 +41,7 @@ import type {
   SettingsDescribeValue,
   SettingsNamespaceView,
   SettingsPathOpView,
+  SessionFeedbackRecordResult,
   SubagentEntry,
   SubagentPromptReceipt,
   WorkspaceItem,
@@ -74,10 +87,20 @@ export interface RemoteStreamHandle {
 }
 
 /**
- * DSH Web API 客户端(0.1.5-rc.1 线协议,兼容 0.1.2 的参数名差异):
- * - 一元:POST /api/<namespace>/<method>,信封 payload 为 {args:{...}};
+ * DSH Web API 客户端(0.1.7-rc.2 线协议,兼容 0.1.5 / 0.1.2 的参数名与端点差异):
+ * - 一元:POST /api/<namespace>/<method>,信封 payload 为恰好一个字段的 {args:{...}};
  * - 流:/api/remote.mux 单 WebSocket 多路(session/follow、session/control、workspace/follow、$events);
  * - 认证:GET /?token=<启动 token> 交换签名 cookie,所有请求携带。
+ *
+ * 0.1.5-rc.1 → 0.1.7-rc.2 与本客户端相关的线协议差异:
+ * - 信封、remote.mux 流与 $events 帧形状不变(已按 0.1.7-rc.2 发布包核对);
+ * - subagents/list 移除(subagentCatalog + session/page 地址分页取代);
+ * - settings/openAgentPresetDirectory 与 agentPresets/copy|deletePreset 移除
+ *   (预设作者只剩 list/read/select);
+ * - 新增 schedule/list|catalog|delete|history(定时任务)与 schedule/changed 失效事件;
+ * - 新增 messageFeedback/list|put|delete(逐消息反馈,CAS 用 ifVersion)与 sessionFeedback/record;
+ * - 新增 permissionPresets/catalog(进程级权限预设目录,可选项比 permissions 投影更权威);
+ * - 新增 goals/get、session/projections|rename|fork|selectModel|workspacePathApplications 等。
  *
  * 0.1.2-rc.1 → 0.1.5-rc.1 与本客户端相关的线协议差异:
  * - commands/execute 第三参数由 images 改名 submittedAttachments(图片/文件内容块同构);
@@ -201,7 +224,15 @@ export class DshApiClient {
     if (out.status === 401 || out.status === 403) {
       throw new DshAuthError(`服务器要求授权(HTTP ${out.status}):请通过本扩展启动服务器`);
     }
-    if (!out.body) throw new Error(`DSH transport failure for ${method}: HTTP ${out.status}`);
+    if (!out.body) {
+      // 端点不存在时网关直接 404(无 JSON 信封)。0.1.7 起多个端点被移除,
+      // 若只抛「transport failure」调用方无法区分「能力缺失」与「真实故障」,
+      // 因此这里统一转成带错误码的 DshApiError(method-unavailable 语义)。
+      if (out.status === 404) {
+        throw new DshApiError("method-unavailable", `该服务器未提供端点 ${method}(HTTP 404):可能已被当前 DSH 版本移除或未启用对应插件`);
+      }
+      throw new DshApiError("transport-failure", `DSH transport failure for ${method}: HTTP ${out.status}`);
+    }
     if (out.body.rpcId !== out.rpcId) throw new Error(`DSH rpcId mismatch for ${method}`);
     if (!out.body.result.ok) {
       throw new DshApiError(out.body.result.error.code, out.body.result.error.message, out.body.result.error.details);
@@ -468,6 +499,14 @@ export class DshApiClient {
   sessionHistory(payload: SessionHistoryRequest) {
     return this.request<SessionHistoryValue>("session/page", { request: payload });
   }
+  /**
+   * 非激活读取一个会话的完整投影基线(session/projections;0.1.5 起可用)。
+   * 用于会话刚打开时补齐 todos / stats / permissions / context / 子代理目录,
+   * 不必等某个投影事件到达。
+   */
+  sessionProjections(sessionId: string) {
+    return this.request<{ asOfSeq: number; values: Record<string, unknown> } | null>("session/projections", { request: { sessionId } });
+  }
   sendPrompt(payload: SessionPromptRequest) {
     return this.request<SessionPromptValue>("session/prompt", { request: payload }, 60_000);
   }
@@ -616,6 +655,14 @@ export class DshApiClient {
   archiveSession(sessionId: string) {
     return this.request<{ archivedSessionIds: string[] }>("workspace/archiveSession", { request: { sessionId } });
   }
+  /**
+   * 取消归档(0.1.7 新增端点;旧宿主不存在 → 调用方忽略错误)。
+   * 0.1.7 起「已归档会话」的回合会立刻以 reason.kind = "blocked" 结束,
+   * 因此向归档会话发消息前必须先取消归档,否则模型不会被调用。
+   */
+  unarchiveSession(sessionId: string) {
+    return this.request<{ archivedSessionIds: string[] }>("workspace/unarchiveSession", { request: { sessionId } });
+  }
 
   /** 0.1.2 起模型目录统一在 session/modelCatalog(= 旧 session.models + llm.models);
    *  服务器返回 {default, routableProviders, groups, failures},映射回扩展的 {current, routable,…} 视图。 */
@@ -675,6 +722,24 @@ export class DshApiClient {
   }
 
   // ---------- 预设作者(agentPresets.*:0.1.2 端点改名 + 返回类型调整) ----------
+
+  /**
+   * 预设作者能力探测:settings/canOpenAgentPresetDirectory 是 0.1.5-rc.1 及更早独有的
+   * 作者端点族标志;0.1.7-rc.2 起该族(copy / deletePreset / openAgentPresetDirectory)
+   * 整体移除,预设改为由 Cordis 组合声明。失败即视为不支持(缓存,只探一次)。
+   */
+  private presetAuthoring: boolean | undefined;
+
+  async probePresetAuthoring(): Promise<boolean> {
+    if (this.presetAuthoring !== undefined) return this.presetAuthoring;
+    try {
+      const canOpen = await this.request<boolean>("settings/canOpenAgentPresetDirectory", {}, 10_000);
+      this.presetAuthoring = typeof canOpen === "boolean" ? canOpen : false;
+    } catch {
+      this.presetAuthoring = false;
+    }
+    return this.presetAuthoring;
+  }
 
   listAgentPresets() {
     return this.request<AgentPresetListValue>("agentPresets/list", {});
@@ -775,6 +840,68 @@ export class DshApiClient {
       parentSessionId,
       mode: "continuable",
     });
+  }
+
+  // ---------- 定时任务(0.1.7 新增 schedule/*;未启用定时任务插件的宿主返回 gateway/method-unavailable) ----------
+
+  /** 某会话内的任务列表(不激活 Agent)。 */
+  scheduleList(sessionId: string) {
+    return this.request<ScheduleRecord[]>("schedule/list", { sessionId });
+  }
+  /** 全进程保留任务目录(带绑定会话与状态),对应网页端「自动化任务」页。 */
+  scheduleCatalog() {
+    return this.request<ScheduleCatalogEntry[]>("schedule/catalog", {});
+  }
+  /** 删除任务(按原会话绑定);已不存在时返回 deleted:false,不抛错。 */
+  scheduleDelete(sessionId: string, id: string) {
+    return this.request<ScheduleDeleteValue>("schedule/delete", { sessionId, id });
+  }
+  /** 某任务的运行记录(新→旧分页,limit 1-100)。 */
+  scheduleHistory(request: ScheduleHistoryRequest) {
+    return this.request<ScheduleHistoryValue>("schedule/history", { ...request });
+  }
+
+  // ---------- 逐消息反馈(0.1.7 新增 messageFeedback/*;put 以 ifVersion 做 CAS) ----------
+
+  /** 读取一个会话当前的逐消息反馈(按首次创建顺序)。 */
+  messageFeedbackList(sessionId: string) {
+    return this.request<MessageFeedbackListResult>("messageFeedback/list", { request: { sessionId } });
+  }
+  /** 创建或替换一条消息反馈;ifVersion=null 表示要求当前不存在。 */
+  messageFeedbackPut(
+    sessionId: string,
+    messageId: string,
+    rating: MessageFeedbackRating,
+    ifVersion: string | null,
+    extra?: { note?: string; category?: FeedbackCategory },
+  ) {
+    return this.request<MessageFeedbackPutResult>("messageFeedback/put", {
+      request: {
+        sessionId,
+        messageId,
+        rating,
+        ifVersion,
+        ...(extra?.note !== undefined ? { note: extra.note } : {}),
+        ...(extra?.category !== undefined ? { category: extra.category } : {}),
+      },
+    });
+  }
+  /** 删除一条消息反馈(需要观测到的 version;已不存在时幂等成功)。 */
+  messageFeedbackDelete(sessionId: string, messageId: string, ifVersion: string) {
+    return this.request<MessageFeedbackDeleteResult>("messageFeedback/delete", { request: { sessionId, messageId, ifVersion } });
+  }
+  /** 会话级反馈(取代 /feedback 命令;文本可为空)。 */
+  recordSessionFeedback(sessionId: string, entry: { text?: string; category?: FeedbackCategory } = {}) {
+    return this.request<SessionFeedbackRecordResult>("sessionFeedback/record", {
+      request: { sessionId, ...(entry.text ? { text: entry.text } : {}), ...(entry.category ? { category: entry.category } : {}) },
+    });
+  }
+
+  // ---------- 权限预设目录(进程级;0.1.5 起可用) ----------
+
+  /** 进程级权限预设目录(可选项 + 新会话默认值),与 permissions 投影配合使用。 */
+  permissionPresetsCatalog() {
+    return this.request<PermissionCatalog>("permissionPresets/catalog", {});
   }
 
   // ---------- 设置 / 凭据 / LLM 目录 ----------

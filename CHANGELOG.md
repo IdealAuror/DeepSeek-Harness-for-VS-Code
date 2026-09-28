@@ -1,5 +1,73 @@
 # Changelog
 
+
+## 0.13.26
+- The sidebar icon is now the **line robot** (`media/robot.svg`) instead of the orca: a rounded head outline with a short antenna and two bar eyes, drawn with the same stroke weight and rounded joins as the extension's own toolbar icons. It is used for the Activity Bar container, the Secondary Side Bar container and the chat view icon (the Marketplace logo `media/icon.png` is untouched).
+- Because the mark is a monochrome outline with no fills, VS Code's container-icon treatment (mask by alpha, paint with `activityBar.inactiveForeground` / the hover foreground) keeps it crisp and correctly coloured on light, dark and high-contrast themes at any DPI; the previous orca mark stays in the repo as `media/orca.svg` but is no longer referenced.
+- 侧栏图标从虎鲸换成**线条机器人**(`media/robot.svg`):圆角头框 + 短天线 + 两条竖条眼睛,描边粗细与圆角收笔与扩展自身工具栏图标一致。活动栏容器、辅助侧栏容器与聊天视图图标都使用它(市场展示用的 `media/icon.png` 不变)。
+- 由于这枚标记是纯描边、无填充,VS Code 对容器图标的处理方式(按 alpha 蒙版 + 用 `activityBar.inactiveForeground` / 悬停前景色重绘)能让它在浅色 / 深色 / 高对比主题、任意 DPI 下都保持清晰且配色正确;上一版虎鲸保留在仓库里(`media/orca.svg`)但已不再被引用。
+
+## 0.13.25
+- The container icon (`media/orca.svg`) is redrawn in a **DeepSeek-style minimal** treatment: one brand-blue fill (DeepSeek blue `#4D6BFE`), no outlines or gradients, built from a round body + an upswept thick tail with a two-lobed fluke + a backswept dorsal fin + a pectoral flipper, with the orca's eye patch left as negative space (a white patch around a blue pupil). At the 16px Activity Bar size it reads as a whale in silhouette; in the view title it reads as a blue orca.
+- How it renders: VS Code masks container icons by alpha and paints them with `activityBar.inactiveForeground` (hover foreground when active), so in the Activity Bar you get the theme-coloured silhouette and the negative-space eye patch stays legible on light, dark and high-contrast themes; the same file is used for the chat view icon and the Secondary Side Bar container. The Marketplace icon (`media/icon.png`) is unchanged.
+- 容器图标(`media/orca.svg`)改为 **DeepSeek 风格极简**处理:单一品牌蓝填充(DeepSeek 蓝 `#4D6BFE`)、无描边无渐变,由「浑圆身体 + 上扬粗尾与二叶尾鳍 + 后掠背鳍 + 胸鳍」构成,虎鲸眼斑作为留白(白色眼斑中一颗蓝色瞳孔)。在活动栏 16px 尺寸下读出鲸形剪影,在视图标题里则是一条蓝色虎鲸。
+- 渲染原理:VS Code 会把容器图标按 alpha 取蒙版、再用 `activityBar.inactiveForeground`(激活时用 hover 前景色)着色,所以活动栏里是主题色剪影、留白眼斑在浅色/深色/高对比主题下都清晰;同一份文件同时用于聊天视图图标与辅助侧栏容器。市场展示图标(`media/icon.png`)不变。
+
+## 0.13.24
+- The VS Code container icon is now a hand-drawn **cute orca** (`media/orca.svg`) instead of the previous square logo, on both the Activity Bar container and the Secondary Side Bar container (and for the chat view's own icon). It is drawn as a black silhouette with the eye patches and mouth left as negative space, which is exactly how VS Code renders container icons - it masks the SVG by alpha and paints it with `activityBar.inactiveForeground` / the hover foreground - so the orca follows light, dark and high-contrast themes automatically at any DPI. The Marketplace extension icon (`media/icon.png`) is unchanged.
+- The Cordis plugin button goes back to its 🧩 emoji as requested (the drawn puzzle icon added in 0.13.22 was removed; the Automation-tasks alarm clock and Subagent-catalog robot line icons stay).
+- VS Code 容器图标从原来的方形 logo 换成手绘的**可爱风虎鲸**(`media/orca.svg`):活动栏容器、辅助侧栏容器以及聊天视图自身的图标都用它。图形以纯黑剪影 + 眼斑/嘴巴留白绘制 —— 这正是 VS Code 渲染容器图标的方式(按 alpha 蒙版,再用 `activityBar.inactiveForeground` / 悬停前景色着色),因此虎鲸会自动跟随浅色 / 深色 / 高对比主题,任意 DPI 都清晰。市场展示用的扩展图标(`media/icon.png`)保持不变。
+- 按要求把 **Cordis 插件按钮恢复为 🧩 emoji**(撤销 0.13.22 里换上的手绘拼图图标);自动化任务的闹钟图标与子代理目录的机器人图标保留为线条图标。
+
+## 0.13.23
+- Every run of consecutive process rows now ends with a **summary row** like the web client's `Executed commands, read files, modified files, …`: the icon + a localized action list counted per run (`1 command`, `read 1 file · searched 2 times`, `modified 3 files`, `fetched 2 pages`, `called 1 tool`) + a chevron. Clicking it collapses or expands that run, the row itself always stays visible, and your choice survives re-renders while the turn streams (it is remembered per run on the assistant message). Runs that only contain thinking get no summary row, so there is no "no tool calls yet" noise; the counts update as each tool result lands.
+- Together with 0.13.20–0.13.22 this makes one continuous run read like the web transcript: thinking row → tool row(s) → a summary line for that run, repeated down the turn, all appearing live as the events arrive (measured: tool/call and tool/result arrive in the same tick and the extension renders them immediately, never at turn end).
+- 每一段连续的过程行末尾现在都有一行**汇总**(与网页端「执行了命令,已读取文件,修改了文件等」同款形态):图标 + 按段统计的本地化动作清单(`执行了 1 条命令`、`读取了 1 个文件、搜索了 2 次`、`修改了 3 个文件`、`访问了 2 个网页`、`调用了 1 个工具`)+ 折叠箭头。点击即可收起/展开这一段(汇总行自身常显),回合流式进行中重绘也会保留你的开合选择(按段记录在助手消息上);只包含思考的段不显示汇总行,不会出现「暂无工具调用」的噪声;每个工具结果落地时计数即时刷新。
+- 与 0.13.20–0.13.22 一起,一条连续执行看起来就和网页端对话一致了:思考行 → 工具行 → 该段汇总行,如此往复,且全部随事件实时出现(已实测:tool/call 与 tool/result 同一节拍到达,扩展当场渲染,不存在「等回合结束才出现」)。
+
+## 0.13.22
+- The last two emoji in the header toolbar are now line icons that follow the VS Code theme like their neighbours: the **Automation tasks** button (was ⏰) uses a drawn alarm-clock icon (`ICONS.alarmClock`) and the **Subagent catalog** button (was 🤖) uses the drawn robot icon, both 15px `currentColor` strokes rendered through the same `lineIcon()` helper as the workspace / jobs / trajectory / settings buttons. Hover, active, focus-ring and the yellow running state are unchanged, and the Cordis plugin button keeps its puzzle emoji.
+- 头部工具栏最后两个 emoji 改为与相邻按钮一致的线条图标:**自动化任务**(原 ⏰)换成手绘闹钟图标(`ICONS.alarmClock`),**子代理目录**(原 🤖)换用手绘机器人图标,两者都是 15px `currentColor` 描边,与工作区 / 后台任务 / 轨迹 / 设置按钮走同一个 `lineIcon()` 渲染路径。悬停、按下、焦点圈与「有子代理运行中」的黄色状态保持不变,Cordis 插件按钮保留原拼图 emoji。
+
+## 0.13.21
+- The turn activity line above the composer now names the running action instead of the generic `Running a tool…`: a tool call sets it to the localized tool row title plus its human-readable summary (`Pwsh · Write-Output hi`, `Read · src/app.ts`, `Write · lib/git.js`), and it falls back to `Thinking deeply…` / `Writing the answer…` as soon as the model streams again. The elapsed timer keeps running, so a long tool call stays identifiable even after the transcript has scrolled away.
+- Also documented by measurement (no behaviour change): process rows are created **while the turn runs**, not at turn end. On a real 0.1.7-rc.2 server the `tool/call` session event arrives together with its result (+1.02s, +2.26s, …) and the session store forwards it to the webview in the same tick, where the tool node is inserted into the in-progress step group immediately; replaying a captured 8-tool turn through the real webview bundle yields 5 thinking rows, 8 tool rows and 5 prose blocks in true interleaved order, and both the current build and 0.13.17 render them.
+- 输入框上方的回合活动行不再笼统显示「执行工具…」,而是直接说明当前动作:工具调用时显示本地化的工具行标题 + 人类可读摘要(`Pwsh · Write-Output hi`、`读取 · src/app.ts`、`写入 · lib/git.js`),模型恢复流式输出后回落到「深度思考中…」/「生成回答…」;计时继续走,长时间工具调用即使在对话已滚走的情况下也能一眼确认当前在做什么。
+- 另以实测记录(行为未变):过程行是**回合进行中**创建并渲染的,不是回合结束才出现。真实 0.1.7-rc.2 服务器上 `tool/call` 会话事件与其结果同时到达(+1.02s、+2.26s……),会话存储在同一个事件节拍内转发给 webview,工具节点当场插入正在进行的步骤分组;把抓取到的 8 次工具调用回合喂给真实 webview 包回放,得到 5 条思考行、8 条工具行、5 段正文按真实顺序交错,当前构建与 0.13.17 均如此渲染。
+
+## 0.13.20
+- "Generate commit message" no longer fails silently: ① the collected diff is logged with its source and size (`staged changes (index vs HEAD)` / `unstaged changes (working tree vs index)` · N chars), so the DSH output channel shows exactly what the command saw; ② when there is no diff at all the message distinguishes **untracked-only** changes — `nothing to generate from — N untracked file(s) are not part of a git diff. Stage them (git add) and try again.` — from a genuinely clean tree; ③ an empty model answer now reports why (`turn end: {reason}, {events} events, {messages} assistant messages`), which separates "the host blocked the turn" from "the model returned no text". All four new strings are localized in 14 languages.
+- Verified end to end with the extension's own bundled code driving a real DSH 0.1.7-rc.2 server: a staged two-file diff produced `feat: 新增 added.txt 并在 demo.txt 中追加内容` in the SCM input box, the default model stayed `deepseek-flash` + `max` afterwards, and a repo with only untracked files produced the explanatory message instead of silence.
+- 「一键生成提交信息」不再静默失败:① 采集到的 diff 会连同来源与规模写入日志(`已暂存改动(index vs HEAD)` / `未暂存改动(工作区 vs index)` · N 字符),DSH 输出通道里能直接看到命令到底看到了什么;② 完全没有 diff 时会区分**只有未跟踪文件**的情况——「没有可生成的内容——有 N 个未跟踪文件不属于 git diff,请先 git add 后重试」——而不是和「工作区干净」混为一谈;③ 模型没返回文本时会说明原因(`回合结束原因:{reason},事件 N 条,助手消息 M 条`),把「宿主 block 了回合」和「模型确实没输出」分开。四条新文案已补齐 14 种语言。
+- 已用扩展自身打包代码驱动真实 DSH 0.1.7-rc.2 服务器做端到端验证:两文件已暂存 diff 生成 `feat: 新增 added.txt 并在 demo.txt 中追加内容` 写入 SCM 输入框,生成后默认模型仍为 `deepseek-flash` + `max`;只有未跟踪文件的仓库则给出明确说明而不是静默。
+
+## 0.13.19
+- Fixed three defects in **Generate Commit Message** (SCM ✨ button) that made it look like the button did nothing and silently changed the model of your other conversations:
+- ① **The one-shot session was archived before the prompt**, and DSH 0.1.7 ends a turn on an archived session immediately with `reason.kind = "blocked"` — the model was never called, so the command just reported "the model returned no commit message". The session is now created → prompted → archived, and hidden from the session dropdown locally while it works.
+- ② `dsh.commitModel` defaulted to the literal `deepseek-v4-flash`, which does not exist on deployments that ship `deepseek-flash` / `deepseek-v4-pro`; model selection then failed with `session/model-unavailable` and aborted generation. The setting is now a **keyword** (default `flash`) matched against the catalog by id or name, with a fallback to the first model that can disable thinking, and generation proceeds with the session's current model when nothing matches.
+- ③ `session/selectModel` persists the chosen model **and thinking depth** into the profile's `agent-default-model` (the default for new sessions), so picking the lightweight commit model rewrote your default — the reason a conversation started showing `low` thinking. The original default is now captured before the switch and restored on every exit path (success / cancel / timeout / error).
+- Verified against a live 0.1.7-rc.2 server: an archived session really does end the turn with `blocked` while an unarchived one completes; switching the commit session to `flash` + `low` rewrites the profile, and the restore returns it to the previous value; a full generate round-trip (create → archive-free prompt → turn/end → extracted message) now returns a usable Conventional Commits line (`docs(demo): 更新 demo.txt 示例内容`).
+- Also reinforced for the same 0.1.7 rule: sending a prompt to an **archived** session now auto-unarchives it first through `workspace/unarchiveSession` (silently skipped on older hosts), so continuing an archived conversation no longer ends its turn as `blocked` and drop the message.
+- 修复**生成提交信息**(SCM ✨ 按钮)的三处缺陷——它既表现为「点了没反应」,又会悄悄改掉你其它对话的模型:
+- ① **一次性会话在发送提示词之前就被归档**,而 DSH 0.1.7 对已归档会话的回合会立刻以 `reason.kind = "blocked"` 结束——模型一次都没被调用,命令只报「模型未返回有效提交信息」。现在顺序改为 创建 → 生成 → 归档,生成期间会话在本地隐藏,不出现在会话下拉里。
+- ② `dsh.commitModel` 默认写死型号 `deepseek-v4-flash`,而交付 `deepseek-flash` / `deepseek-v4-pro` 的部署里并没有这个型号,选型直接以 `session/model-unavailable` 失败并中止生成。该设置现改为**关键字**(默认 `flash`),按 id 或名称在目录中匹配,匹配不到时回退到第一个可关闭思考的模型,完全匹配不到就用会话当前模型继续生成。
+- ③ `session/selectModel` 会把所选模型**与思考深度**持久化进 profile 的 `agent-default-model`(即新建会话的默认值),因此为提交会话选轻量模型会改写你的默认选择——这就是对话里思考深度变成 `low` 的原因。现在会在切换前记录原默认值,并在所有退出路径(成功 / 取消 / 超时 / 出错)上恢复。
+- 已在真实 0.1.7-rc.2 服务器上验证:归档会话的回合确实以 `blocked` 结束、未归档会话正常完成;把提交会话切到 `flash` + `low` 确实会改写 profile,恢复调用能把它改回原值;完整链路(创建 → 不归档发送 → turn/end → 提取文本)现在能返回可用的 Conventional Commits 行(`docs(demo): 更新 demo.txt 示例内容`)。
+- 针对同一条 0.1.7 规则补强:向**已归档会话**发消息前会先经 `workspace/unarchiveSession` 自动取消归档(旧宿主无该端点则静默跳过),继续已归档对话不再出现回合被 `blocked` 结束、消息被丢弃的情况。
+
+## 0.13.18
+- Adapt to DSH 0.1.7-rc.2: new **Automation tasks panel** (⏰ button) listing every host-side reminder (task title, rule text, next scheduled time with countdown, enabled/ended status) with search + status filter, a per-task detail (instruction, frequency, time zone, linked session jump, last delivery) and its **delivery records** (newest-first, `Load more` paging) plus delete with inline confirmation — refreshed automatically from the host's `schedule/changed` invalidation event; the host's schedule feature is off by default since 0.1.7, and the panel explains that instead of failing.
+- **Native per-message feedback**: 👍/👎 on assistant messages now write through `messageFeedback/put` (versioned CAS against the host) instead of the `/feedback` command, so clicking the active rating revokes it and ratings survive reloads (they are read back from `messageFeedback/list`); older sessions without a message id still fall back to the command.
+- **0.1.7 endpoint removals handled**: `subagents/list` was removed, so the subagent catalog is now folded from the `subagentCatalog` session projection (with per-child running state) and refreshed live; the removed preset-authoring endpoints (copy / delete / open preset folder) are probed through `settings/canOpenAgentPresetDirectory` and their buttons only appear on hosts that still serve them, with a clear notice otherwise.
+- **Projection baseline on session open** (`session/projections`): statistics, to-dos, permissions, context meter and the subagent catalog are read from the host right after a session opens instead of waiting for the next projection frame.
+- Verified against the published 0.1.5-rc.1 and 0.1.7-rc.2 package sets: the request envelope, `remote.mux` stream set (`session/follow`, `session/control`, `workspace/follow`, `$events` + `$events/result`), host-event vocabulary, and every endpoint this extension calls except the three removals above are unchanged (one signature change: `workspaceFiles/readBytes`, unused here).
+- Fixed while verifying against a live 0.1.7-rc.2 server: `session/projections` needs its single-argument payload wrapped as `{request:{…}}` (it previously failed descriptor validation and silently fell back), and a gateway 404 for a removed/disabled endpoint now surfaces as a typed `method-unavailable` error instead of a bare transport failure — the automation-tasks panel uses that to explain a host with the schedule plugin disabled instead of showing an error. 13/13 live checks pass (auth + cookie exchange, `$events` ready frame, session list/create, projection baseline, feedback list, permission catalog, schedule unavailable path, preset-authoring probe, commands/model catalog/skills, archive).
+- 适配 DSH 0.1.7-rc.2:新增**自动化任务面板**(⏰ 按钮),列出宿主侧全部提醒任务(任务名 · 规则文案 · 下次计划时间与倒计时 · 已开启/已结束),支持搜索与状态筛选、任务详情(内容 · 提醒频率 · 时区 · 关联会话跳转 · 最近一次投递)与其**运行记录**(新→旧分页,「加载更多」)以及就地确认的删除;目录随宿主 `schedule/changed` 失效事件自动刷新。宿主自 0.1.7 起默认关闭定时任务,面板会明确说明而不是报错。
+- **原生逐消息反馈**:助手消息的 👍/👎 改用 `messageFeedback/put`(带 version 的 CAS 写入)而非 `/feedback` 命令——再次点击当前评价即可撤销,评价在重载后依然显示(由 `messageFeedback/list` 读回);没有 message id 的旧会话仍回退到命令通道。
+- **0.1.7 端点下线兜底**:`subagents/list` 已移除,子代理目录改为从 `subagentCatalog` 会话投影折叠(含每个子代理的运行态)并实时刷新;已移除的预设作者端点(复制 / 删除 / 打开预设目录)改为经 `settings/canOpenAgentPresetDirectory` 探测能力,只在仍提供这些端点的宿主上显示按钮,否则给出明确提示。
+- **会话打开即读投影基线**(`session/projections`):统计、待办、权限、上下文进度环与子代理目录在会话打开后立刻从宿主读取,不再等下一个投影帧。
+- 已按已发布的 0.1.5-rc.1 与 0.1.7-rc.2 包逐一核对:请求信封、`remote.mux` 流派(`session/follow` / `session/control` / `workspace/follow` / `$events` + `$events/result`)、主机事件词表,以及本扩展调用的全部端点(上述三处移除除外)均未变化;唯一签名变化 `workspaceFiles/readBytes` 本扩展未使用。
+- 对真实 0.1.7-rc.2 服务器验证时修复两处:① `session/projections` 的单参数载荷必须包一层 `{request:{…}}`(此前被描述符校验拒绝并静默回退);② 端点被移除/未启用时的网关 404 现在转成带 `method-unavailable` 错误码的 `DshApiError`,而不是裸传输失败——自动化任务面板据此判断「宿主未启用定时任务」并给出说明,而不是报错。13/13 项实测通过(认证与 cookie 交换、`$events` ready 帧、会话列表/新建、投影基线、反馈列表、权限目录、定时任务不可用路径、预设作者探测、命令/模型目录/技能、归档)。
 ## 0.13.17
 - Bottom session totals now match the web StatsPills: two pills under the composer — `{turns} turns {steps} steps · {tps} tok/s` and `{total} tok · {hit}% cache hit` — each opening a stat dialog on click (session statistics: LLM time, tool time, average TTFT, output TPS; token usage: exact total, cache hit, uncached input, cache read/write, output); a partial cache hit is never rounded up to 100% (precision grows until the shown value stays honest), and the old single plain-text stats line is gone
 - 底部会话总量与网页端 StatsPills 对齐:输入框下方改为两枚胶囊 —— `{轮} 轮 {步} 步 · {tps} tok/s` 与 `{总量} tok · 缓存命中 {p}%`,点击分别展开「会话统计」(模型用时 / 工具调用用时 / 首 token 平均 TTFT / 输出速度 TPS)与「Token 用量」(精确总量 / 缓存命中 / 未缓存输入 / 缓存读取/写入 / 输出);部分命中不再被四舍五入成 100%(自动提高精度),原来那行纯文本统计已移除
@@ -104,7 +172,6 @@
 - Adapt to DeepSeek Harness v0.1.2-rc.1 (latest published release, 2026-09-03): ① the release's wire contract equals the 0.1.2-alpha.4 one — now audited directly against the published rc.1 runtime (source diff alpha.4 → rc.1: storage/projection internals only) AND a live rc.1 server, which is what actually surfaced the fixes below; ② fixed the gateway parameter wrapper: every single-parameter Remote expects the parameter-name envelope `{request: …}` (`session/list` uses `_request`) but the extension sent raw fields — session/list, session/search, session/page, session/prompt, session/create, session/cancel, session/rename, session/fork, session/attachment, session/selectModel, session/updateQueue, skills/list, subagents/prompt, workspace/create|rename|delete|insertBefore|insertSessionBefore|archiveSession and the session/follow streams now send the wrapper (a real rc.1 server rejected session/list with gateway/arguments-invalid, so the whole 0.1.2 server path was unusable); ③ `credentials/describe` actually returns a plain `ref → info` record, not `{credentials: …}`; ④ live-verified against a fresh rc.1 server: auth cookie exchange (303 + dsh-auth cookie), session/list − create − page − rename − prompt − cancel, modelCatalog, skills/list, subagents/list, commands/list, fileReferences/list, sessionReferenceResolver/candidates, agentPresets/list, settings/describe, credentials/describe, llm/listProviders, dynamicCordisRunner/inventory, goals/create, workspace/create plus the workspace/follow, session/control, session/follow streams and the $events ready frame; ⑤ verified not to touch the wire: Remote gateway unified dispatch, one-time-token launch URLs for network access, WebSocket heartbeats (ws auto-Pong keeps the mux alive), storage v5 + compatibleVersions/backupRecord, Node 24.0–24.11.1 startup fix, caller-optional subagent model selection — note: rc.1 disables session/search by default (openAt "never") and the extension surfaces the server message; ⑥ npx/npm/direct-install/update channels now install @deepseek-ai/dsh@latest — 0.1.2-rc.1 is on `latest`/`next`, while `alpha` (0.1.2-alpha.5) is no longer the release the extension should deploy.
 - 适配 DeepSeek Harness v0.1.2-rc.1(最新发布版本,2026-09-03):① 该版本线协议与 0.1.2-alpha.4 相同 —— 现在直接对照已发布 rc.1 运行时(alpha.4 → rc.1 源码差异仅存储/投影内部)并对真实 rc.1 服务器逐项实测,正是实测暴露了以下修复;② 修复网关参数包装:单参数 Remote 必须使用参数名信封 `{request: …}`(`session/list` 为 `_request`),而扩展此前直接发送裸字段 —— session/list、session/search、session/page、session/prompt、session/create、session/cancel、session/rename、session/fork、session/attachment、session/selectModel、session/updateQueue、skills/list、subagents/prompt、workspace/create|rename|delete|insertBefore|insertSessionBefore|archiveSession 以及 session/follow 流现已带包装(真实 rc.1 服务器此前以 gateway/arguments-invalid 拒绝 session/list,0.1.2 服务器路径整体不可用);③ `credentials/describe` 实际返回 `ref → info` 记录,并非 `{credentials: …}`;④ 已对新起的 rc.1 服务器实测:认证 cookie 交换(303 + dsh-auth cookie)、session/list − create − page − rename − prompt − cancel、modelCatalog、skills/list、subagents/list、commands/list、fileReferences/list、sessionReferenceResolver/candidates、agentPresets/list、settings/describe、credentials/describe、llm/listProviders、dynamicCordisRunner/inventory、goals/create、workspace/create 及 workspace/follow、session/control、session/follow 各流与 $events ready 帧;⑤ 核实不影响线协议的 rc.1 变更:Remote 网关统一远程调用与异常分发、网络访问一次性 token 启动链接、WebSocket 心跳(ws 自动 Pong 保活)、存储 v5 + compatibleVersions/backupRecord、Node 24.0–24.11.1 启动修复、子代理模型选择(调用方可选)—— 注意:rc.1 默认禁用 session/search(openAt "never"),扩展会显示服务器提示;⑥ npx/npm/直接安装/升级通道改为 @deepseek-ai/dsh@latest —— 0.1.2-rc.1 已发布为 `latest`/`next`,`alpha`(0.1.2-alpha.5)不再是扩展应部署的版本。
 
-
 ## 0.12.91
 - Fix "授权数据缺失(服务器由外部启动)" on upgrades: ① the 0.1.2 browser-auth is now lazy — the client sends requests first and only exchanges the launch-token cookie when the server actually answers 401/403, so an old 0.1.1-rc.2 server (no auth) is no longer blocked before the request is sent; ② when the server was started by a previous extension instance or a terminal, the client re-reads the extension log files (%TEMP%\dsh-vscode-server.log / -install.log) for the auth URL and retries once; ③ a running legacy server (0.1.1-rc.2 and earlier, dotted endpoints) is detected via host.describe and reported with a clear "stop and restart" message instead of a vague offline state; ④ the offline watcher now calls ensureReady on every tick, so once you stop the old server the extension auto-starts the new one (honoring dsh.autoStart) and captures the token itself.
 - 修复升级后「授权数据缺失(服务器由外部启动)」:① 0.1.2 浏览器认证改为懒认证 —— 客户端先发请求,只有服务器真正返回 401/403 时才用启动 token 交换 cookie,旧版 0.1.1-rc.2 服务器(无需认证)不再被请求前误拦;② 服务器由上一个扩展实例或终端启动时,客户端会从扩展日志(%TEMP%\dsh-vscode-server.log / -install.log)重新读取授权 URL 并重试一次;③ 运行中的旧版服务器(0.1.1-rc.2 及更早,点号端点)通过 host.describe 识别,给出明确的「停止并重启」提示,而不是笼统的离线;④ 离线巡检改调 ensureReady:停掉旧服务器后,扩展会自动拉起新服务器(遵循 dsh.autoStart)并自行获取授权。
@@ -130,7 +197,6 @@
 - @ mention menu polish: ① removed the emoji icons (🤖/📄/💬) from every row for a clean, compact list; ② typing @ now shows a loading listbox right away (web parity) — the Agents group appears instantly from the local scan while "Loading files…" / "Loading sessions…" rows with a CSS spinner fill the Files & folders and Session conversations groups until the server candidates arrive, then the loading rows are replaced in place.
 - @ 提及菜单优化:① 移除每行的 emoji 图标(🤖/📄/💬),列表更简洁紧凑;② 输入 @ 立即显示加载列表框(与网页端一致)—— 智能体分组由本地扫描即时出现,「正在加载文件资源…」「正在加载会话列表…」加载行(纯 CSS 旋转圆点)占位,服务器候选到达后原位替换。
 
-
 ## 0.12.84
 - @ mention menu now matches the web (rc.8): typing @ opens a grouped picker (Agents / Files & folders / Session conversations) navigable with ↑↓/Enter/Esc: ① file/folder candidates come from the server's fileReferences/list (relative to the session cwd); picking inserts @path (@"quoted" form for paths with spaces; directories keep the trailing slash and stay open to descend, matching the web grammar); ② session candidates come from sessionReferenceResolver/candidates; picking inserts the @[label](dsh-session:…) Markdown mention, which the host pre-step expands into read-only snapshot context on send (no local handling needed); ③ agent mentions keep the original local scan-and-inject behavior; ④ the @ trigger grammar is broadened to the web's (any non-space token plus @"quoted paths"), and the agent-config scan no longer requires a selected session, fixing the empty @ menu; ⑤ fixed the root cause of the missing 'low' reasoning effort: the server was shadowed by the stale direct install (~/.dsh-vscode/server, rc.6) — a new dsh.updateServer command force-reinstalls @deepseek-ai/dsh@latest and restarts, and the UI auto-refreshes model data after the server reconnects.
 - @ 提及菜单对齐网页版 rc.8:输入 @ 弹出分组候选列表(智能体 / 文件与文件夹 / Session 对话),支持 ↑↓/Enter/Esc 选择:① 文件与文件夹候选来自服务器 fileReferences/list(相对会话工作目录),选中插入 @路径(含空格的路径用 @"引号" 形式;目录保持尾部斜杠并继续输入下一级,与网页端 grammar 一致);② Session 候选来自 sessionReferenceResolver/candidates,选中插入 @[标题](dsh-session:…) Markdown 提及,发送后由宿主 pre-step 展开为只读会话快照上下文(无需本地处理);③ 智能体候选保持原有本地扫描与注入逻辑;④ 提及触发语法放宽为网页端同款(支持 @任意字符 与 @"带空格路径"),并修复此前仅在已选会话时才扫描智能体目录导致 @ 无候选的问题;⑤ 修复「思考强度 low 缺失」的根源:服务器被 ~/.dsh-vscode/server 的旧版直接安装(rc.6)遮蔽 —— 新增 dsh.updateServer 命令(强制重装 @deepseek-ai/dsh@latest 并重启),服务器重连后自动重推界面数据刷新模型下拉。
@@ -139,26 +205,21 @@
 - Remove the leading ⌘ icon character from every row of the / command menu to reduce popup width and declutter the list (the ⌘ prefix shown for queued commands inside the conversation is unaffected).
 - 移除 / 命令列表中每行前的 ⌘ 图标字符,减少弹窗占用、视觉更清爽(会话内排队命令的 ⌘ 前缀显示不受影响)。
 
-
 ## 0.12.82
 - Adapt to DeepSeek Harness v0.1.0-rc.8: ① commands/execute now carries an images parameter (rc.8 rejects the call as arguments-invalid when the field is missing, while rc.7 and earlier reject extra fields) — the extension detects the capability from commands/list descriptors (input.images) instead of the version string (host.describe returns a generic 0.0.1 and is unreliable), refreshed automatically on reconnect; ② /goal, /plan and friends now accept image+text input: known commands with images go through the command gateway when supported (the host decides per command declaration and returns an error text for commands that refuse images), otherwise they fall back to the image prompt path so no image is dropped; ③ audited the remaining rc.8 changes (multimodal adapters, subagent Profile Bundles / Codex named instances, PTY, SQLite storage format, concurrent web_search, etc.) — none affect the extension wire contract; session.prompt / session.history / subagent.list match rc.8 exactly.
 - 适配 DeepSeek Harness v0.1.0-rc.8:① commands/execute 网关新增 images 参数(rc.8 起缺失该字段会被网关按 arguments-invalid 拒绝,rc.7 及更早则拒绝多余字段)—— 扩展改为通过 commands/list 描述符(input.images)探测能力而非依赖版本号(host.describe 返回通用 0.0.1,不可靠),连接重连时自动刷新;② /goal、/plan 等命令支持图文输入:已知命令 + 图片在支持网关时走命令通道(宿主按命令声明裁决,不接受的命令返回错误文本),旧版网关或未知命令时退回图文 prompt 通道,图片不丢失;③ 核对 rc.8 其余变更(多模态适配器、子代理 Profile Bundle / Codex 命名实例、PTY、SQLite 存储格式、web_search 并发等)均不涉及扩展线协议;session.prompt / session.history / subagent.list 等契约与 rc.8 完全一致。
-
 
 ## 0.12.79
 - Fix 'approve in VS Code but the web still shows awaiting approval': the host's activate return value does not include a status field, so the extension's previous check never detected client-pending and never ran the resolveRequestRun settlement after approval — plugins with a Client half stayed client-pending forever with the approval request still open (the web's reconcile treats client-pending as awaiting approval too). Now, after approving or a direct run, the extension confirms the run state from the authoritative inventory and only then settles via resolveRequestRun/settleUserRun (matching the web orchestrator's answer/settleDirect semantics); if approval fails, the approval card is restored for retry.
 - 修复 VS Code 中批准 Cordis 插件后网页端仍显示待审批的问题:宿主的 activate 返回值并不包含 status 字段,扩展此前据此判断是否需要在批准后执行 resolveRequestRun 结算,导致含 Client 半段的插件在批准后一直停留在 client-pending、审批请求始终未关闭,网页端(其 reconcile 把 client-pending 也视为待审批)因而持续显示待批准。现在授权/直接运行后以权威清单确认运行状态,确需结算时再调用 resolveRequestRun/settleUserRun(与网页端 orchestrator 的 answer/settleDirect 语义一致);授权失败时审批卡片恢复显示以便重试。
 
-
 ## 0.12.78
 - Port the web Cordis dynamic-plugin panel into VS Code: ① in-conversation approval cards — when a plugin requests a run, a 'Cordis plugin approval' card appears in the chat with ✓ Allow this version only / ✓✓ Allow future versions / ✗ Decline (web parity: allowing future versions auto-runs later updates of that plugin); ② a new 'Cordis plugins' panel (command dsh.openCordisPanel / 🧩 header button) listing plugins grouped by current/other sessions with live status (awaiting approval / running / waiting / starting / client pending / failed / stopped…), version list with the current version, and actions run/restart, run an older version, stop, remove (two-step confirm); ③ host/remote-event cordis/* frames are now forwarded so the panel and approval cards refresh in real time; ④ note: the Client half only takes effect in the web GUI (hinted in the panel); after approving in VS Code the host half runs normally.
 - 把网页版 Cordis 动态插件面板完整移植到 VS Code:① 会话内浮窗审批卡 —— 插件请求运行时在对话区出现「Cordis 插件审批」卡片,支持 ✓仅允许此版本 / ✓✓允许后续版本 / ✗拒绝,与网页端授权语义一致(允许后续版本后同一插件的更新自动运行);② 新增「Cordis 插件」面板(命令 dsh.openCordisPanel / 聊天头部 🧩 按钮):插件清单按当前/其他会话分组,显示运行状态(待审批/运行中/等待/启动中/Client 待激活/失败/已停止等)、版本列表与当前版本,支持 运行/重启、切换运行旧版本、停止、移除(两步确认);③ 打通 host/remote-event 的 cordis/* 帧转发,面板与审批卡随插件生命周期实时刷新;④ 说明:Client 半段仅在网页端生效(面板中提示),VS Code 内授权后宿主半段正常运行。
 
-
 ## 0.12.77
 - Adapt to DeepSeek Harness v0.1.0-rc.7: ① question cards are now collapsible and keep selections, custom answers and the current page when collapsed (web rc.7 parity; drafts survive re-renders); ② the built-in preset English name is renamed Code mode → PTC mode (Chinese stays 编码模式), all language dictionaries synced; ③ the defaultReasoningEffort config description now mentions the new low effort (the server already reports off/low/high/max; the thinking dropdown adapts automatically); ④ audited the remaining rc.7 changes (subagent tasks in the Job Panel, durable MCP/ACP image attachments, max-tokens fix, etc.) — none affect the extension wire contract.
 - 适配 DeepSeek Harness v0.1.0-rc.7:① 提问卡片支持折叠/展开,折叠后保留已选选项、自定义输入与当前页码(与网页端 rc.7 一致,草稿跨重渲染保留);② 内置预设英文名 Code mode 更名为 PTC mode(与网页端一致,中文仍为「编码模式」),各语言词典同步;③ 配置项 defaultReasoningEffort 描述补充新增的 low 推理强度(服务器已返回 off/low/high/max 四档,思考下拉自动适配);④ 核对 rc.7 其余变更(子代理任务接入 Job Panel、MCP/ACP 持久化图片、max-tokens 修复等)均不涉及扩展线协议,无需改动。
-
 
 ## 0.12.76
 - Fix /undo failing on non-ASCII filenames (Chinese etc.): git now runs with `core.quotepath=false` so paths stay as raw UTF-8 instead of `"\346\265\213..."` escapes; the reverse-apply patch is no longer trimmed (keeps its trailing newline, fixing "corrupt patch"); `git apply` uses `--ignore-whitespace` to survive Windows CRLF. Includes plugin dsh-git-rollback@0.1.7 (13 tests).
@@ -288,71 +349,57 @@
 - 全量多语言支持(14 种语言,界面 + 设置 + 预设)。
 - Full multilingual support (14 languages: UI + settings + presets).
 
-
 ## 0.12.74
 - Review dialogs now color-code file rows by change type: added files (A) in green, deleted files (D) in red with strikethrough — applied to rollback preview, turn-undo preview and the checkpoints dialog (binary files use git --name-status to determine add/delete).
 - 审核窗口按改动类型着色文件行:新增文件(A)绿色,删除文件(D)红色 + 删除线——覆盖回退预览、回合精确撤销预览与检查点清单弹窗(二进制文件通过 git --name-status 判定增删)。
-
 
 ## 0.12.75
 - Fix 'Steer now' on queued messages: ① the steer button is now only enabled while the agent is running (web parity; disabled with an explanatory tooltip after the turn ends/cancel/error); ② clear feedback on accepted steers (handled right after the current response) and actionable notice when the turn no longer accepts steering; silent convergence when the item was already claimed; ③ fix the running indicator wrongly clearing when queued messages remain after a turn; ④ add the missing Arabic package.nls key and remove its BOM.
 - 修复排队消息「插队」失效问题:① 插队按钮仅在 agent 运行中可用(与网页端 disabled:!running 一致,回合已结束/取消/出错后禁用并给出提示);② 插队成功给出明确反馈(将在当前回答结束后优先处理),回合结束不可插队时给出可操作提示,消息已被开始处理时静默收敛;③ 修正回合结束但仍有排队消息时运行状态误判为停止的问题;④ 补齐阿拉伯语 package.nls 缺失键并移除 BOM。
 
-
 ## 0.12.73
 - Added Russian (ru) support: 446 UI dictionary entries + 160 host l10n strings + 53 contribution-point strings fully translated; the settings language picker, dsh.language enum, and README language list now include Русский.
 - 新增俄语(ru)支持:446 条界面词典 + 160 条宿主 l10n + 53 条贡献点文案全部译毕;设置面板语言选择器、dsh.language 枚举、README 语言清单同步加入 Русский。
-
 
 ## 0.12.68
 - Filled all missing translations using Chinese as the source: +61 keys per language in the 11 UI dictionaries (permission presets / subagent catalog / deliverables / settings namespaces & fields / tool-dir compatibility) and +5 per language in the l10n bundles (command notices / plan review header) — 726 entries total; audit confirms 0 missing across all three dictionary sets.
 - 按中文为源语言补齐全部语言的缺失条目:11 种语言词典各补 61 个键(权限预设/子代理目录/产物/设置命名空间与字段/工具目录兼容等),l10n bundle 各补 5 个键(命令执行/计划审批头等),合计 726 条;审计确认三组词典全部 0 缺失。
 
-
 ## 0.12.65
 - Archiving a session no longer activates sessions from other workspace folders: the next session is picked only within the current folder (or the dropdown returns to " — Select session —\);
 - 归档会话后不再激活其他工作目录的会话:仅从当前工作目录内选择下一个会话,目录内无会话则回到「— 选择会话 —」;目录过滤开启时下拉列表严格只显示当前目录的会话(不再特殊保留其他目录的当前会话)。
-
 
 ## 0.12.64
 - Commit-message generation no longer activates a session in the conversation list: the one-shot session is archived immediately and the user's previous current session is restored — generation runs fully in the background (progress in a notification), never disturbing the session dropdown.
 - 生成 git 提交信息时不再激活到对话列表:一次性会话创建后立即归档,并恢复用户原当前会话 —— 生成全程在后台进行(进度走通知气泡),不打断、不污染会话下拉列表。
 
-
 ## 0.12.63
 - On workspace-folder switch or extension activation, no session is auto-selected: the dropdown stays at " — Select session —\
 - 切换工作区目录或扩展激活时不再主动选择/切换会话:下拉框保持「— 选择会话 —」占位,由用户主动选择;若当前会话不属于新目录仅取消选择(不再自动切到该目录最近会话)。
-
 
 ## 0.12.62
 - Typing / now immediately shows the main command list (plan on/off, goal, compact, feedback, permission, rollback, redo, checkpoints), with skills and .claude commands appended when a filter word is typed; switching workspace folders auto-isolates sessions — a current session outside the new folder is replaced by that folder's latest session (or none), preventing cross-folder confusion.
 - 输入 / 立即弹出主要命令列表(计划模式/退出、设置目标、压缩上下文、反馈、权限、回退、重做、检查点),输入过滤词后追加技能与 .claude 命令;切换工作区目录时自动对话隔离 —— 当前会话不属于新目录则切到该目录最近会话,无会话则取消选择,避免跨目录误显运行中对话。
 
-
 ## 0.12.60
 - Local skills (.claude/.codex) now behave like all skills: picking inserts a /name token (expanded on send, no full-text dump into the input); typing / auto-completes commands and skills (plan mode, skills, .claude commands; ↑↓/Enter/Esc).
 - .claude / .codex 等本地技能与所有技能统一:点击插入 /名称 token(发送时由扩展展开正文,不再整文塞入输入框);输入 / 时自动弹出命令与技能补全(计划模式、技能、.claude 命令等,↑↓/Enter/Esc 选择)。
-
 
 ## 0.12.59
 - Answered why global skills still appear with only .claude enabled: the available-skills list now shows source tags and a new " DSH user skills\
 - 回答「只启用 .claude 仍显示全局技能」:可用技能列表新增来源标注(全局/内置等)与「DSH 用户技能」开关 —— 关闭后 ~/.dsh/skills、~/.agents/skills 与自定义目录的技能不再显示。
 
-
 ## 0.12.58
 - Rollback-review diffs now render git-style with line numbers (added=green, removed=red, header/hunk highlights); the agent-config-dirs toggles now govern both project and user-global config dirs (e.g. disabling codex skips ~/.codex and the project .codex).
 - 回退审核的「查看差异」改为 git 风格:带行号,新增行标绿、删除行标红,文件头/hunk 头高亮;智能体配置目录开关现在同时控制项目目录与用户全局目录(如禁用 codex 后 ~/.codex 与项目 .codex 都不再读取展示)。
-
 
 ## 0.12.56
 - Produced git-tracked files now open as HEAD → working-tree diffs by default; README intro mentions turn-level Git rollback; fixed the extension repository URL to github.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code.
 - 产物中的 git 已跟踪文件点击打开时,默认展示 HEAD → 工作树 diff 差异视图;插件介绍(README/简介)补充回合级 Git 回退说明;修正插件仓库地址为 github.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code。
 
-
 ## 0.12.55
 - New release script tools/release.mjs: automatically generates brief bilingual changelog entries on version bumps, syncing CHANGELOG.md and the extension-changelog agent.
 - 新增发布脚本 tools/release.mjs:发版时自动生成中英双语更新日志条目,并同步写入 CHANGELOG.md 与 .dsh/agent/extension-changelog.md 智能体。
-
 
 ## 0.12.53
 - 修复:回合进行中不再显示消息操作条(复制/分支/回退/点赞),避免对话被修改期间误操作。

@@ -71,6 +71,8 @@ interface HubStatus {
   provider?: string;
   model?: string;
   message?: string;
+  /** 宿主是否仍提供预设作者端点(0.1.7-rc.2 起移除) */
+  presetAuthoring?: boolean;
 }
 
 interface ApprovalInfo {
@@ -157,6 +159,8 @@ interface NodeState {
   plainText?: string;
   deliverables?: string[];
   feedback?: "positive" | "negative";
+  /** 0.1.7 逐消息反馈的目标:assistant/message 的 message.id(缺失时退化为 /feedback 命令) */
+  messageId?: string;
   actionsEl?: HTMLElement | null;
   roleEl?: HTMLElement | null;
   /** 助手消息内产物卡容器(位于回答与操作条之间) */
@@ -171,6 +175,12 @@ interface NodeState {
   reasoningStartMs?: number;
   /** 助手节点内联的工具行(网页端工作流:工具插在所属思考块之后) */
   tools?: NodeState[];
+  /** 过程段容器(思考/工具连续段),段尾汇总行按段折叠时使用 */
+  groupEls?: { start: number; el: HTMLElement }[];
+  /** 段尾汇总行(工具完成时刷新计数) */
+  groupSummaries?: { __refresh?: () => void }[];
+  /** 用户手动收起的段(按段起始 block index 记录;重绘后保持) */
+  groupCollapsed?: Set<number>;
   /** 工具行插入位置:渲染在 blocks[afterBlock] 之后(-1 = 最前) */
   afterBlock?: number;
   // files 卡片节点
@@ -262,6 +272,10 @@ const state = {
   stats: undefined as { sessionStats?: any; tokenUsage?: any } | undefined,
   /** 待办事项(todos 投影) */
   todos: undefined as { content: string; status: "pending" | "in_progress" | "completed" }[] | null | undefined,
+  /** 逐消息反馈(0.1.7 messageFeedback;messageId → 当前值) */
+  feedback: [] as { messageId: string; rating: "positive" | "negative"; version: string; note?: string; updatedAt?: number }[],
+  /** 宿主是否仍提供预设作者端点(0.1.7-rc.2 起移除) */
+  presetAuthoring: undefined as boolean | undefined,
   /** 显示语言(宿主传入,zh-* 用中文源语言,其余用英文词典) */
   lang: "zh-cn",
   /** 排队消息权威快照(供语言切换时重建排队节点) */
@@ -450,6 +464,9 @@ const ICONS = {
   box: "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z|M3.27 6.96 12 12.01l8.73-5.05|M12 22.08V12",
   // 时钟(回合用时)
   clock: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z|M12 6v6l4 2",
+  // 闹钟(定时任务 / 自动化任务)
+  alarmClock:
+    "M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z|M12 10v3.6l2.4 1.4|M5 3 2 6|M19 3l3 3|M6.5 22 4 20.5|M17.5 22 20 20.5",
   // 仪表盘(会话统计胶囊,网页端 IconGaugeOutline16 同款语义)
   gauge: "M4.6 19.5a9 9 0 1 1 14.8 0|M12 13.8l4.2-4.2|M12 18h.01",
   // 终端(命令类工具)
@@ -459,7 +476,7 @@ const ICONS = {
   // 星芒(思考过程)
   sparkle: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z",
   // 机器人(子代理 / 工作流)
-  robot: "M5 8h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z|M12 4v4|M9 14h.01|M15 14h.01",
+  robot: "M4 10a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z|M12 4v4|M9 13v2|M15 13v2",
   // 清单(任务类工具)
   checklist: "M4 6h2v2H4z|M4 11h2v2H4z|M4 16h2v2H4z|M10 7h10|M10 12h10|M10 17h10",
   // 数据库(回合用量)
@@ -549,6 +566,10 @@ const panels = createPanels({
   requestAttachment: (_sessionId, attachmentId, messageId) => vscode.postMessage({ kind: "attachmentRead", attachmentId, messageId }),
   presetDisplayText,
   presetName,
+  // 能力随 status 更新,经 getter 读取实时值(面板渲染时总取最新)
+  get presetAuthoring() {
+    return state.presetAuthoring;
+  },
 } as PanelsContext);
 
 /** 权限预设的中文名称(经 t() 翻译)。 */
@@ -882,6 +903,66 @@ const EN_TEXT: Record<string, string> = {
   // ---- 头部按钮与图片附件 ----
   "工作区(分组 / 搜索 / 归档)": "Workspaces (groups / search / archive)",
   "后台任务": "Background jobs",
+  "自动化任务": "Automation tasks",
+  "旧会话无法撤销反馈": "Older sessions cannot revoke feedback",
+  // ---- 定时任务(0.1.7 自动化任务面板) ----
+  "一次性": "Once",
+  "周一,周二,周三,周四,周五,周六,周日": "Mon,Tue,Wed,Thu,Fri,Sat,Sun",
+  "搜索任务": "Search tasks",
+  "全部": "All",
+  "已开启": "Enabled",
+  "重新读取任务列表": "Reload the task list",
+  "正在加载任务…": "Loading tasks…",
+  "当前宿主未提供定时任务能力:请在宿主设置中启用定时任务插件后重试(0.1.7 起默认为关闭)。":
+    "This host does not provide scheduled tasks: enable the scheduled-task plugin in the host settings and retry (off by default since 0.1.7).",
+  "还没有自动化任务,在会话中创建的任务会显示在这里": "No automation tasks yet. Tasks created in your sessions appear here.",
+  "没有匹配的自动化任务": "No matching automation tasks",
+  "下次计划时间:": "Next scheduled time: ",
+  "关联会话": "Linked session",
+  "状态": "Status",
+  "下次计划时间": "Next scheduled time",
+  "提醒频率": "Frequency",
+  "时区": "Time zone",
+  "最近一次投递": "Last delivery",
+  "任务 ID": "Task ID",
+  "确认删除": "Confirm deletion",
+  "删除任务": "Delete task",
+  "删除此任务?": "Delete this task?",
+  "重新读取运行记录": "Reload delivery records",
+  "关闭详情": "Close details",
+  "收起任务详情": "Collapse task details",
+  "任务运行记录": "Delivery records",
+  "正在加载任务运行记录…": "Loading delivery records…",
+  "暂无任务运行记录": "No delivery record available",
+  "无法加载任务运行记录": "Could not load delivery records.",
+  "更早的运行记录已清理": "Earlier delivery records have been cleared",
+  "加载更多": "Load more",
+  "加载更早的运行记录": "Load earlier delivery records",
+  "无法删除任务": "Could not delete the task.",
+  "任务可能已不存在": "The task may no longer exist.",
+  "当前宿主的预设由 Cordis 组合声明,不再提供本地预设作者端点(复制 / 打开目录 / 删除);此处只能查看组合文本。":
+    "This host declares presets through Cordis composition and no longer provides local preset authoring (copy / open folder / delete); only the composition text can be viewed here.",
+  "展开 / 收起这一段过程": "Expand / collapse this run of steps",
+  "暂无工具调用": "No tool calls yet",
+  "执行了 {n} 条命令": "{n} command(s)",
+  "读取了 {n} 个文件": "{n} file(s) read",
+  "修改了 {n} 个文件": "{n} file(s) changed",
+  "搜索了 {n} 次": "{n} search(es)",
+  "访问了 {n} 个网页": "{n} page(s) fetched",
+  "调用了 {n} 个工具": "{n} tool call(s)",
+  "{n} 小时": "{n} hours",
+  "{n} 分钟": "{n} minutes",
+  "{n} 秒": "{n} seconds",
+  "一次性(创建后 {d})": "Once (after {d})",
+  "每 {d}": "Every {d}",
+  "每天 {time}": "Daily at {time}",
+  "每周 {days} {time}": "Weekly {days} at {time}",
+  "Cron {expr}": "Cron {expr}",
+  "{absolute}(已到期)": "{absolute} (due)",
+  "{absolute}({relative}后)": "{absolute} (in {relative})",
+  "{m}月{d}日 {clock}": "{m}/{d} {clock}",
+  "{y}年{m}月{d}日 {clock}": "{y}/{m}/{d} {clock}",
+  "、": ", ",
   "轨迹(事件台账)": "Trajectory (event ledger)",
   "设置(常规 / 模型 / 预设)": "Settings (general / models / presets)",
   "🖼️ 添加图片": "🖼️ Add image",
@@ -1223,6 +1304,10 @@ btnWorkspaces.append(lineIcon(ICONS.box, 15));
 const btnJobs = el("button", "btn btn-icon");
 btnJobs.title = t("后台任务");
 btnJobs.append(lineIcon(ICONS.list, 15));
+// 定时任务(0.1.7 自动化任务:网页端「自动化任务」页同款目录 + 运行记录)
+const btnSchedule = el("button", "btn btn-icon");
+btnSchedule.title = t("自动化任务");
+btnSchedule.append(lineIcon(ICONS.alarmClock, 15));
 const btnTrajectory = el("button", "btn btn-icon");
 btnTrajectory.title = t("轨迹(事件台账)");
 btnTrajectory.append(lineIcon(ICONS.ledger, 15));
@@ -1257,11 +1342,11 @@ const toolLeft = el("div", "header-tools");
 // 子代理目录按钮(网页端 session.header.actions 目录树同款定位:单个按钮 + 展开目录,不占对话空间)
 const btnSubagents = el("button", "btn btn-icon");
 btnSubagents.title = t("子代理目录");
-btnSubagents.append(el("span", "btn-emoji", "🤖"));
+btnSubagents.append(lineIcon(ICONS.robot, 15));
 const subagentsBadge = el("span", "btn-badge");
 subagentsBadge.hidden = true;
 btnSubagents.append(subagentsBadge);
-toolLeft.append(btnWorkspaces, btnJobs, btnTrajectory, btnSettings, btnSubagents);
+toolLeft.append(btnWorkspaces, btnJobs, btnSchedule, btnTrajectory, btnSettings, btnSubagents);
 const toolRight = el("div", "header-tools header-tools-right");
 toolRight.append(btnBrowser, btnCordis, statusDot, statusText);
 headerToolRow.append(toolLeft, toolRight);
@@ -2444,6 +2529,7 @@ btnBrowser.addEventListener("click", () => vscode.postMessage({ kind: "openBrows
 btnCordis.addEventListener("click", () => vscode.postMessage({ kind: "openCordisPanel" }));
 btnWorkspaces.addEventListener("click", () => panels.openWorkspaces());
 btnJobs.addEventListener("click", () => panels.openJobs());
+btnSchedule.addEventListener("click", () => panels.openSchedule());
 btnTrajectory.addEventListener("click", () => panels.openTrajectory(state.rawEvents));
 btnSettings.addEventListener("click", () => panels.openSettings());
 btnSubagents.addEventListener("click", (e) => {
@@ -3317,23 +3403,31 @@ function renderAssistantBlocks(assistant: NodeState): HTMLElement {
   /**
    * 过程行(思考 / 工具)按"连续段"包进一个 .step-group:整段只画一条左侧细导轨,
    * 与网页端一致;正文块会打断分组,因此不会出现每行一小截的碎线。
+   * 每个连续段末尾追加一行汇总(网页端「执行了命令,已读取文件,修改了文件等」
+   * 同款语义):一眼看出这一段都做了什么,点击可折叠/展开该段。
    */
   let group: HTMLElement | null = null;
-  const openGroup = (): HTMLElement => {
+  let groupStart = -1;
+  const groups: { start: number; el: HTMLElement }[] = [];
+  const summaryRows: GroupSummaryRow[] = [];
+  const openGroup = (start: number): HTMLElement => {
     if (!group) {
       group = el("div", "step-group");
+      groupStart = start;
       container.append(group);
+      groups.push({ start, el: group });
     }
     return group;
   };
   const closeGroup = () => {
     group = null;
+    groupStart = -1;
   };
   const appendToolsAfter = (index: number) => {
     for (const t of tools) {
       if ((t.afterBlock ?? -1) !== index) continue;
       if (!t.el) t.el = renderNode(t);
-      openGroup().append(t.el);
+      openGroup(index).append(t.el);
     }
   };
   appendToolsAfter(-1);
@@ -3376,7 +3470,7 @@ function renderAssistantBlocks(assistant: NodeState): HTMLElement {
       setHtml(body, block.text);
       block.el = body;
       details.append(body);
-      openGroup().append(details);
+      openGroup(index).append(details);
     } else {
       closeGroup();
       const bwrap = el("div", "block");
@@ -3388,7 +3482,125 @@ function renderAssistantBlocks(assistant: NodeState): HTMLElement {
     }
     appendToolsAfter(index);
   });
+  // 段尾汇总行:按分段边界把过程行分组,每组末尾插一行「执行了命令…」并可折叠该段
+  const toolIndices = new Set<number>();
+  for (const t of tools) toolIndices.add(t.afterBlock ?? -1);
+  const allStarts = [...new Set([...groups.map((g) => g.start), ...toolIndices])].sort((a, b) => a - b);
+  const endOf = (start: number): number => {
+    const i = allStarts.indexOf(start);
+    return i >= 0 && i + 1 < allStarts.length ? allStarts[i + 1] : Number.MAX_SAFE_INTEGER;
+  };
+  for (const entry of groups) {
+    // 只有真正执行过工具的段才显示汇总行(纯思考段不出现「暂无工具调用」噪声)
+    if (summarizeGroup(assistant, entry.start, endOf(entry.start)).length === 0) continue;
+    const row = buildGroupSummary(assistant, entry.start, endOf(entry.start), entry.el);
+    entry.el.append(row);
+    summaryRows.push(row);
+    if (assistant.groupCollapsed?.has(entry.start) === true) row.__applyCollapsed?.(true);
+  }
+  assistant.groupEls = groups;
+  assistant.groupSummaries = summaryRows;
   return container;
+}
+
+/** 段尾汇总行的可更新部件。 */
+interface GroupSummaryRow extends HTMLButtonElement {
+  /** 刷新动作清单文本(工具执行完成后调用)。 */
+  __refresh?: () => void;
+  /** 应用折叠态(true = 收起本段过程行),重绘后恢复用户选择。 */
+  __applyCollapsed?: (collapsed: boolean) => void;
+}
+
+/** 过程段分组的边界:段落起点 index(afterBlock)与结束 index(不含)。 */
+function groupRanges(assistant: NodeState): { start: number; end: number }[] {
+  const tools = assistant.tools ?? [];
+  const indices = new Set<number>();
+  for (const t of tools) indices.add(t.afterBlock ?? -1);
+  for (let i = -1; i < (assistant.blocks?.length ?? 0); i++) {
+    const block = assistant.blocks?.[i];
+    const text = typeof block?.text === "string" ? block.text : "";
+    if (block !== undefined && text.trim() !== "") indices.add(i);
+  }
+  const sorted = [...indices].sort((a, b) => a - b);
+  return sorted.map((start, i) => ({ start, end: i + 1 < sorted.length ? sorted[i + 1] : Number.MAX_SAFE_INTEGER }));
+}
+
+/**
+ * 一段连续过程行的动作汇总(网页端「执行了命令,已读取文件,修改了文件等」同款语义):
+ * 按工具类别计数,只列非零项。
+ */
+function summarizeGroup(assistant: NodeState, start: number, end: number): string[] {
+  const counts = { command: 0, read: 0, write: 0, edit: 0, search: 0, web: 0, other: 0 };
+  for (const tool of assistant.tools ?? []) {
+    const after = tool.afterBlock ?? -1;
+    const inGroup = after === start || (after > start && after < end);
+    if (!inGroup) continue;
+    const n = (tool.name ?? "").toLowerCase();
+    if (n.includes("bash") || n.includes("pwsh") || n.includes("powershell") || n.includes("shell") || n.includes("code_runtime")) counts.command++;
+    else if (n.includes("read")) counts.read++;
+    else if (n.includes("write")) counts.write++;
+    else if (n.includes("edit") || n.includes("str_replace")) counts.edit++;
+    else if (n.includes("grep") || n.includes("glob") || n.includes("search")) counts.search++;
+    else if (n.includes("web_fetch") || n.includes("web_search")) counts.web++;
+    else counts.other++;
+  }
+  const parts: string[] = [];
+  const push = (n: number, key: string) => {
+    if (n > 0) parts.push(t(key, { n: String(n) }));
+  };
+  push(counts.command, "执行了 {n} 条命令");
+  push(counts.read, "读取了 {n} 个文件");
+  push(counts.write + counts.edit, "修改了 {n} 个文件");
+  push(counts.search, "搜索了 {n} 次");
+  push(counts.web, "访问了 {n} 个网页");
+  push(counts.other, "调用了 {n} 个工具");
+  return parts;
+}
+
+/** 段尾汇总行:图标 + 动作清单 + 折叠箭头,点击折叠/展开本段(与网页端过程段同款)。 */
+function buildGroupSummary(assistant: NodeState, start: number, end: number, groupEl: HTMLElement): GroupSummaryRow {
+  const row = el("button", "step-group-summary") as GroupSummaryRow;
+  row.type = "button";
+  const icon = el("span", "step-group-icon");
+  icon.append(lineIcon(ICONS.checklist, 13));
+  row.append(icon);
+  const text = el("span", "step-group-text");
+  row.append(text);
+  const chevron = el("span", "step-group-chevron");
+  chevron.append(lineIcon(ICONS.up2, 12));
+  row.append(chevron);
+  row.title = t("展开 / 收起这一段过程");
+  const refresh = () => {
+    const parts = summarizeGroup(assistant, start, end);
+    text.textContent = parts.length > 0 ? parts.join(t("、")) : t("暂无工具调用");
+  };
+  refresh();
+  row.__refresh = refresh;
+  let collapsed = false;
+  const applyCollapsed = (next: boolean) => {
+    collapsed = next;
+    for (const child of [...groupEl.children]) {
+      if (child === row) continue;
+      (child as HTMLElement).hidden = collapsed;
+    }
+    row.classList.toggle("step-group-collapsed", collapsed);
+    chevron.innerHTML = "";
+    chevron.append(lineIcon(collapsed ? ICONS.down2 : ICONS.up2, 12));
+  };
+  row.__applyCollapsed = applyCollapsed;
+  row.addEventListener("click", () => {
+    applyCollapsed(!collapsed);
+    // 记住用户选择:整块重绘(流式/工具结果)后仍保持收起
+    assistant.groupCollapsed ??= new Set<number>();
+    if (collapsed) assistant.groupCollapsed.add(start);
+    else assistant.groupCollapsed.delete(start);
+  });
+  return row;
+}
+
+/** 工具结果落地后刷新本回合各过程段的动作清单(不整块重绘,避免打断展开态)。 */
+function refreshGroupSummaries(assistant: NodeState | undefined) {
+  for (const row of assistant?.groupSummaries ?? []) row.__refresh?.();
 }
 
 /** 思考预览:取首个非空行,压缩空白并截断(网页端 Think 行的一行摘要同款)。 */
@@ -3559,18 +3771,21 @@ function renderActions(node: NodeState) {
     });
   }
 
-  // 点赞 / 点踩(官方 /feedback 命令记录)
+  // 点赞 / 点踩:0.1.7 起优先走 messageFeedback/put(逐消息反馈,可撤销);
+  // 缺少 message.id 的历史会话退化为官方 /feedback 命令。
   const up = actionBtn(ICONS.up, t("好的回答(记录反馈)"), () => {
-    if (node.feedback === "positive") return;
-    node.feedback = "positive";
-    vscode.postMessage({ kind: "feedback", rating: "positive", snippet: node.plainText ?? "" });
-    renderActions(node);
+    if (node.feedback === "positive") {
+      clearNodeFeedback(node);
+      return;
+    }
+    setNodeFeedback(node, "positive");
   });
   const down = actionBtn(ICONS.down, t("差的回答(记录反馈)"), () => {
-    if (node.feedback === "negative") return;
-    node.feedback = "negative";
-    vscode.postMessage({ kind: "feedback", rating: "negative", snippet: node.plainText ?? "" });
-    renderActions(node);
+    if (node.feedback === "negative") {
+      clearNodeFeedback(node);
+      return;
+    }
+    setNodeFeedback(node, "negative");
   });
   if (node.feedback === "positive") up.classList.add("selected-positive");
   if (node.feedback === "negative") down.classList.add("selected-negative");
@@ -3588,6 +3803,45 @@ function renderActions(node: NodeState) {
   const clockMs = node.time ?? endMs;
   if (clockMs !== undefined) node.actionsEl.append(el("span", "turn-stat-clock", formatMessageClock(clockMs)));
 }
+
+/**
+ * 记录一条消息反馈:有 message.id 的助手消息走 0.1.7 的 messageFeedback/put,
+ * 否则退化为主机 /feedback 命令(旧会话日志没有 message.id)。
+ */
+function setNodeFeedback(node: NodeState, rating: "positive" | "negative") {
+  node.feedback = rating;
+  if (node.messageId) {
+    vscode.postMessage({ kind: "messageFeedback", messageId: node.messageId, sessionId: state.current, rating });
+  } else {
+    vscode.postMessage({ kind: "feedback", rating, snippet: node.plainText ?? "" });
+  }
+  renderActions(node);
+}
+
+/** 撤销已记录的消息反馈(仅逐消息通道支持;命令通道无撤销语义)。 */
+function clearNodeFeedback(node: NodeState) {
+  const previous = node.feedback;
+  node.feedback = undefined;
+  if (node.messageId) {
+    vscode.postMessage({ kind: "messageFeedbackClear", messageId: node.messageId, sessionId: state.current });
+  } else if (previous) {
+    vscode.postMessage({ kind: "notice", message: t("旧会话无法撤销反馈") });
+  }
+  renderActions(node);
+}
+
+/** 把宿主推送的逐消息反馈同步到已渲染的助手节点(按 messageId 精确匹配)。 */
+function applyFeedbackToNodes() {
+  const byMessage = new Map(state.feedback.map((item) => [item.messageId, item.rating]));
+  for (const node of state.nodes) {
+    if (node.kind !== "assistant" || !node.messageId) continue;
+    const rating = byMessage.get(node.messageId);
+    if (rating === node.feedback) continue;
+    node.feedback = rating;
+    renderActions(node);
+  }
+}
+
 
 /**
  * 本地时钟(网页端 formatMessageClock 同款):同一天 → HH:mm;同年 → 「{m}月{d}日 HH:mm」;
@@ -3928,6 +4182,9 @@ function handleEvent(wire: WireEvent) {
         assistant = { kind: "assistant", key: `a:${turn}:${state.nodes.length}`, el: null, blocks: [], turn };
         appendNode(assistant);
       }
+      // 0.1.7 逐消息反馈的目标:本回合最终助手消息的 message.id(操作条点赞/点踩据此落库)
+      const assistantMessageId = typeof data?.message?.id === "string" ? data.message.id : undefined;
+      if (assistantMessageId) assistant.messageId = assistantMessageId;
       // 结算权威文本(message content)按块 index 归并:
       // - 本步已流出的块:原位覆盖文本(不新增块,避免重复渲染,也不打乱工具行的块位);
       // - 旧历史(rc.1)的压缩行:仅在 content 未覆盖的 index 上补齐;
@@ -4031,7 +4288,9 @@ function handleEvent(wire: WireEvent) {
       break;
     }
     case "tool/call": {
-      setTurnStatusActivity("tool");
+      // 活动行直接说明当前在做什么(如「运行命令 · Write-Output hi」):
+      // 长回合里工具行可能已滚出视口,活动行是唯一的实时窗口
+      setTurnStatusText(toolActivityLabel(data?.name, data?.arguments));
       const callId: string = data?.callId ?? "";
       if (!callId) break;
       // 记录调用视图(主机已计算):tool/result 成功时据此把跟随 locations 计入本轮产物
@@ -4117,6 +4376,8 @@ function handleEvent(wire: WireEvent) {
             body.append(buildImageRow(existing));
           }
           updateToolSummary(existing);
+          // 段尾汇总行实时更新:一眼看到这段已经执行了哪些动作
+          refreshGroupSummaries(findAssistantTail());
         }
         // 网页端 ProducedFiles 同款推导:成功 mutation 的跟随 locations 计入本轮产物(首见顺序去重)
         if (!isError) {
@@ -4128,6 +4389,8 @@ function handleEvent(wire: WireEvent) {
           }
         }
       }
+      // 工具结束后回到通用活动文案:下一个流式块(思考/文本)会立即覆盖它
+      setTurnStatusActivity("reasoning");
       break;
     }
     case "turn/start": {
@@ -5578,18 +5841,13 @@ function turnStatusLabel(kind: string): string {
   return TURN_ACTIVITY[kind] ?? "思考中…";
 }
 
-/** 网页版一致的计时格式:中文 12分50秒 / 英文 12m 50s。 */
-function fmtClock(ms: number): string {
-  if (!Number.isFinite(ms) || ms < 0) ms = 0;
-  const zh = (state.lang ?? "zh-cn").toLowerCase().startsWith("zh");
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return zh ? `${s}秒` : `${s}s`;
-  const m = Math.floor(s / 60);
-  const rs = s % 60;
-  if (m < 60) return zh ? `${m}分${rs ? `${rs}秒` : ""}` : `${m}m ${rs}s`;
-  const h = Math.floor(m / 60);
-  const rm = m % 60;
-  return zh ? `${h}小时${rm}分` : `${h}h ${rm}m`;
+/**
+ * 工具执行期间的活动文案(网页端活动行同款:直接说明正在做什么,而不是笼统的「执行工具…」)。
+ * 形如「运行命令 · Write-Output hi」/「读取 · src/app.ts」/「写入 · lib/git.js」,
+ * 与过程行的标题 + 摘要一致,便于在长回合里一眼看到当前动作(行可能已滚出视口)。
+ */
+function toolActivityLabel(name: string | undefined, args: string | undefined): string {
+  return `${t(toolTitle(name))} · ${toolSummary(name, args)}`;
 }
 
 function tickTurnStatus() {
@@ -5607,6 +5865,26 @@ function startTurnStatus(time: number) {
 function setTurnStatusActivity(kind: string) {
   turnStatusActivity = turnStatusLabel(kind);
   if (!turnStatus.hidden) tickTurnStatus();
+}
+
+/** 直接设置活动文案(工具级:标题 + 摘要已经是本地化后的成品,不再经 t() 二次翻译)。 */
+function setTurnStatusText(text: string) {
+  turnStatusActivity = text;
+  if (!turnStatus.hidden) tickTurnStatus();
+}
+
+/** 网页版一致的计时格式:中文 12分50秒 / 英文 12m 50s。 */
+function fmtClock(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) ms = 0;
+  const zh = (state.lang ?? "zh-cn").toLowerCase().startsWith("zh");
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return zh ? `${s}秒` : `${s}s`;
+  const m = Math.floor(s / 60);
+  const rs = s % 60;
+  if (m < 60) return zh ? `${m}分${rs ? `${rs}秒` : ""}` : `${m}m ${rs}s`;
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  return zh ? `${h}小时${rm}分` : `${h}h ${rm}m`;
 }
 
 function stopTurnStatus() {
@@ -5670,6 +5948,8 @@ function updateSendButton() {
 
 function updateStatus(status: HubStatus) {
   state.status = status;
+  // 预设作者能力(0.1.7-rc.2 起宿主移除该端点族):设置面板据此显示/隐藏作者按钮
+  if (typeof status.presetAuthoring === "boolean") state.presetAuthoring = status.presetAuthoring;
   if (status.serverUp && status.muxConnected) {
     statusDot.className = "status-dot ok";
     statusText.textContent = status.model ? t("已连接 · {model}", { model: status.model }) : t("已连接");
@@ -6183,6 +6463,7 @@ function applyStaticLabels() {
   btnMore.title = t("会话操作:分叉 / 重命名 / 归档");
   btnWorkspaces.title = t("工作区(分组 / 搜索 / 归档)");
   btnJobs.title = t("后台任务");
+  btnSchedule.title = t("自动化任务");
   btnTrajectory.title = t("轨迹(事件台账)");
   btnSettings.title = t("设置(常规 / 模型 / 预设)");
   btnSubagents.title = t("子代理目录");
@@ -6699,6 +6980,30 @@ function handleMessage(msg: any) {
       if (msg.sessionId && msg.sessionId !== state.current) break;
       state.jobs = msg.jobs ?? [];
       panels.updateJobs();
+      break;
+    }
+    // ---------- 定时任务(0.1.7 schedule/*) ----------
+    case "schedule": {
+      panels.scheduleResult(msg);
+      break;
+    }
+    case "scheduleHistory": {
+      panels.scheduleHistoryResult(msg);
+      break;
+    }
+    case "scheduleDeleted": {
+      panels.scheduleDeleted(msg);
+      break;
+    }
+    case "scheduleChanged": {
+      panels.scheduleChanged();
+      break;
+    }
+    // ---------- 逐消息反馈(0.1.7 messageFeedback/*) ----------
+    case "feedback": {
+      if (msg.sessionId && msg.sessionId !== state.current) break;
+      state.feedback = Array.isArray(msg.items) ? msg.items : [];
+      applyFeedbackToNodes();
       break;
     }
     case "searchResults":

@@ -2,6 +2,7 @@ import type {
   AskUserQuestionItem,
   AssistantStreamFrame,
   JobView,
+  MessageFeedbackItem,
   QueueItem,
   SessionControlFrame,
   SessionEvent,
@@ -82,6 +83,19 @@ export class SessionStore {
   readonly stats = new Map<string, { sessionStats?: unknown; tokenUsage?: unknown }>();
   /** 待办事项(todos 投影,每回合重置) */
   readonly todos = new Map<string, { content: string; status: "pending" | "in_progress" | "completed" }[] | null>();
+  /**
+   * 直接子代理目录(subagentCatalog 投影;0.1.7 起取代已移除的 subagents/list 端点)。
+   * 只含直接子级:id / createdAt / mode / label(与网页端 header 目录同源)。
+   */
+  readonly subagentCatalog = new Map<string, { id: string; createdAt?: number; mode?: string; label?: string }[]>();
+  /**
+   * 逐消息反馈(sessionId → messageId → 当前值)。
+   * 来源:0.1.7 的 feedback/message-put|delete 会话事件(仅入日志,不入模型历史)
+   * 与 messageFeedback/list 的初始读取。
+   */
+  readonly feedback = new Map<string, Map<string, MessageFeedbackItem>>();
+  /** 某个会话是否已从 messageFeedback/list 读过一次(避免重复拉取)。 */
+  readonly feedbackLoaded = new Set<string>();
   /** 每个会话是否还有更早的历史可加载(session/page 分页) */
   readonly historyHasMore = new Map<string, boolean>();
   /** 最近活跃会话(用于面板默认选择) */
@@ -113,7 +127,9 @@ export class SessionStore {
   on(name: "permissions", fn: (sessionId: string, value: unknown) => void): () => void;
   on(name: "stats", fn: (sessionId: string, value: unknown) => void): () => void;
   on(name: "todos", fn: (sessionId: string, value: unknown) => void): () => void;
+  on(name: "subagentCatalog", fn: (sessionId: string) => void): () => void;
   on(name: "jobs", fn: (sessionId: string, jobs: JobView[]) => void): () => void;
+  on(name: "feedbackChanged", fn: (sessionId: string) => void): () => void;
   on(name: "workspaces", fn: () => void): () => void;
   on(name: "currentChanged", fn: (sessionId: string | undefined) => void): () => void;
   on(name: "remoteEvent", fn: (event: string, args: unknown[]) => void): () => void;
@@ -139,6 +155,11 @@ export class SessionStore {
   /** 通知会话列表已变化(供外部刷新调用)。 */
   notifySessionsChanged() {
     this.emit("sessionsChanged", this.listSessions());
+  }
+
+  /** 通知工作区/归档状态已变化(供外部在改动归档集合后刷新 UI)。 */
+  notifyWorkspacesChanged() {
+    this.emit("workspaces");
   }
 
   // ---------- 帧消费(0.1.2:session/follow) ----------
@@ -425,7 +446,48 @@ export class SessionStore {
       case "user/message":
         if (!s?.blank && !this.currentSessionId) this.currentSessionId = sessionId;
         break;
+      // 0.1.7 逐消息反馈:仅入日志(不进模型历史),在此折叠成会话内当前值。
+      case "feedback/message-put": {
+        const item = event.data?.item as MessageFeedbackItem | undefined;
+        if (item?.messageId) {
+          this.applyFeedbackItem(sessionId, item);
+          this.emit("feedbackChanged", sessionId);
+        }
+        break;
+      }
+      case "feedback/message-delete": {
+        const messageId = event.data?.messageId as string | undefined;
+        if (messageId && this.feedback.get(sessionId)?.delete(messageId) === true) {
+          this.emit("feedbackChanged", sessionId);
+        }
+        break;
+      }
     }
+  }
+
+  /** 合并一条逐消息反馈(事件流或 messageFeedback/list 的初始读取共用)。 */
+  applyFeedbackItem(sessionId: string, item: MessageFeedbackItem) {
+    let byMessage = this.feedback.get(sessionId);
+    if (!byMessage) this.feedback.set(sessionId, (byMessage = new Map()));
+    byMessage.set(item.messageId, item);
+  }
+
+  /** 用 messageFeedback/list 的结果覆盖某会话的反馈缓存。 */
+  applyFeedbackList(sessionId: string, items: MessageFeedbackItem[]) {
+    const byMessage = new Map<string, MessageFeedbackItem>();
+    for (const item of items) byMessage.set(item.messageId, item);
+    this.feedback.set(sessionId, byMessage);
+    this.feedbackLoaded.add(sessionId);
+    this.emit("feedbackChanged", sessionId);
+  }
+
+  /**
+   * 用 session/projections 的完整基线补齐某会话的投影值(0.1.5 起可用)。
+   * 会话刚打开、尚未收到任何投影帧时,统计 / 待办 / 权限 / 上下文 / 子代理目录
+   * 都靠这一次读取落地;幂等,重复调用只是重放同样的值。
+   */
+  applyProjectionBaseline(sessionId: string, values: Record<string, unknown>) {
+    for (const [key, value] of Object.entries(values)) this.applyProjection(sessionId, key, value);
   }
 
   private applyProjection(sessionId: string, key: string, value: unknown) {
@@ -478,6 +540,18 @@ export class SessionStore {
     if (key === "todos") {
       this.todos.set(sessionId, value as { content: string; status: "pending" | "in_progress" | "completed" }[] | null);
       this.emit("todos", sessionId, value);
+      return;
+    }
+    // 0.1.7 子代理目录投影(取代已移除的 subagents/list 端点)
+    if (key === "subagentCatalog") {
+      const rows = Array.isArray(value) ? (value as { id?: string; createdAt?: number; mode?: string; label?: string }[]) : [];
+      this.subagentCatalog.set(
+        sessionId,
+        rows
+          .filter((row) => typeof row?.id === "string")
+          .map((row) => ({ id: row.id as string, createdAt: row.createdAt, mode: row.mode, label: row.label })),
+      );
+      this.emit("subagentCatalog", sessionId);
     }
   }
 
@@ -615,6 +689,9 @@ export class SessionStore {
     this.permissions.clear();
     this.stats.clear();
     this.todos.clear();
+    this.subagentCatalog.clear();
+    this.feedback.clear();
+    this.feedbackLoaded.clear();
     this.historyHasMore.clear();
     this.unreadSessionIds.clear();
     this.currentSessionId = undefined;

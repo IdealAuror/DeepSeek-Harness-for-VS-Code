@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
 import type { DshHub } from "../dsh/hub";
 import { DshApiError } from "../dsh/apiClient";
+import { isHiddenCommitSession } from "../dsh/commitMessage";
 import { folderCwd } from "../dsh/participantSessions";
 import {
   allCheckpointSummaries,
@@ -301,6 +302,23 @@ export class ChatChannel {
         }),
       },
       {
+        // 逐消息反馈(0.1.7 feedback/message-put|delete 会话事件):推给当前会话的界面
+        dispose: store.on("feedbackChanged", (sid: string) => {
+          if (sid === store.currentSessionId) {
+            this.post({ kind: "feedback", sessionId: sid, items: [...(store.feedback.get(sid)?.values() ?? [])] });
+          }
+        }),
+      },
+      {
+        // 定时任务失效通知(0.1.7 schedule/changed):任务面板与回合任务摘要都需重读
+        dispose: this.hub.onRemoteEvent((event: string) => {
+          if (event === "schedule/changed") {
+            this.post({ kind: "scheduleChanged" });
+            if (this.schedulePanelOpen) void this.pushScheduleCatalog();
+          }
+        }),
+      },
+      {
         dispose: store.on("currentChanged", () => {
           void this.pushFullState();
         }),
@@ -336,6 +354,33 @@ export class ChatChannel {
           if (stored.event.type === "turn/start" && sid === store.currentSessionId) {
             this.scheduleRollbackRefresh(sid);
           }
+        }),
+      },
+      {
+        // 0.1.7 子代理目录投影(subagentCatalog):取代已移除的 subagents/list 端点,
+        // 投影变化即重推目录(新建/结束子代理时按钮徽标与列表实时更新)
+        dispose: store.on("subagentCatalog", (sid: string) => {
+          if (sid !== store.currentSessionId) return;
+          this.post({ kind: "subagents", sessionId: sid, value: { entries: this.subagentEntries(sid), parentAvailable: true } });
+        }),
+      },
+      {
+        // 0.1.7 逐消息反馈:会话就绪后拉一次 messageFeedback/list(老宿主无此端点时静默跳过)
+        dispose: this.hub.onFollowReady((sid: string) => {
+          // 投影基线:follow 快照不带投影时补齐统计 / 待办 / 权限 / 上下文 / 子代理目录
+          void this.hub.loadSessionProjections(sid).then((loaded) => {
+            if (loaded && sid === store.currentSessionId) void this.pushFullState();
+          });
+          void this.hub
+            .loadFeedback(sid)
+            .then(() => {
+              if (sid === store.currentSessionId) {
+                this.post({ kind: "feedback", sessionId: sid, items: [...(store.feedback.get(sid)?.values() ?? [])] });
+              }
+            })
+            .catch(() => {
+              // 0.1.5- 及未启用该能力的宿主:不影响其它功能
+            });
         }),
       },
     );
@@ -469,19 +514,69 @@ export class ChatChannel {
     }
   }
 
+  /** 定时任务面板是否打开(打开时 schedule/changed 失效通知会主动重推目录)。 */
+  private schedulePanelOpen = false;
+
+  /**
+   * 由 subagentCatalog 投影构造子代理目录条目(0.1.7 起取代 subagents/list 端点)。
+   * 运行态取自子会话自身的 turn 状态(session/list 已包含这些会话)。
+   */
+  private subagentEntries(parentSessionId: string) {
+    const rows = this.hub.store.subagentCatalog.get(parentSessionId) ?? [];
+    return rows.map((row) => ({
+      kind: "child",
+      id: row.id,
+      mode: row.mode === "one-shot" ? "one-shot" : "continuable",
+      activity: this.hub.store.sessions.get(row.id)?.running === true ? "running" : "inactive",
+      ...(row.label ? { label: row.label } : {}),
+    }));
+  }
+
+  /**
+   * 该错误是否为「宿主已移除预设作者端点」(0.1.7-rc.2 起 copy / deletePreset /
+   * openAgentPresetDirectory 整体下线;老宿主返回 gateway/method-unavailable,
+   * 未知端点也可能落到 gateway/internal)。
+   */
+  private presetAuthoringGone(error: unknown): boolean {
+    if (!(error instanceof DshApiError)) return false;
+    return /method-unavailable|ambiguous-endpoint|unknown-endpoint|internal/i.test(error.code) || /no such|not found|unknown/i.test(error.message);
+  }
+
+  /**
+   * 读取全局保留任务目录并推给面板。
+   * 宿主未启用定时任务插件时网关返回 gateway/method-unavailable:此时推 available:false,
+   * 面板显示「宿主未启用定时任务」而不是报错(0.1.7 起定时任务默认关闭)。
+   */
+  private async pushScheduleCatalog(requestId?: unknown) {
+    try {
+      const entries = await this.hub.scheduleCatalog();
+      this.post({ kind: "schedule", requestId, available: true, entries });
+    } catch (error) {
+      const unavailable = error instanceof DshApiError && /method-unavailable|service-unavailable|namespace/i.test(error.code);
+      this.post({ kind: "schedule", requestId, available: !unavailable, entries: null, error: String(error) });
+    }
+  }
+
   private serializeSessions(): StoredSession[] {
     return this.hub.store.listSessions().map((s) => {
       const pending = this.hub.store.pendingFor(s.sessionId);
-      return { ...s, unread: this.hub.store.unreadSessionIds.has(s.sessionId), ...(pending ? { pending } : {}) };
+      // 提交信息的一次性会话在生成期间本地隐藏(0.1.7 起归档会 block 掉回合,不能再先归档)
+      const archived = this.hub.store.archivedSessionIds.has(s.sessionId) || isHiddenCommitSession(s.sessionId);
+      return { ...s, unread: this.hub.store.unreadSessionIds.has(s.sessionId) && !archived, ...(pending ? { pending } : {}) };
     });
   }
 
   private serializeWorkspaces() {
     const store = this.hub.store;
+    // 提交信息会话在生成期间按归档语义隐藏(0.1.7 起归档会 block 掉回合,不能先归档再生成)
+    const archived = new Set(store.archivedSessionIds);
+    for (const session of store.listSessions()) {
+      if (isHiddenCommitSession(session.sessionId)) archived.add(session.sessionId);
+    }
     return {
       workspaces: store.listWorkspaces(),
       workspaceOrder: store.workspaceOrder,
-      archivedSessionIds: [...store.archivedSessionIds],
+      archivedSessionIds: [...archived],
     };
   }
 
@@ -549,6 +644,7 @@ export class ChatChannel {
       permissions: current ? store.permissions.get(current) : undefined,
       stats: current ? store.stats.get(current) : undefined,
       todos: current ? store.todos.get(current) : undefined,
+      feedback: current ? [...(store.feedback.get(current)?.values() ?? [])] : undefined,
       hasMore: current ? (store.historyHasMore.get(current) ?? false) : false,
       planFile: current ? this.planFiles.get(current) : undefined,
     });
@@ -740,6 +836,71 @@ export class ChatChannel {
         }
         break;
       }
+      // ---------- 定时任务(0.1.7 schedule/*) ----------
+      case "scheduleOpen": {
+        this.schedulePanelOpen = true;
+        await this.pushScheduleCatalog(msg.requestId);
+        break;
+      }
+      case "scheduleRefresh": {
+        this.schedulePanelOpen = true;
+        await this.pushScheduleCatalog(msg.requestId);
+        break;
+      }
+      case "scheduleHistory": {
+        if (typeof msg.id === "string" && typeof msg.sessionId === "string") {
+          try {
+            const value = await this.hub.scheduleHistory({
+              sessionId: msg.sessionId,
+              id: msg.id,
+              limit: typeof msg.limit === "number" ? msg.limit : 20,
+              ...(typeof msg.before === "string" ? { before: msg.before } : {}),
+            });
+            this.post({ kind: "scheduleHistory", requestId: msg.requestId, id: msg.id, sessionId: msg.sessionId, value });
+          } catch (error) {
+            this.post({ kind: "scheduleHistory", requestId: msg.requestId, id: msg.id, sessionId: msg.sessionId, value: null, error: String(error) });
+          }
+        }
+        break;
+      }
+      case "scheduleDelete": {
+        if (typeof msg.id === "string" && typeof msg.sessionId === "string") {
+          try {
+            const result = await this.hub.scheduleDelete(msg.sessionId, msg.id);
+            this.post({ kind: "scheduleDeleted", requestId: msg.requestId, id: msg.id, deleted: result.deleted !== false });
+            await this.pushScheduleCatalog();
+          } catch (error) {
+            this.post({ kind: "scheduleDeleted", requestId: msg.requestId, id: msg.id, deleted: false, error: String(error) });
+          }
+        }
+        break;
+      }
+      // ---------- 逐消息反馈(0.1.7 messageFeedback/*) ----------
+      case "messageFeedback": {
+        const sessionId = typeof msg.sessionId === "string" && msg.sessionId ? msg.sessionId : current;
+        if (sessionId && typeof msg.messageId === "string" && (msg.rating === "positive" || msg.rating === "negative")) {
+          try {
+            const result = await this.hub.putFeedback(sessionId, msg.messageId, msg.rating);
+            if (result.ok !== true) {
+              this.post({ kind: "notice", message: t("notice.feedbackConflict"), level: "warning" });
+            }
+          } catch (error) {
+            this.post({ kind: "notice", message: t("notice.feedbackFailed", { error: String(error) }), level: "error" });
+          }
+        }
+        break;
+      }
+      case "messageFeedbackClear": {
+        const sessionId = typeof msg.sessionId === "string" && msg.sessionId ? msg.sessionId : current;
+        if (sessionId && typeof msg.messageId === "string") {
+          try {
+            await this.hub.deleteFeedback(sessionId, msg.messageId);
+          } catch (error) {
+            this.post({ kind: "notice", message: t("notice.feedbackFailed", { error: String(error) }), level: "error" });
+          }
+        }
+        break;
+      }
       // ---------- 工作区管理 ----------
       case "workspaceAdd": {
         try {
@@ -924,11 +1085,27 @@ export class ChatChannel {
       }
       case "getSubagents": {
         if (current) {
+          // 0.1.7 起 subagents/list 端点移除:改为读 subagentCatalog 投影
+          // (父会话的直接子级 + 子会话自身运行态),旧宿主仍走端点回退。
+          const rows = store.subagentCatalog.get(current);
+          if (rows !== undefined) {
+            this.post({
+              kind: "subagents",
+              sessionId: current,
+              value: { entries: this.subagentEntries(current), parentAvailable: true },
+            });
+            break;
+          }
           try {
             const value = await this.hub.listSubagents(current);
             this.post({ kind: "subagents", sessionId: current, value });
           } catch (error) {
-            this.post({ kind: "subagents", sessionId: current, value: null, error: String(error) });
+            this.post({
+              kind: "subagents",
+              sessionId: current,
+              value: store.sessions.has(current) ? { entries: this.subagentEntries(current), parentAvailable: true } : null,
+              error: String(error),
+            });
           }
         }
         break;
@@ -1519,7 +1696,11 @@ export class ChatChannel {
             this.post({ kind: "presets", value });
             this.post({ kind: "notice", message: t("notice.presetCopied", { preset: msg.preset }), level: "info" });
           } catch (error) {
-            this.post({ kind: "notice", message: t("notice.presetCopyFailed", { error: String(error) }), level: "error" });
+            if (this.presetAuthoringGone(error)) {
+              this.post({ kind: "notice", message: t("notice.presetAuthoringGone"), level: "warning" });
+            } else {
+              this.post({ kind: "notice", message: t("notice.presetCopyFailed", { error: String(error) }), level: "error" });
+            }
           }
         }
         break;
@@ -1532,7 +1713,11 @@ export class ChatChannel {
             this.post({ kind: "presets", value });
             this.post({ kind: "notice", message: t("notice.presetRemoved", { preset: msg.preset }), level: "info" });
           } catch (error) {
-            this.post({ kind: "notice", message: t("notice.presetRemoveFailed", { error: String(error) }), level: "error" });
+            if (this.presetAuthoringGone(error)) {
+              this.post({ kind: "notice", message: t("notice.presetAuthoringGone"), level: "warning" });
+            } else {
+              this.post({ kind: "notice", message: t("notice.presetRemoveFailed", { error: String(error) }), level: "error" });
+            }
           }
         }
         break;
@@ -1546,7 +1731,11 @@ export class ChatChannel {
             }
             this.post({ kind: "presetFolderOpened", preset: msg.preset, path: result.path });
           } catch (error) {
-            this.post({ kind: "notice", message: t("notice.presetOpenFailed", { error: String(error) }), level: "error" });
+            if (this.presetAuthoringGone(error)) {
+              this.post({ kind: "notice", message: t("notice.presetAuthoringGone"), level: "warning" });
+            } else {
+              this.post({ kind: "notice", message: t("notice.presetOpenFailed", { error: String(error) }), level: "error" });
+            }
           }
         }
         break;

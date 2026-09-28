@@ -102,7 +102,6 @@
   "commit.pickRepo": "Git-Repository auswählen",
   "commit.diffTruncated": "Diff gekürzt",
   "commit.done": "DSH: Commit-Meldung generiert – überprüfen Sie sie und committen Sie",
-  "commit.empty": "DSH: das Modell hat keine Commit-Meldung zurückgegeben",
   "commit.cancelled": "DSH: Generierung der Commit-Meldung abgebrochen",
   "commit.timeout": "DSH: Generierung hat das Zeitlimit überschritten, die Anfrage wurde abgebrochen",
   "commit.interrupted": "DSH: das Modell hat zusätzliche Interaktion angefordert, die hier nicht unterstützt wird – abgebrochen",
@@ -184,5 +183,12 @@
   "server.updated": "DSH-Server aktualisiert und neu gestartet.",
   "server.updateRestartFailed": "DSH-Server aktualisiert, aber Neustart fehlgeschlagen: {message}",
   "notice.permissionBusy": "Ein Turn läuft: Das Berechtigungs-Preset gilt ab dem nächsten Turn. Versuchen Sie es erneut, wenn die Sitzung idle ist.",
-  "hub.modelNoImages": "Das aktuelle Modell \"{model}\" unterstützt keine Bildeingabe: Bildanhänge entfernen oder über die Modelltaste oben rechts im Eingabefeld zu einem bildfähigen Modell wechseln."
+  "hub.modelNoImages": "Das aktuelle Modell \"{model}\" unterstützt keine Bildeingabe: Bildanhänge entfernen oder über die Modelltaste oben rechts im Eingabefeld zu einem bildfähigen Modell wechseln.",
+  "notice.feedbackConflict": "Das Feedback wurde an anderer Stelle geändert; der aktuelle Wert wurde neu geladen. Bitte erneut bewerten.",
+  "notice.feedbackFailed": "Feedback konnte nicht erfasst werden: {error}",
+  "notice.presetAuthoringGone": "Die Presets dieses Hosts werden per Cordis-Komposition deklariert; lokales Preset-Authoring (Kopieren / Löschen / Ordner öffnen) entfällt. Der Kompositionstext bleibt in den Einstellungen einsehbar.",
+  "commit.diffStaged": "bereitgestellte Änderungen (Index vs. HEAD)",
+  "commit.diffUnstaged": "nicht bereitgestellte Änderungen (Arbeitsbaum vs. Index)",
+  "commit.onlyUntracked": "DSH: nichts zu generieren — {n} nicht verfolgte Datei(en) sind nicht Teil eines git diff. Bitte zuerst git add ausführen.",
+  "commit.empty": "DSH: Das Modell hat keine gültige Commit-Meldung geliefert (Turn-Ende: {reason}, {events} Ereignisse, {messages} Assistenten-Nachrichten)."
 }

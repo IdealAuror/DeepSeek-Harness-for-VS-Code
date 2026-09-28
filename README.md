@@ -6,7 +6,7 @@
 > npx @deepseek-ai/dsh web
 > ```
 
-[中文版](#chinese) | Publisher: Jager · Latest: 0.13.17
+[中文版](#chinese) | Publisher: Jager · Latest: 0.13.26
 
 Use [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) directly in VS Code, alongside ChatGPT / Copilot: the built-in `@dsh` chat participant, secondary sidebar / standalone chat windows, workspaces / jobs / trajectory / settings panels, turn-level Git rollback, and a **multi-language UI** (简体中文 / 繁體中文 / English / 日本語 / 한국어 / Deutsch / Français / Español / Português / ไทย / Bahasa Indonesia / Türkçe / Русский / العربية — follows the VS Code display language or switch manually).
 
@@ -18,9 +18,9 @@ Use [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) 
 - **Secondary sidebar tab**: container appears in the Secondary Side Bar on VS Code ≥ 1.106 (falls back to the Activity Bar on older versions).
 - **Standalone chat window**: `DSH: Open Standalone Chat Window`.
 - **Modern chat UI**: large rounded input box, pill toolbar (thinking depth / model / preset / permission), and a **context meter ring** at the top-right of the input box, right of the preset pill (web parity: click for "context used", the ~used / window reading, and the system-prompt / tool-definition / conversation breakdown with colour-coded bar segments and per-category token counts). Below the input box sit two **session statistic pills** (web parity): `4 turns 285 steps · 267 tok/s` (click for session statistics — LLM time, tool time, average TTFT, output TPS) and `71M tok · 99.6% cache hit` (click for token usage — exact total, cache hit, uncached input, cache read/write, output).
-- **Per-message actions** (minimal line icons): copy (double-rectangle icon) / branch (forked line icon; menu: counter-clockwise arrow "Rewind here" · forked icon "Branch from here" · up-left fold "Branch and rewind earlier" · up-left arrow "Back to main") / thumbs up/down (line icons, official `/feedback`) / message header shows model · thinking time · per-step tokens.
+- **Per-message actions** (minimal line icons): copy (double-rectangle icon) / branch (forked line icon; menu: counter-clockwise arrow "Rewind here" · forked icon "Branch from here" · up-left fold "Branch and rewind earlier" · up-left arrow "Back to main") / thumbs up/down (line icons; native `messageFeedback` with click-again-to-revoke, `/feedback` command fallback for older sessions) / message header shows model · thinking time · per-step tokens.
 - **Turn footer stats** (web parity): a `Usage 25.8K tok` pill (click for provider/model, cache hit rate, uncached input, cache read/write, output with reasoning share), a `Ran for 5m 57s` pill (click for total turn time, output TPS, time to first token), and the local clock of the closing message at the row's right end (`HH:mm`, `M/D HH:mm` for earlier days, `Y-M-D HH:mm` for other years). While the session is running, an earlier turn's action row and stats stay hidden and fade in on hover (only the settled latest turn shows them) — the web's `data-actions-reveal` behaviour.
-- **Step timeline** (web ToolRow / ThinkRow parity): thinking and tool calls render as one-line process rows on a left rail — `思考 • <first line>` (expanded while it streams, collapsed once thinking ends, manual toggles preserved) and `Read/Write/Pwsh/Grep • <human summary>` with a status dot, a running sweep animation, and the full arguments/result (plus image results) behind a click. Long JSON no longer floods the row.
+- **Step timeline** (web ToolRow / ThinkRow parity): thinking and tool calls render as one-line process rows on a left rail — `思考 • <first line>` (expanded while it streams, collapsed once thinking ends, manual toggles preserved) and `Read/Write/Pwsh/Grep • <human summary>` with a status dot, a running sweep animation, and the full arguments/result (plus image results) behind a click; rows appear live as each event arrives, each run of rows ends with a web-style summary line (`1 command · read 1 file · searched 2 times`) that folds or unfolds that run when clicked, and the activity line above the composer names the running action (tool title + summary) rather than a generic label. Long JSON no longer floods the row.
 - **Deliverable file cards** (web `present` parity): files the model delivers appear as cards at the turn tail — file name + description, an **Open** button (opens the file, or the HEAD→worktree diff for tracked files) and a **⋯ menu** with "Open with default app" and "Reveal in File Explorer".
 - **Turn-level Git rollback** (↩ button on each assistant turn + branch-menu entries): the DSH server-side plugin `dsh-git-rollback` snapshots the workspace's git state (tracked + untracked files) at every turn start into hidden refs (`refs/dsh/checkpoints/<sid>`, zero pollution of your branch history) and records them under `.dsh/rollback`; the button restores the workspace to the state before that turn. Commands `/rollback [N]`, `/redo`, `/checkpoints` work in both the web command panel and the VS Code chat (rollback is non-destructive: the pre-rollback state is saved first, `/redo` restores it, ignored files are never touched). Each message's ⋯/branch menu also offers **"Undo this turn's file changes"** (preview-and-confirm review dialog, reverses only the files that turn changed — your own commits and HEAD stay untouched), **"View checkpoints"**, and "Undo this turn's changes and branch from here". The web chat gets the same Copilot-style turn dividers and a floating restore dialog out of the box (plugin web half, served via the DSH client-modules pipeline).
 
@@ -41,8 +41,10 @@ Use [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) 
 - **Cross-project sessions**: per-folder @dsh sessions; multi-root follows the active editor; `dsh.participantSessionMode: global` to share one session.
 - **Workspace browser** (📁 button, web Workspaces parity): sessions grouped by workspace; add / rename / delete / reorder workspaces; per-group session ordering and archive; session content search (instant title matches + server content search with local fallback when the index is disabled); rows show waiting-for-approval / plan-review / question / running states.
 - **Background jobs panel** (⚙️ button): bash / pwsh / subagent jobs for the current session with status, timings, and detail, live from session/jobs frames.
-- **Trajectory view** (🧭 button, web Trajectory parity): turn-aware event ledger (seq · time · type · summary · token usage), click to expand the full event JSON, type filter.
-- **Settings panel** (⚙️ button, web Settings parity): general settings (schema-driven forms for every namespace, restart badges, per-namespace reset), models & providers (provider route directory + model catalog + endpoint model discovery), credential management (API key set/clear), agent preset authoring (view composition / copy / open directory to edit cordis.yml / delete user presets).
+- **Automation tasks panel** (⏰ button, host-side `schedule/*`, DSH 0.1.7+): every retained reminder with its rule text, next scheduled time and countdown, enabled / ended status, search and status filter; open a task for its instruction, frequency, time zone, linked session (jump straight to it), last delivery and its **delivery records** (newest-first with paging) and delete it after an inline confirmation. The catalog refreshes itself from the host's `schedule/changed` event; when the host has the schedule plugin disabled (the 0.1.7 default) the panel says so instead of erroring.
+- **Automation tasks panel** (⏰ button, host-side `schedule/*`, DSH 0.1.7+): every retained reminder with its rule text, next scheduled time and countdown, enabled / ended status, search and status filter; open a task for its instruction, frequency, time zone, linked session (jump straight to it), last delivery and its **delivery records** (newest-first with paging) and delete it after an inline confirmation. The catalog refreshes itself from the host's `schedule/changed` event; when the host has the schedule plugin disabled (the 0.1.7 default) the panel says so instead of erroring.
+- **Trajectory view** (🧭 button, web Trajectory parity): turn-aware event ledger (seq · time · type · summary · token usage), click to expand the full event JSON, type filter. The header toolbar is all line icons (workspace / background jobs / automation tasks / trajectory / settings / subagent catalog) drawn at 15px; the Cordis plugin button keeps its 🧩 emoji, and the Activity Bar / Secondary Side Bar container and the chat view use a line-robot mark (media/robot.svg, masked to the theme icon colour by VS Code) in the theme's icon colour.
+- **Settings panel** (⚙️ button, web Settings parity): general settings (schema-driven forms for every namespace, restart badges, per-namespace reset), models & providers (provider route directory + model catalog + endpoint model discovery), credential management (API key set/clear), agent preset authoring on hosts that still expose it — DSH 0.1.7 removed the preset authoring endpoints, so the copy / open-directory / delete buttons only appear when `settings/canOpenAgentPresetDirectory` reports support and presets are otherwise read-only composition text.
 
 ![Settings panel](https://raw.githubusercontent.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code/main/media/setting.jpg)
 
@@ -50,7 +52,7 @@ Use [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) 
 - **Image attachments**: 🖼️ add images (official image content-block channel), in both sending and history playback.
 - **Queued-message actions**: queued messages can be edited / removed / steered (official session.updateQueue).
 - **Goal creation**: the 🎯 chip creates a goal when none exists (goal.create with objective and round cap).
-- **One-click commit messages**: the ✨ button in the Source Control title bar (`DSH: Generate Commit Message`) reads the staged/unstaged git diff and generates a Conventional Commits-style message in a disposable session (archived immediately, never shown in the session list) with a lightweight model (default `deepseek-v4-flash` + low effort; configurable via `dsh.commitModel` / `dsh.commitReasoningEffort`), writing the result into the SCM input box and auto-cancelling on timeout or when the model requests extra interaction.
+- **One-click commit messages**: the ✨ button in the Source Control title bar (`DSH: Generate Commit Message`) reads the staged/unstaged git diff and generates a Conventional Commits-style message in a disposable session (archived immediately, never shown in the session list) with a lightweight model (default: the `flash` keyword matched against the DSH model catalog + low effort; configurable via `dsh.commitModel` / `dsh.commitReasoningEffort`), writing the result into the SCM input box and auto-cancelling on timeout or when the model requests extra interaction. The model switch is temporary — your default model and thinking depth are captured first and restored when generation ends, and the throwaway session is archived only after the answer arrives (DSH 0.1.7 blocks turns on archived sessions).
 - **i18n**: Simplified Chinese / Traditional Chinese / English / Japanese / Korean / German / French / Spanish / Portuguese / Thai / Indonesian / Turkish / Russian / Arabic — follows the VS Code display language, or switch in place via `dsh.language` / the 🌐 section of the settings panel.
 
 ## Install
@@ -133,7 +135,7 @@ npm run package     # → Releases/
 > npx @deepseek-ai/dsh web
 > ```
 
-[English version](#) | 发布者:Jager · 最新版本:0.13.17
+[English version](#) | 发布者:Jager · 最新版本:0.13.26
 
 在 VS Code 中直接使用 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)(`dsh`),与 ChatGPT / Copilot 一样融入 VS Code 聊天体系:内置聊天参与者 `@dsh`、辅助侧栏 / 独立聊天窗口、工作区 / 后台任务 / 轨迹 / 设置面板、回合级 Git 回退,以及**多语言界面**(简体中文 / 繁體中文 / English / 日本語 / 한국어 / Deutsch / Français / Español / Português / ไทย / Bahasa Indonesia / Türkçe / Русский / العربية,跟随 VS Code 显示语言或手动切换)。
 
@@ -143,9 +145,9 @@ npm run package     # → Releases/
 - **辅助侧栏子 tab**:VS Code ≥ 1.106 时容器直接出现在辅助侧栏(与 ChatGPT 等并列);旧版本自动回退到活动栏图标。
 - **独立聊天窗口**:编辑器区 WebviewPanel,命令 `DSH: 打开独立聊天窗口`。
 - **现代聊天界面**:大号圆角输入框、胶囊工具栏(思考深度 / 模型 / 预设 / 权限),以及输入框右上角、预设胶囊右侧的**上下文进度环**(与网页端一致:点击展开「上下文已用」读数 ~已用 / 上限,以及 系统提示词 / 工具定义 / 对话消息 三段彩色构成与各自 token 数)。输入框下方是两枚**会话统计胶囊**(与网页端一致):`4 轮 285 步 · 267 tok/s`(点击展开 会话统计:模型用时 · 工具调用用时 · 首 token 平均 TTFT · 输出速度 TPS)与 `71M tok · 缓存命中 99.6%`(点击展开 Token 用量:精确总量 · 缓存命中 · 未缓存输入 · 缓存读取/写入 · 输出)。
-- **消息操作条**(每条回答下方,简约线条图标):复制(双层矩形图标)/ 分支(分叉线条图标,点击展开菜单:逆时针箭头"回退到此处" · 分叉图标"从此处新建分支" · 左上折线"分支并回退到更早位置" · 左上箭头"回到主线")/ 点赞、点踩(拇指线条图标,官方 `/feedback` 记录)/ 消息头显示模型名 · 思考耗时 · 本步 token 消耗。
+- **消息操作条**(每条回答下方,简约线条图标):复制(双层矩形图标)/ 分支(分叉线条图标,点击展开菜单:逆时针箭头"回退到此处" · 分叉图标"从此处新建分支" · 左上折线"分支并回退到更早位置" · 左上箭头"回到主线")/ 点赞、点踩(拇指线条图标;0.1.7 起走原生 `messageFeedback`,再点一次即撤销,旧会话回退到 `/feedback` 命令)/ 消息头显示模型名 · 思考耗时 · 本步 token 消耗。
 - **回合尾统计**(与网页端一致):`用量 25.8K tok` 胶囊(点击展开 提供方/模型 · 缓存命中率 · 未缓存输入 · 缓存读取/写入 · 输出(含推理占比))、`用时 5分57秒` 胶囊(点击展开 本轮总用时 · 输出速度 TPS · 首 token 用时 TTFT),最右侧显示收尾消息的本地时间(当天 `HH:mm`,更早 `M月D日 HH:mm`,跨年 `Y年M月D日 HH:mm`)。**会话运行中,历史回合的操作条与统计默认隐藏、悬停该条消息才淡入**(网页端 `data-actions-reveal` 同款),只有已结束的最新回合常显。
-- **过程时间线**(与网页端 ToolRow / ThinkRow 一致):思考与工具调用渲染为左侧导轨上的一行——`思考 • <首行摘要>`(流式期间展开,思考结束自动收起,手动开合会被保留)与 `读取 / 写入 / Pwsh / Grep • <人类可读摘要>`(状态点 + 运行中扫光),点击展开完整参数/结果(含图片结果);不再把整段 JSON 铺在行上。
+- **过程时间线**(与网页端 ToolRow / ThinkRow 一致):思考与工具调用渲染为左侧导轨上的一行——`思考 • <首行摘要>`(流式期间展开,思考结束自动收起,手动开合会被保留)与 `读取 / 写入 / Pwsh / Grep • <人类可读摘要>`(状态点 + 运行中扫光),点击展开完整参数/结果(含图片结果);不再把整段 JSON 铺在行上。过程行随事件实时出现,每段末尾附一行网页端同款汇总(「执行了 1 条命令 · 读取了 1 个文件 · 搜索了 2 次」),点击即可折叠/展开该段;输入框上方的活动行同时说明当前动作(工具标题 + 摘要),不再是笼统的「执行工具…」。
 - **交付文件卡**(与网页端 `present` 一致):模型交付的文件在回合尾渲染为卡片——文件名 + 描述、**打开** 按钮(已跟踪文件直接打开 HEAD→工作区 diff)与 **⋯** 菜单(用默认应用打开 / 在资源管理器中显示)。
 - **回合级 Git 回退**(每条助手回答上的 ↩ 按钮 + 「分支/回退」菜单项):DSH 服务端插件 `dsh-git-rollback` 在每个回合开始时把工作区 git 状态(含未跟踪文件)快照到隐藏引用(`refs/dsh/checkpoints/<sid>`,用户分支历史零污染)并记录在 `.dsh/rollback`;点击按钮即可把工作区恢复到该回合之前的状态。`/rollback [N]`、`/redo`、`/checkpoints` 命令在 web 命令面板与 VS Code 聊天面板通用——回退非破坏性(先存保存点,`/redo` 可恢复,ignored 文件永不触碰)。每条消息的 ⋯/分支菜单另提供 **「撤销本回合改动」**(先预览后确认的审核弹窗,只反向应用该回合自身产生的文件改动——你自己的提交与 HEAD 完全不受影响)、**「查看检查点」** 与「撤销本回合变更并从此处新建分支」。网页端聊天开箱即用地获得同款 Copilot 风格回合分隔线与悬浮还原弹窗(插件 web 半区,经 DSH client-modules 管线分发)。
 
@@ -166,8 +168,10 @@ npm run package     # → Releases/
 - **跨项目会话**:每项目(工作区文件夹)独立 @dsh 会话;多根工作区跟随活动编辑器;`/session <ID>` 显式切换;`dsh.participantSessionMode: global` 可全局共用。
 - **工作区浏览器**(📁 按钮,网页端 Workspace 对齐):按工作区分组显示会话;添加 / 重命名 / 删除 / 上移下移工作区,组内会话排序与归档;会话内容搜索(标题即时匹配 + 服务器内容搜索,后端索引禁用时自动回退本地匹配);会话行显示 等待审批 / 计划待审 / 等待回答 / 运行中 状态。
 - **后台任务面板**(⚙️ 按钮):当前会话的 bash / pwsh / 子代理等后台任务清单(状态 · 起止时间 · 耗时 · 明细),随 session/jobs 帧实时刷新。
-- **轨迹视图**(🧭 按钮,网页端 Trajectory 对齐):按回合组织的事件台账(序号 / 时间 / 类型 / 摘要 / token 用量),点击展开完整事件 JSON,支持类型筛选。
-- **设置面板**(⚙️ 按钮,网页端 Settings 对齐):常规设置(schema 驱动表单,全部命名空间,含"需重启"标注与命名空间重置)、模型与供应商(供应商路由目录 + 模型目录 + 发现模型端点探测)、凭据管理(API Key 写入 / 清除)、Agent 预设管理(查看组合文本 / 复制新预设 / 打开预设目录编辑 cordis.yml / 删除用户预设)。
+- **自动化任务面板**(⏰ 按钮,宿主侧 `schedule/*`,需 DSH 0.1.7+):列出全部保留的提醒任务(规则文案 · 下次计划时间与倒计时 · 已开启/已结束),支持搜索与状态筛选;点开任务可看内容、提醒频率、时区、关联会话(一键跳转)、最近一次投递与其**运行记录**(新→旧分页),并可就地确认删除。目录随宿主 `schedule/changed` 事件自动刷新;宿主未启用定时任务插件(0.1.7 默认)时面板给出说明而不是报错。
+- **自动化任务面板**(⏰ 按钮,宿主侧 `schedule/*`,需 DSH 0.1.7+):列出全部保留的提醒任务(规则文案 · 下次计划时间与倒计时 · 已开启/已结束),支持搜索与状态筛选;点开任务可看内容、提醒频率、时区、关联会话(一键跳转)、最近一次投递与其**运行记录**(新→旧分页),并可就地确认删除。目录随宿主 `schedule/changed` 事件自动刷新;宿主未启用定时任务插件(0.1.7 默认)时面板给出说明而不是报错。
+- **轨迹视图**(🧭 按钮,网页端 Trajectory 对齐):按回合组织的事件台账(序号 / 时间 / 类型 / 摘要 / token 用量),点击展开完整事件 JSON,支持类型筛选。头部工具栏统一为线条图标(工作区 / 后台任务 / 自动化任务 / 轨迹 / 设置 / 子代理目录),15px、跟随主题图标色;Cordis 插件按钮保留 🧩 emoji,活动栏 / 辅助侧栏容器与聊天视图改用线条机器人图标(media/robot.svg,由 VS Code 按主题图标色蒙版着色)。
+- **设置面板**(⚙️ 按钮,网页端 Settings 对齐):常规设置(schema 驱动表单,全部命名空间,含"需重启"标注与命名空间重置)、模型与供应商(供应商路由目录 + 模型目录 + 发现模型端点探测)、凭据管理(API Key 写入 / 清除)、Agent 预设管理(在仍提供作者端点的宿主上可 查看组合文本 / 复制新预设 / 打开预设目录编辑 cordis.yml / 删除用户预设——DSH 0.1.7 移除了预设作者端点,此时按钮隐藏,预设只能查看组合文本)。
 
 ![设置面板](https://raw.githubusercontent.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code/main/media/setting.jpg)
 
@@ -175,7 +179,7 @@ npm run package     # → Releases/
 - **图片附件**:🖼️ 添加图片(官方 image 内容块通道),发送与历史回放均支持。
 - **排队消息操作**:排队消息条可 编辑 / 移除 / 插队(session.updateQueue 官方端点)。
 - **目标创建**:无目标时 🎯 芯片一键创建(goal.create,目标描述 + 最大轮数)。
-- **一键生成提交信息**:源代码管理(SCM)视图标题栏 ✨ 按钮(`DSH: 生成提交信息`),读取 git 暂存/未暂存 diff,在一次性会话(创建即归档,不占用会话列表)中用轻量模型按 Conventional Commits 风格生成提交信息并写入 SCM 输入框;模型与思考深度可配置(`dsh.commitModel` / `dsh.commitReasoningEffort`),超时或模型请求额外交互时自动取消。
+- **一键生成提交信息**:源代码管理(SCM)视图标题栏 ✨ 按钮(`DSH: 生成提交信息`),读取 git 暂存/未暂存 diff,在一次性会话(生成期间隐藏、结束后归档,不占用会话列表)中用轻量模型按 Conventional Commits 风格生成提交信息并写入 SCM 输入框;模型与思考深度可配置(`dsh.commitModel` 为关键字,默认 `flash`,按目录匹配 / `dsh.commitReasoningEffort`),超时或模型请求额外交互时自动取消。模型切换是临时的——先记录你的默认模型与思考深度,生成结束即恢复;一次性会话在拿到结果之后才归档(DSH 0.1.7 对已归档会话会直接 block 回合)。
 - **多语言**:扩展与聊天界面支持简体中文 / 繁體中文 / English / 日本語 / 한국어 / Deutsch / Français / Español / Português / ไทย / Bahasa Indonesia / Türkçe / Русский / العربية——跟随 VS Code 显示语言,或通过设置 `dsh.language` / 设置面板 🌐 就地切换。
 
 ## 安装

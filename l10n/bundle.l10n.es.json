@@ -102,7 +102,6 @@
   "commit.pickRepo": "Selecciona un repositorio de git",
   "commit.diffTruncated": "diff truncado",
   "commit.done": "DSH: mensaje de confirmación generado — revísalo y haz la confirmación",
-  "commit.empty": "DSH: el modelo no devolvió ningún mensaje de confirmación",
   "commit.cancelled": "DSH: generación del mensaje de confirmación cancelada",
   "commit.timeout": "DSH: se agotó el tiempo de generación y la solicitud se canceló",
   "commit.interrupted": "DSH: el modelo solicitó interacción adicional, que no se admite aquí — cancelado",
@@ -184,5 +183,12 @@
   "server.updated": "Servidor DSH actualizado y reiniciado.",
   "server.updateRestartFailed": "Servidor DSH actualizado, pero el reinicio falló: {message}",
   "notice.permissionBusy": "Hay un turno en ejecución: el preajuste de permisos se aplicará en el siguiente turno; vuelve a intentarlo cuando la sesión esté inactiva.",
-  "hub.modelNoImages": "El modelo actual \"{model}\" no admite imágenes: quita los adjuntos de imagen o cambia a un modelo compatible con imágenes con el botón de modelo de la esquina superior derecha del cuadro de entrada."
+  "hub.modelNoImages": "El modelo actual \"{model}\" no admite imágenes: quita los adjuntos de imagen o cambia a un modelo compatible con imágenes con el botón de modelo de la esquina superior derecha del cuadro de entrada.",
+  "notice.feedbackConflict": "El comentario cambió en otro lugar; se recargó el valor más reciente. Vuelve a valorarlo.",
+  "notice.feedbackFailed": "No se pudo registrar el comentario: {error}",
+  "notice.presetAuthoringGone": "Los preajustes de este host se declaran por composición de Cordis; ya no se ofrece edición local (copiar / eliminar / abrir carpeta). El texto de composición sigue consultable en Ajustes.",
+  "commit.diffStaged": "cambios preparados (index vs HEAD)",
+  "commit.diffUnstaged": "cambios sin preparar (árbol de trabajo vs index)",
+  "commit.onlyUntracked": "DSH: no hay nada que generar — {n} archivo(s) sin seguimiento no forman parte de un git diff. Ejecuta git add y vuelve a intentarlo.",
+  "commit.empty": "DSH: el modelo no devolvió un mensaje de commit válido (fin de turno: {reason}, {events} eventos, {messages} mensajes del asistente)."
 }

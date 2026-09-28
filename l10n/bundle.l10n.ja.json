@@ -102,7 +102,6 @@
   "commit.pickRepo": "git リポジトリを選択",
   "commit.diffTruncated": "diff は切り詰められています",
   "commit.done": "DSH: コミットメッセージを生成しました — 内容を確認してコミットしてください",
-  "commit.empty": "DSH: モデルがコミットメッセージを返しませんでした",
   "commit.cancelled": "DSH: コミットメッセージの生成をキャンセルしました",
   "commit.timeout": "DSH: 生成がタイムアウトしたため、リクエストをキャンセルしました",
   "commit.interrupted": "DSH: モデルが追加の対話を要求しましたが、ここではサポートされていないためキャンセルしました",
@@ -184,5 +183,12 @@
   "server.updated": "DSH サーバーを更新して再起動しました。",
   "server.updateRestartFailed": "DSH サーバーは更新されましたが、再起動に失敗しました:{message}",
   "notice.permissionBusy": "ターンが実行中です:権限プリセットは次のターンから適用されます。セッションが空いてから再試行してください。",
-  "hub.modelNoImages": "現在のモデル「{model}」は画像入力に対応していません:画像の添付を外すか、入力欄右上のモデルボタンから画像対応モデルに切り替えてください。"
+  "hub.modelNoImages": "現在のモデル「{model}」は画像入力に対応していません:画像の添付を外すか、入力欄右上のモデルボタンから画像対応モデルに切り替えてください。",
+  "notice.feedbackConflict": "フィードバックは別の画面で変更されました。最新の値を読み込み直しました。もう一度評価してください。",
+  "notice.feedbackFailed": "フィードバックを記録できませんでした: {error}",
+  "notice.presetAuthoringGone": "このホストのプリセットは Cordis 構成で宣言されており、ローカルなプリセット作成機能(複製 / 削除 / フォルダを開く)は提供されません。構成テキストは設定で確認できます。",
+  "commit.diffStaged": "ステージ済みの変更 (index vs HEAD)",
+  "commit.diffUnstaged": "未ステージの変更 (working tree vs index)",
+  "commit.onlyUntracked": "DSH: 生成できる内容がありません — {n} 個の未追跡ファイルは git diff に含まれません。git add してから再試行してください。",
+  "commit.empty": "DSH: モデルが有効なコミットメッセージを返しませんでした(ターン終了理由: {reason}、イベント {events} 件、アシスタントメッセージ {messages} 件)。"
 }

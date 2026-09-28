@@ -51,6 +51,40 @@ export interface PanelPreset {
   broken?: string;
 }
 
+/** 定时任务(0.1.7 schedule/catalog 条目:记录 + 绑定会话 + 状态)。 */
+export interface PanelScheduleEntry {
+  id: string;
+  kind: "after" | "at" | "every" | "daily" | "weekly" | "cron";
+  title: string;
+  prompt: string;
+  scheduledAt: string;
+  afterSeconds?: number;
+  everySeconds?: number;
+  time?: string;
+  timeZone?: string;
+  weekdays?: number[];
+  expression?: string;
+  sessionId: string;
+  status: "active" | "inactive";
+  lastDelivery?: { scheduledAt: string; deliveredAt: string; messageId: string };
+}
+
+/** 任务运行记录(schedule/history)。 */
+export interface PanelScheduleDelivery {
+  scheduledAt: string;
+  deliveredAt: string;
+  messageId: string;
+  prompt?: string;
+}
+
+export interface PanelScheduleHistory {
+  records: PanelScheduleDelivery[];
+  earlierRecordsUnavailable?: boolean;
+  earlierRecordsPruned?: boolean;
+  nextBefore?: string;
+  error?: string;
+}
+
 export interface PanelsContext {
   state: {
     sessions: PanelSession[];
@@ -69,6 +103,8 @@ export interface PanelsContext {
     languagePref: string;
     agentDirs: { claude: boolean; codex: boolean; githubCopilot: boolean; dshUserSkills: boolean };
   };
+  /** 宿主是否仍提供预设作者端点(0.1.7-rc.2 起移除;undefined = 尚未探测)。 */
+  presetAuthoring?: boolean;
   post: (msg: Record<string, unknown>) => void;
   el: (tag: string, cls?: string, text?: string) => HTMLElement;
   t: (zh: string, params?: Record<string, string | number>) => string;
@@ -515,6 +551,322 @@ export function createPanels(ctx: PanelsContext) {
 
   function updateJobs() {
     if (jobsPanel && !jobsPanel.overlay.hidden) renderJobsBody();
+  }
+
+  // ---------- 2b. 定时任务面板(0.1.7 schedule/*;网页端「自动化任务」页) ----------
+
+  let schedulePanel: ReturnType<typeof makePanel> | undefined;
+  /** 目录读写状态:null = 尚未读取(加载中)。 */
+  let scheduleEntries: PanelScheduleEntry[] | null = null;
+  /** 宿主是否提供定时任务能力(0.1.7 起默认关闭,未启用时面板给出说明)。 */
+  let scheduleAvailable = true;
+  let scheduleError: string | undefined;
+  let scheduleFilter = "";
+  let scheduleStatus: "all" | "active" | "inactive" = "all";
+  let scheduleOpenId: string | undefined;
+  let scheduleHistory: PanelScheduleHistory | undefined;
+  let scheduleHistoryLoading = false;
+  let schedulePendingDelete: string | undefined;
+
+  function openSchedule() {
+    if (!schedulePanel) {
+      schedulePanel = makePanel(ctx, t("自动化任务"), true);
+      schedulePanel.overlay.addEventListener("click", (e) => {
+        if (e.target === schedulePanel!.overlay) scheduleOpenId = undefined;
+      });
+    }
+    schedulePanel.overlay.hidden = false;
+    renderScheduleBody();
+    post({ kind: "scheduleOpen", requestId: nextRequestId() });
+  }
+
+  /** 任务规则的可读描述(对齐网页端 formatScheduleFrequency 的语义)。 */
+  function scheduleFrequencyText(entry: PanelScheduleEntry): string {
+    const unit = (seconds: number) => {
+      if (seconds % 3600 === 0) return t("{n} 小时", { n: seconds / 3600 });
+      if (seconds % 60 === 0) return t("{n} 分钟", { n: seconds / 60 });
+      return t("{n} 秒", { n: seconds });
+    };
+    switch (entry.kind) {
+      case "after":
+        return t("一次性(创建后 {d})", { d: entry.afterSeconds !== undefined ? unit(entry.afterSeconds) : "" });
+      case "at":
+        return t("一次性");
+      case "every":
+        return t("每 {d}", { d: entry.everySeconds !== undefined ? unit(entry.everySeconds) : "" });
+      case "daily":
+        return t("每天 {time}", { time: (entry.time ?? "").slice(0, 5) });
+      case "weekly": {
+        const names = t("周一,周二,周三,周四,周五,周六,周日").split(",");
+        const days = (entry.weekdays ?? []).map((d) => names[d - 1] ?? String(d)).join(t("、"));
+        return t("每周 {days} {time}", { days, time: (entry.time ?? "").slice(0, 5) });
+      }
+      case "cron":
+        return t("Cron {expr}", { expr: entry.expression ?? "" });
+      default:
+        return entry.kind;
+    }
+  }
+
+  /** 下次计划时间:本地绝对时间 + 相对距离(网页端 nextRunParts 同款两段式)。 */
+  function scheduleNextText(entry: PanelScheduleEntry): string {
+    const at = Date.parse(entry.scheduledAt);
+    if (!Number.isFinite(at)) return entry.scheduledAt;
+    const absolute = formatScheduleClock(at);
+    if (entry.status !== "active") return absolute;
+    const delta = at - Date.now();
+    if (delta <= 0) return t("{absolute}(已到期)", { absolute });
+    return t("{absolute}({relative}后)", { absolute, relative: ctx.fmtDuration(delta) });
+  }
+
+  /** 本地时钟:同一天 HH:mm;跨天「{m}月{d}日 HH:mm」;跨年带年份。 */
+  function formatScheduleClock(ms: number): string {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const date = new Date(ms);
+    const now = new Date();
+    const clock = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    if (date.toDateString() === now.toDateString()) return clock;
+    if (date.getFullYear() === now.getFullYear()) return t("{m}月{d}日 {clock}", { m: date.getMonth() + 1, d: date.getDate(), clock });
+    return t("{y}年{m}月{d}日 {clock}", { y: date.getFullYear(), m: date.getMonth() + 1, d: date.getDate(), clock });
+  }
+
+  function renderScheduleBody() {
+    if (!schedulePanel) return;
+    const body = schedulePanel.body;
+    body.innerHTML = "";
+
+    // 工具条:搜索 + 状态过滤 + 刷新
+    const bar = ctx.el("div", "sched-bar");
+    const search = ctx.el("input", "sched-search") as HTMLInputElement;
+    search.type = "search";
+    search.placeholder = t("搜索任务");
+    search.value = scheduleFilter;
+    search.addEventListener("input", () => {
+      scheduleFilter = search.value;
+      renderScheduleList(list);
+    });
+    const filter = ctx.el("select", "sched-filter") as HTMLSelectElement;
+    for (const [value, label] of [["all", t("全部")], ["active", t("已开启")], ["inactive", t("已结束")]] as const) {
+      const option = ctx.el("option", undefined, label) as HTMLOptionElement;
+      option.value = value;
+      if (scheduleStatus === value) option.selected = true;
+      filter.append(option);
+    }
+    filter.addEventListener("change", () => {
+      scheduleStatus = filter.value as typeof scheduleStatus;
+      renderScheduleList(list);
+    });
+    const refresh = textBtn(ctx, t("刷新"), t("重新读取任务列表"), () => {
+      scheduleEntries = null;
+      renderScheduleBody();
+      post({ kind: "scheduleRefresh", requestId: nextRequestId() });
+    }, "mini-btn");
+    bar.append(search, filter, refresh);
+    body.append(bar);
+
+    if (scheduleEntries === null && scheduleError === undefined) {
+      body.append(ctx.el("div", "ws-note", t("正在加载任务…")));
+      return;
+    }
+    if (!scheduleAvailable) {
+      body.append(
+        ctx.el(
+          "div",
+          "ws-note",
+          t("当前宿主未提供定时任务能力:请在宿主设置中启用定时任务插件后重试(0.1.7 起默认为关闭)。"),
+        ),
+      );
+      if (scheduleError) body.append(ctx.el("div", "ws-note ws-note-error", scheduleError));
+      return;
+    }
+    if (scheduleError !== undefined) {
+      body.append(ctx.el("div", "ws-note ws-note-error", t("无法加载任务:{error}", { error: scheduleError })));
+      return;
+    }
+    const list = ctx.el("div", "sched-list");
+    body.append(list);
+    renderScheduleList(list);
+  }
+
+  /** 渲染目录列表(搜索 + 状态过滤;点击行展开详情)。 */
+  function renderScheduleList(list: HTMLElement) {
+    list.innerHTML = "";
+    const all = scheduleEntries ?? [];
+    const needle = scheduleFilter.trim().toLowerCase();
+    const filtered = all.filter((entry) => {
+      if (scheduleStatus !== "all" && entry.status !== scheduleStatus) return false;
+      if (!needle) return true;
+      return `${entry.title} ${entry.prompt} ${entry.id} ${entry.sessionId}`.toLowerCase().includes(needle);
+    });
+    if (all.length === 0) {
+      list.append(ctx.el("div", "ws-note", t("还没有自动化任务,在会话中创建的任务会显示在这里")));
+      return;
+    }
+    if (filtered.length === 0) {
+      list.append(ctx.el("div", "ws-note", t("没有匹配的自动化任务")));
+      return;
+    }
+    const ordered = [...filtered].sort((a, b) => {
+      if (a.status !== b.status) return a.status === "active" ? -1 : 1;
+      return Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt);
+    });
+    for (const entry of ordered) {
+      list.append(scheduleRow(entry));
+      if (scheduleOpenId === entry.id) list.append(scheduleDetail(entry));
+    }
+  }
+
+  function scheduleRow(entry: PanelScheduleEntry): HTMLElement {
+    const row = ctx.el("div", "sched-row");
+    if (scheduleOpenId === entry.id) row.classList.add("sched-row-open");
+    const dot = ctx.el("span", entry.status === "active" ? "job-status job-running" : "job-status job-done", entry.status === "active" ? "●" : "✓");
+    dot.title = entry.status === "active" ? t("已开启") : t("已结束");
+    const main = ctx.el("div", "sched-main");
+    const title = ctx.el("div", "sched-title", entry.title || entry.id.slice(0, 8));
+    const meta = ctx.el("div", "sched-meta", `${scheduleFrequencyText(entry)} · ${t("下次计划时间:")} ${scheduleNextText(entry)}`);
+    meta.title = entry.prompt;
+    main.append(title, meta);
+    const session = ctx.el("button", "sched-session", t("关联会话"));
+    session.title = entry.sessionId;
+    session.addEventListener("click", (e) => {
+      e.stopPropagation();
+      ctx.selectSession(entry.sessionId);
+      schedulePanel?.close();
+    });
+    row.append(dot, main, session);
+    row.addEventListener("click", () => {
+      scheduleOpenId = scheduleOpenId === entry.id ? undefined : entry.id;
+      scheduleHistory = undefined;
+      schedulePendingDelete = undefined;
+      renderScheduleBody();
+      if (scheduleOpenId === entry.id) loadScheduleHistory(entry);
+    });
+    return row;
+  }
+
+  function scheduleDetail(entry: PanelScheduleEntry): HTMLElement {
+    const detail = ctx.el("div", "sched-detail");
+    const prompt = ctx.el("div", "sched-prompt", entry.prompt);
+    detail.append(prompt);
+    const facts = ctx.el("div", "sched-facts");
+    const addFact = (label: string, value: string) => {
+      const line = ctx.el("div", "sched-fact");
+      line.append(ctx.el("span", "sched-fact-label", label), ctx.el("span", "sched-fact-value", value));
+      facts.append(line);
+    };
+    addFact(t("状态"), entry.status === "active" ? t("已开启") : t("已结束"));
+    addFact(t("下次计划时间"), scheduleNextText(entry));
+    addFact(t("提醒频率"), scheduleFrequencyText(entry));
+    if (entry.timeZone) addFact(t("时区"), entry.timeZone);
+    if (entry.lastDelivery) addFact(t("最近一次投递"), formatScheduleClock(Date.parse(entry.lastDelivery.deliveredAt)));
+    addFact(t("任务 ID"), entry.id);
+    addFact(t("关联会话"), entry.sessionId);
+    detail.append(facts);
+
+    const actions = ctx.el("div", "sched-actions");
+    const del = textBtn(
+      ctx,
+      schedulePendingDelete === entry.id ? t("确认删除") : t("删除任务"),
+      t("删除此任务?"),
+      () => {
+        if (schedulePendingDelete !== entry.id) {
+          schedulePendingDelete = entry.id;
+          renderScheduleBody();
+          return;
+        }
+        schedulePendingDelete = undefined;
+        post({ kind: "scheduleDelete", sessionId: entry.sessionId, id: entry.id, requestId: nextRequestId() });
+      },
+      schedulePendingDelete === entry.id ? "mini-btn danger" : "mini-btn",
+    );
+    const reload = textBtn(ctx, t("刷新"), t("重新读取运行记录"), () => loadScheduleHistory(entry, true), "mini-btn");
+    const close = textBtn(ctx, t("关闭详情"), t("收起任务详情"), () => {
+      scheduleOpenId = undefined;
+      scheduleHistory = undefined;
+      renderScheduleBody();
+    }, "mini-btn");
+    actions.append(del, reload, close);
+    detail.append(actions);
+
+    const records = ctx.el("div", "sched-records");
+    records.append(ctx.el("div", "sched-records-title", t("任务运行记录")));
+    if (scheduleHistoryLoading) {
+      records.append(ctx.el("div", "ws-note", t("正在加载任务运行记录…")));
+    } else if (scheduleHistory === undefined) {
+      records.append(ctx.el("div", "ws-note", t("暂无任务运行记录")));
+    } else if (scheduleHistory.error) {
+      records.append(ctx.el("div", "ws-note ws-note-error", t("无法加载任务运行记录")));
+    } else if (scheduleHistory.records.length === 0) {
+      records.append(ctx.el("div", "ws-note", t("暂无任务运行记录")));
+    } else {
+      if (scheduleHistory.earlierRecordsPruned) records.append(ctx.el("div", "ws-note", t("更早的运行记录已清理")));
+      for (const record of scheduleHistory.records) {
+        const line = ctx.el("div", "sched-record");
+        line.append(ctx.el("span", "sched-record-time", formatScheduleClock(Date.parse(record.deliveredAt))));
+        line.append(ctx.el("span", "sched-record-text", record.prompt || record.messageId));
+        records.append(line);
+      }
+      if (scheduleHistory.nextBefore) {
+        records.append(
+          textBtn(ctx, t("加载更多"), t("加载更早的运行记录"), () => loadScheduleHistory(entry, false, scheduleHistory?.nextBefore), "mini-btn"),
+        );
+      }
+    }
+    detail.append(records);
+    return detail;
+  }
+
+  function loadScheduleHistory(entry: PanelScheduleEntry, refresh = false, before?: string) {
+    scheduleHistoryLoading = true;
+    if (refresh) scheduleHistory = undefined;
+    renderScheduleBody();
+    post({
+      kind: "scheduleHistory",
+      sessionId: entry.sessionId,
+      id: entry.id,
+      limit: 20,
+      ...(before !== undefined ? { before } : {}),
+      ...(refresh ? { refresh: true } : {}),
+      requestId: nextRequestId(),
+    });
+  }
+
+  /** 目录读取结果(宿主推送;available=false 表示宿主未启用定时任务能力)。 */
+  function scheduleResult(msg: { available?: boolean; entries?: PanelScheduleEntry[] | null; error?: string }) {
+    scheduleAvailable = msg.available !== false;
+    scheduleError = msg.error;
+    scheduleEntries = Array.isArray(msg.entries) ? msg.entries : [];
+    if (schedulePanel && !schedulePanel.overlay.hidden) renderScheduleBody();
+  }
+
+  /** schedule/changed 失效通知:目录打开时自动重读。 */
+  function scheduleChanged() {
+    if (schedulePanel && !schedulePanel.overlay.hidden) {
+      post({ kind: "scheduleRefresh", requestId: nextRequestId() });
+    }
+  }
+
+  function scheduleHistoryResult(msg: { id: string; value: PanelScheduleHistory | null; error?: string; refresh?: boolean }) {
+    scheduleHistoryLoading = false;
+    if (msg.error || msg.value === null) {
+      scheduleHistory = msg.error || msg.refresh ? { records: [], error: msg.error ?? t("无法加载任务运行记录") } : undefined;
+    } else if (msg.refresh) {
+      scheduleHistory = msg.value;
+    } else {
+      const known = new Set((scheduleHistory?.records ?? []).map((r) => r.messageId));
+      scheduleHistory = { ...msg.value, records: [...(scheduleHistory?.records ?? []), ...msg.value.records.filter((r) => !known.has(r.messageId))] };
+    }
+    if (schedulePanel && !schedulePanel.overlay.hidden) renderScheduleBody();
+  }
+
+  function scheduleDeleted(msg: { id: string; deleted?: boolean; error?: string }) {
+    if (msg.deleted === false) {
+      void ctx.showDialog({ title: t("无法删除任务"), text: msg.error ?? t("任务可能已不存在") });
+      return;
+    }
+    scheduleEntries = (scheduleEntries ?? []).filter((entry) => entry.id !== msg.id);
+    if (scheduleOpenId === msg.id) scheduleOpenId = undefined;
+    if (schedulePanel && !schedulePanel.overlay.hidden) renderScheduleBody();
   }
 
   // ---------- 3. 轨迹视图 ----------
@@ -1413,29 +1765,43 @@ export function createPanels(ctx: PanelsContext) {
           presetReadValue = null;
           post({ kind: "presetRead", preset: p.id, requestId: nextRequestId() });
         }, "mini-btn"),
-        iconBtn(ctx, ctx.ICONS.copy, t("复制为新预设(本地作者)"), () => {
-          void ctx.showDialog({ title: t("复制预设"), text: t("新预设 id(小写字母数字与连字符)"), input: true, value: `${p.id}-copy` }).then((v) => {
-            if (!v) return;
-            void ctx.showDialog({ title: t("复制预设"), text: t("显示名(可留空)"), input: true, value: text.name }).then((name) => {
-              post({ kind: "presetCopy", from: p.id, preset: v.trim(), name: name?.trim() || undefined });
-            });
-          });
-        }, "mini-btn"),
       );
-      if (p.trust === "user") {
+      // 预设作者(复制 / 打开目录 / 删除)在 0.1.7-rc.2 起从宿主端点族移除:
+      // 仅在宿主仍提供该能力时渲染按钮(能力由宿主探测后随 status 下发)。
+      if (ctx.presetAuthoring === true) {
         actions.append(
-          iconBtn(ctx, ctx.ICONS.folder, t("打开预设目录"), () => post({ kind: "presetOpenFolder", preset: p.id }), "mini-btn"),
-          iconBtn(ctx, ctx.ICONS.trash, t("删除预设"), () => {
-            void ctx.showDialog({ title: t("删除预设"), text: `${t("确定删除预设")} ${p.id}?` }).then((v) => {
-              if (v) post({ kind: "presetRemove", preset: p.id });
+          iconBtn(ctx, ctx.ICONS.copy, t("复制为新预设(本地作者)"), () => {
+            void ctx.showDialog({ title: t("复制预设"), text: t("新预设 id(小写字母数字与连字符)"), input: true, value: `${p.id}-copy` }).then((v) => {
+              if (!v) return;
+              void ctx.showDialog({ title: t("复制预设"), text: t("显示名(可留空)"), input: true, value: text.name }).then((name) => {
+                post({ kind: "presetCopy", from: p.id, preset: v.trim(), name: name?.trim() || undefined });
+              });
             });
           }, "mini-btn"),
         );
+        if (p.trust === "user") {
+          actions.append(
+            iconBtn(ctx, ctx.ICONS.folder, t("打开预设目录"), () => post({ kind: "presetOpenFolder", preset: p.id }), "mini-btn"),
+            iconBtn(ctx, ctx.ICONS.trash, t("删除预设"), () => {
+              void ctx.showDialog({ title: t("删除预设"), text: `${t("确定删除预设")} ${p.id}?` }).then((v) => {
+                if (v) post({ kind: "presetRemove", preset: p.id });
+              });
+            }, "mini-btn"),
+          );
+        }
       }
       row.append(actions);
       body.append(row);
     }
-    body.append(ctx.el("div", "ws-note", t("提示:预设组合文本是唯一编辑器。复制后通过\"打开预设目录\"在 VS Code 中编辑 cordis.yml;新会话创建时可选自定义预设。")));
+    body.append(
+      ctx.el(
+        "div",
+        "ws-note",
+        ctx.presetAuthoring === true
+          ? t("提示:预设组合文本是唯一编辑器。复制后通过\"打开预设目录\"在 VS Code 中编辑 cordis.yml;新会话创建时可选自定义预设。")
+          : t("当前宿主的预设由 Cordis 组合声明,不再提供本地预设作者端点(复制 / 打开目录 / 删除);此处只能查看组合文本。"),
+      ),
+    );
   }
 
   function renderPresetReadResult(msg: { value: { agentPreset: string; trust: string; content: string; name?: string; description?: string } | null; error?: string }) {
@@ -1705,6 +2071,11 @@ export function createPanels(ctx: PanelsContext) {
     renderSearchResults,
     openJobs,
     updateJobs,
+    openSchedule,
+    scheduleResult,
+    scheduleChanged,
+    scheduleHistoryResult,
+    scheduleDeleted,
     openTrajectory,
     openSettings,
     refreshSettings,

@@ -1,7 +1,7 @@
 import { DshApiClient, DshApiError, DshAuthError, type RemoteStreamHandle } from "./apiClient";
 import { ServerManager } from "./serverManager";
 import { SessionStore, type StoredSession } from "./sessionStore";
-import type { CommandExecutionView, PromptContentPart, SessionFollowFrame } from "./types";
+import type { CommandExecutionView, MessageFeedbackRating, PromptContentPart, ScheduleHistoryRequest, SessionFollowFrame } from "./types";
 import type {
   CordisPluginRow,
   CordisRequestRun,
@@ -22,6 +22,8 @@ export interface HubStatus {
   provider?: string;
   model?: string;
   message?: string;
+  /** 宿主是否仍提供预设作者端点(copy / deletePreset / openAgentPresetDirectory;0.1.7 起移除)。 */
+  presetAuthoring?: boolean;
 }
 
 export interface HubDeps {
@@ -41,7 +43,7 @@ export interface HubDeps {
 
 const HISTORY_PAGE_MESSAGES = 60;
 
-/** 中枢:服务器 + API 客户端 + 会话存储的统一入口(0.1.5-rc.1 线协议,兼容 0.1.2 参数名)。 */
+/** 中枢:服务器 + API 客户端 + 会话存储的统一入口(0.1.7-rc.2 线协议,兼容 0.1.5 / 0.1.2 参数名)。 */
 export class DshHub {
   readonly store = new SessionStore();
   readonly client: DshApiClient;
@@ -57,6 +59,8 @@ export class DshHub {
 
   private readyPromise: Promise<{ ok: boolean; message?: string }> | undefined;
   private statusListeners = new Set<(status: HubStatus) => void>();
+  /** 宿主是否仍提供预设作者端点(探测结果;undefined = 尚未探测)。 */
+  private presetAuthoring: boolean | undefined;
 
   /** 当前跟随的会话(session/follow 流只能按地址打开)。 */
   private followedSession: string | undefined;
@@ -93,6 +97,18 @@ export class DshHub {
       onReady: () => {
         // $events 打开帧:主机信息(session.list 探测所需)
         this.emitStatus();
+        // 预设作者能力探测(0.1.7 起端点族移除;只探一次并缓存)
+        void this.client
+          .probePresetAuthoring()
+          .then((supported) => {
+            if (supported !== this.presetAuthoring) {
+              this.presetAuthoring = supported;
+              this.emitStatus();
+            }
+          })
+          .catch(() => {
+            /* 探测失败按不支持处理,不打扰用户 */
+          });
       },
       onEmit: (event, args) => {
         if (event.startsWith("api-session/")) {
@@ -116,7 +132,7 @@ export class DshHub {
   }
 
   get status(): HubStatus {
-    return { ...this.statusState };
+    return { ...this.statusState, presetAuthoring: this.presetAuthoring };
   }
 
   onStatus(listener: (status: HubStatus) => void): () => void {
@@ -485,12 +501,33 @@ export class DshHub {
   }
 
   async send(sessionId: string, text: string): Promise<{ accepted: true; command?: { kind: "success"; text?: string } } | undefined> {
+    await this.ensureUnarchived(sessionId);
     try {
       return await this.client.sendPromptParts(sessionId, "queue", [{ type: "text", text }]);
     } catch (error) {
       const message = this.describeSendError(error);
       this.deps.onNotice?.(this.deps.t?.("hub.sendFailed", { message }) ?? `Send failed: ${message}`, "error");
       throw error;
+    }
+  }
+
+  /**
+   * 0.1.7 起已归档会话的回合会立刻以 reason.kind = "blocked" 结束(模型不会被调用),
+   * 因此向一个归档会话发消息前先取消归档。旧宿主没有该端点 → 静默忽略。
+   */
+  private async ensureUnarchived(sessionId: string): Promise<void> {
+    if (!this.store.archivedSessionIds.has(sessionId)) return;
+    try {
+      const result = await this.client.unarchiveSession(sessionId);
+      if (Array.isArray(result?.archivedSessionIds)) {
+        this.store.archivedSessionIds.clear();
+        for (const id of result.archivedSessionIds) this.store.archivedSessionIds.add(id);
+      } else {
+        this.store.archivedSessionIds.delete(sessionId);
+      }
+      this.store.notifyWorkspacesChanged();
+    } catch {
+      // 旧宿主无 unarchive 端点:保持现状(其归档语义不影响回合)
     }
   }
 
@@ -615,6 +652,7 @@ export class DshHub {
 
   /** 发送带内容块的消息(文本 + 图片)。 */
   async sendParts(sessionId: string, content: PromptContentPart[]) {
+    await this.ensureUnarchived(sessionId);
     try {
       await this.client.sendPromptParts(sessionId, "queue", content);
     } catch (error) {
@@ -779,6 +817,82 @@ export class DshHub {
 
   subagentInterrupt(parentSessionId: string, childSessionId: string) {
     return this.client.subagentInterrupt(parentSessionId, childSessionId);
+  }
+
+  // ---------- 定时任务(0.1.7 schedule/*;宿主未启用定时任务插件时方法不可用) ----------
+
+  /** 全局保留任务目录(网页端「自动化任务」页同款数据源)。 */
+  scheduleCatalog() {
+    return this.client.scheduleCatalog();
+  }
+
+  /** 某会话内的任务列表。 */
+  scheduleList(sessionId: string) {
+    return this.client.scheduleList(sessionId);
+  }
+
+  scheduleDelete(sessionId: string, id: string) {
+    return this.client.scheduleDelete(sessionId, id);
+  }
+
+  scheduleHistory(request: ScheduleHistoryRequest) {
+    return this.client.scheduleHistory(request);
+  }
+
+  // ---------- 逐消息反馈(0.1.7 messageFeedback/*) ----------
+  /**
+   * 读取会话的完整投影基线并写入存储(0.1.5 起 session/projections;0.1.2 无此端点)。
+   * 用于会话刚打开时立即补齐统计 / 待办 / 权限 / 上下文 / 子代理目录。
+   */
+  async loadSessionProjections(sessionId: string): Promise<boolean> {
+    try {
+      const baseline = await this.client.sessionProjections(sessionId);
+      if (!baseline || typeof baseline.values !== "object" || baseline.values === null) return false;
+      this.store.applyProjectionBaseline(sessionId, baseline.values);
+      return true;
+    } catch {
+      return false; // 旧宿主无该端点:交给 follow 快照与投影帧
+    }
+  }
+
+
+  /** 读取会话的逐消息反馈并写入缓存(每个会话只拉一次)。 */
+  async loadFeedback(sessionId: string, force = false): Promise<void> {
+    if (!force && this.store.feedbackLoaded.has(sessionId)) return;
+    const result = await this.client.messageFeedbackList(sessionId);
+    if (result.ok === true) {
+      this.store.applyFeedbackList(sessionId, result.value.items);
+    } else {
+      // 业务失败(如会话已归档)不重试;标记已读避免每次切换都打一次
+      this.store.feedbackLoaded.add(sessionId);
+    }
+  }
+
+  /** 点赞 / 点踩(用缓存的 version 做 CAS,冲突时以宿主返回的当前值刷新缓存)。 */
+  async putFeedback(sessionId: string, messageId: string, rating: MessageFeedbackRating, note?: string) {
+    const current = this.store.feedback.get(sessionId)?.get(messageId);
+    const result = await this.client.messageFeedbackPut(sessionId, messageId, rating, current?.version ?? null, note !== undefined ? { note } : undefined);
+    if (result.ok === true) {
+      this.store.applyFeedbackItem(sessionId, result.value);
+      return { ok: true as const, item: result.value };
+    }
+    // version-conflict:宿主回传权威当前值,刷新缓存后由调用方重试
+    const currentItem = result.error?.current;
+    if (currentItem) this.store.applyFeedbackItem(sessionId, currentItem);
+    return { ok: false as const, code: result.error?.code ?? "unknown" };
+  }
+
+  /** 撤销反馈(需要观测到的 version;已不存在时幂等成功)。 */
+  async deleteFeedback(sessionId: string, messageId: string) {
+    const current = this.store.feedback.get(sessionId)?.get(messageId);
+    if (!current) return { ok: true as const };
+    const result = await this.client.messageFeedbackDelete(sessionId, messageId, current.version);
+    if (result.ok === true) {
+      const rest = [...(this.store.feedback.get(sessionId)?.values() ?? [])].filter((item) => item.messageId !== messageId);
+      this.store.applyFeedbackList(sessionId, rest);
+      return { ok: true as const };
+    }
+    return { ok: false as const, code: result.error?.code ?? "unknown" };
   }
 
   // ---------- 工作区 ----------

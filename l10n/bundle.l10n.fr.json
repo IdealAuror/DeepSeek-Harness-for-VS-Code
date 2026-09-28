@@ -102,7 +102,6 @@
   "commit.pickRepo": "Sélectionnez un dépôt git",
   "commit.diffTruncated": "diff tronqué",
   "commit.done": "DSH : message de commit généré — relisez-le et validez",
-  "commit.empty": "DSH : le modèle n'a renvoyé aucun message de commit",
   "commit.cancelled": "DSH : génération du message de commit annulée",
   "commit.timeout": "DSH : le délai de génération a expiré et la demande a été annulée",
   "commit.interrupted": "DSH : le modèle a demandé une interaction supplémentaire, non prise en charge ici — annulé",
@@ -184,5 +183,12 @@
   "server.updated": "Serveur DSH mis à jour et redémarré.",
   "server.updateRestartFailed": "Serveur DSH mis à jour, mais le redémarrage a échoué : {message}",
   "notice.permissionBusy": "Un tour est en cours : le préréglage de permissions s'appliquera au tour suivant ; réessayez lorsque la session est inactive.",
-  "hub.modelNoImages": "Le modèle actuel « {model} » ne prend pas en charge les images : retirez les pièces jointes ou choisissez un modèle compatible via le bouton de modèle en haut à droite de la zone de saisie."
+  "hub.modelNoImages": "Le modèle actuel « {model} » ne prend pas en charge les images : retirez les pièces jointes ou choisissez un modèle compatible via le bouton de modèle en haut à droite de la zone de saisie.",
+  "notice.feedbackConflict": "Le retour a été modifié ailleurs ; la valeur la plus récente a été rechargée. Veuillez réévaluer.",
+  "notice.feedbackFailed": "Impossible d'enregistrer le retour : {error}",
+  "notice.presetAuthoringGone": "Les préréglages de cet hôte sont déclarés par composition Cordis ; l'édition locale (copier / supprimer / ouvrir le dossier) n'est plus fournie. Le texte de composition reste consultable dans les réglages.",
+  "commit.diffStaged": "modifications indexées (index vs HEAD)",
+  "commit.diffUnstaged": "modifications non indexées (arbre de travail vs index)",
+  "commit.onlyUntracked": "DSH : rien à générer — {n} fichier(s) non suivi(s) ne font pas partie d'un git diff. Faites git add puis réessayez.",
+  "commit.empty": "DSH : le modèle n'a pas renvoyé de message de commit valide (fin de tour : {reason}, {events} événements, {messages} messages de l'assistant)."
 }

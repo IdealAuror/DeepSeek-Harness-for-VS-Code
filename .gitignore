@@ -12,6 +12,9 @@ out/
 Releases/
 plugins/*/*.tgz
 
+# --- Scratch / audit workspaces (upgrade audits, probes; never shipped or pushed) ---
+tmp/
+
 # --- DSH workspace state & agent config (local data, never push) ---
 .dsh/
 .dsh-snapshots/

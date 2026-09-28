@@ -104,7 +104,6 @@
   "commit.pickRepo": "Select a git repository",
   "commit.diffTruncated": "diff truncated",
   "commit.done": "DSH: commit message generated — review it and commit",
-  "commit.empty": "DSH: the model returned no commit message",
   "commit.cancelled": "DSH: commit message generation cancelled",
   "commit.timeout": "DSH: generation timed out and the request was cancelled",
   "commit.interrupted": "DSH: the model requested extra interaction, which is not supported here — cancelled",
@@ -184,5 +183,12 @@
   "server.updating": "Updating DSH server (downloads @deepseek-ai/dsh@latest)…",
   "server.updateFailed": "DSH server update failed. See the Output log for details.",
   "server.updated": "DSH server updated and restarted.",
-  "server.updateRestartFailed": "DSH server updated, but restart failed: {message}"
+  "server.updateRestartFailed": "DSH server updated, but restart failed: {message}",
+  "notice.feedbackConflict": "Feedback changed elsewhere; the latest value has been reloaded. Please rate again.",
+  "notice.feedbackFailed": "Could not record feedback: {error}",
+  "notice.presetAuthoringGone": "This host declares presets through Cordis composition and no longer provides local preset authoring (copy / delete / open folder). Composition text can still be viewed in Settings.",
+  "commit.diffStaged": "staged changes (index vs HEAD)",
+  "commit.diffUnstaged": "unstaged changes (working tree vs index)",
+  "commit.onlyUntracked": "DSH: nothing to generate from — {n} untracked file(s) are not part of a git diff. Stage them (git add) and try again.",
+  "commit.empty": "DSH: the model returned no commit message (turn end: {reason}, {events} events, {messages} assistant messages)."
 }
