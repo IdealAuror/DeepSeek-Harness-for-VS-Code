@@ -3223,7 +3223,32 @@ button {
 /* 发送提示行:独占一行,位于输入框左下角 */
 .hint-row {
   display: flex;
+  align-items: center;
+  gap: 8px;
   justify-content: flex-start;
+}
+
+/* 发送键切换胶囊:贴在提示文案右侧,点一下就在 Enter / Ctrl+Enter 之间切换 */
+.hint-sendkey {
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 1px 6px;
+  color: var(--vscode-descriptionForeground);
+  background: none;
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.hint-sendkey:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.18));
+  color: var(--vscode-foreground);
+}
+
+.hint-sendkey:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
 }
 
 /* ---------- 底部行:+ 菜单与上下文进度 ---------- */

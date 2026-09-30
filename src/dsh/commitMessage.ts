@@ -192,8 +192,13 @@ interface ModelSelectionView {
 /** 提交模型关键字:默认 flash(轻量档);留空 = 不切换模型,直接用会话默认。 */
 const DEFAULT_COMMIT_MODEL = "flash";
 
-function modelEfforts(model: { reasoning?: { efforts?: { id: string }[] } } | undefined): string[] {
+function modelEfforts(model: { reasoning?: { efforts?: { id: string; name?: string }[] } } | undefined): string[] {
   return (model?.reasoning?.efforts ?? []).map((e) => e.id);
+}
+
+/** 同名但以 name 声明的能力(部分上传探测只给 name,ids 为空)。 */
+function modelEffortNames(model: { reasoning?: { efforts?: { id: string; name?: string }[] } } | undefined): string[] {
+  return (model?.reasoning?.efforts ?? []).map((e) => e.name ?? e.id);
 }
 
 /**
@@ -203,19 +208,28 @@ function modelEfforts(model: { reasoning?: { efforts?: { id: string }[] } } | un
  * 3. 关键字无命中时回退到目录里第一个「支持关闭思考」的模型,再退回第一个模型。
  * 完全解析不到时返回 undefined(调用方保持会话当前模型,不再让整个功能失败)。
  */
-function resolveCommitModel(models: SessionModelsValue, wantModel: string): { provider: string; model: string; efforts: string[] } | undefined {
+function resolveCommitModel(
+  models: SessionModelsValue,
+  wantModel: string,
+): { provider: string; model: string; efforts: string[]; effortNames: string[] } | undefined {
   const groups = models.groups ?? [];
   const rows = groups.flatMap((g) => (g.models ?? []).map((m) => ({ provider: g.id, model: m })));
   if (rows.length === 0) return undefined;
+  const row = (r: (typeof rows)[number]) => ({
+    provider: r.provider,
+    model: r.model.id,
+    efforts: modelEfforts(r.model),
+    effortNames: modelEffortNames(r.model),
+  });
   const needle = wantModel.trim().toLowerCase();
   if (!needle) {
     const current = rows.find((r) => r.provider === models.current?.provider && r.model.id === models.current?.model);
-    return current ? { provider: current.provider, model: current.model.id, efforts: modelEfforts(current.model) } : undefined;
+    return current ? row(current) : undefined;
   }
   const exact = rows.find((r) => r.model.id.toLowerCase() === needle);
   const partial = exact ?? rows.find((r) => r.model.id.toLowerCase().includes(needle) || (r.model.name ?? "").toLowerCase().includes(needle));
   const fallback = partial ?? rows.find((r) => modelEfforts(r.model).includes("off")) ?? rows[0];
-  return { provider: fallback.provider, model: fallback.model.id, efforts: modelEfforts(fallback.model) };
+  return row(fallback);
 }
 
 /**
@@ -233,24 +247,49 @@ async function applyCommitModel(hub: DshHub, sessionId: string): Promise<() => P
   const original: ModelSelectionView | undefined = models.current
     ? { provider: models.current.provider, model: models.current.model, ...(models.current.reasoningEffort ? { reasoningEffort: models.current.reasoningEffort } : {}) }
     : undefined;
+  /**
+   * 恢复用户默认选择 —— 并且**验证**它真的落盘了。
+   * 宿主 session/selectModel 是「安装到会话 + 后台保存 profile 默认值」两件事:
+   * 后台保存失败只会打宿主日志,客户端看不到,所以这里读回目录确认;
+   * 不一致时重试一次,仍失败就明确提示用户(否则默认模型会被永久改成提交档)。
+   */
   const restore = async () => {
     if (!original) return;
-    try {
-      await hub.selectModel(sessionId, original.provider, original.model, original.reasoningEffort);
-    } catch (error) {
-      console.error("[dsh] restore default model after commit message failed:", error);
+    const wanted = (selection: ModelSelectionView | undefined) =>
+      selection !== undefined && selection.provider === original.provider && selection.model === original.model &&
+      (original.reasoningEffort === undefined || selection.reasoningEffort === original.reasoningEffort);
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await hub.selectModel(sessionId, original.provider, original.model, original.reasoningEffort);
+        const after = (await hub.getSessionModels(sessionId)).current;
+        if (wanted(after)) return;
+        console.error(`[dsh] restore default model not applied (attempt ${attempt}):`, JSON.stringify(after));
+      } catch (error) {
+        console.error(`[dsh] restore default model after commit message failed (attempt ${attempt}):`, error);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 400));
     }
+    void vscode.window.showWarningMessage(t("commit.modelRestoreFailed", { model: `${original.provider}/${original.model}` }));
   };
 
   const target = resolveCommitModel(models, wantModel);
   if (!target) return noop; // 目录为空:保持会话当前模型
-  const effort = target.efforts.includes(wantEffort) ? wantEffort : undefined;
+  // 读不到原值就绝不切换:切了没东西可恢复,会把全局默认永久改成提交档
+  if (!original) return noop;
+  // 目录自带的 reasoning.efforts 为空 ≠ 该模型不支持思考:上传探测的能力声明既有 id 也有 name,
+  // 标成 name 时 ids 会为空 —— 那种情况按「支持」处理(网页端同样用 name 渲染)。
+  const effortIds = target.efforts.map((id) => id.toLowerCase());
+  const declaredByName = target.effortNames.map((name) => name.toLowerCase());
+  const supports =
+    target.efforts.length === 0 ||
+    declaredByName.includes(wantEffort.toLowerCase()) ||
+    effortIds.includes(wantEffort.toLowerCase());
+  const effort = supports ? wantEffort : undefined;
   if (!wantModel.trim() && !effort) return noop; // 未配置关键字:不动模型
   const same =
-    original !== undefined &&
     original.provider === target.provider &&
     original.model === target.model &&
-    (effort === undefined || original.reasoningEffort === effort);
+    (effort === undefined || original.reasoningEffort?.toLowerCase() === effort.toLowerCase());
   if (same) return noop;
   await hub.selectModel(sessionId, target.provider, target.model, effort);
   return restore;

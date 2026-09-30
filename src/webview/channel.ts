@@ -2037,6 +2037,42 @@ export class ChatChannel {
         }
         break;
       }
+      case "setSendKey": {
+        // 输入框胶囊 / 头部按钮切换发送快捷键(写入 dsh.sendKey,全局)
+        const raw = msg.sendKey;
+        if (raw === "enter" || raw === "ctrl-enter" || raw === "shift-enter") {
+          try {
+            await vscode.workspace.getConfiguration("dsh").update("sendKey", raw, vscode.ConfigurationTarget.Global);
+          } catch (error) {
+            // 配置未注册(旧版本扩展 / 开发宿主未重载):仍把选择下发给 webview,本次会话生效
+            console.warn("[dsh] dsh.sendKey not registered, keeping the in-session choice:", error);
+          }
+          this.post({ kind: "composerPrefs", value: this.composerPrefs() });
+        }
+        break;
+      }
+      case "setUiFontFamily": {
+        // 输入区字体(写入 dsh.uiFontFamily,全局);空串 = 跟随 VS Code 界面字体
+        const value = typeof msg.value === "string" ? msg.value.trim() : "";
+        try {
+          await vscode.workspace.getConfiguration("dsh").update("uiFontFamily", value, vscode.ConfigurationTarget.Global);
+        } catch (error) {
+          console.warn("[dsh] dsh.uiFontFamily not registered, keeping the in-session value:", error);
+        }
+        this.post({ kind: "composerPrefs", value: this.composerPrefs() });
+        break;
+      }
+      case "setAutoCollapseProducedFiles": {
+        // 产物文件列表是否默认折叠(写入 dsh.autoCollapseProducedFiles,全局)
+        const value = msg.value === true;
+        try {
+          await vscode.workspace.getConfiguration("dsh").update("autoCollapseProducedFiles", value, vscode.ConfigurationTarget.Global);
+        } catch (error) {
+          console.warn("[dsh] dsh.autoCollapseProducedFiles not registered, keeping the in-session value:", error);
+        }
+        this.post({ kind: "composerPrefs", value: this.composerPrefs() });
+        break;
+      }
       case "setAgentDirs": {
         // 从设置面板切换模型配置兼容扫描开关(写入 dsh.agentConfigDirs,全局)
         const value = msg.value;

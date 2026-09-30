@@ -196,5 +196,6 @@
   "perm.desc.readOnly": "Solo lectura: sin cambios en archivos ni ejecución de comandos; los archivos externos y la red siguen la política de aprobación.",
   "perm.desc.workspaceWrite": "Puede modificar archivos dentro del espacio de trabajo; los archivos externos y la red siguen la política de aprobación.",
   "perm.desc.dangerFullAccess": "Acceso sin restricciones a Internet y a cualquier archivo de tu equipo.",
-  "perm.desc.custom": "Combinación personalizada (edítala en Ajustes)."
+  "perm.desc.custom": "Combinación personalizada (edítala en Ajustes).",
+  "commit.modelRestoreFailed": "El mensaje de commit se generó, pero no se pudo restaurar el modelo predeterminado a {model}. Vuelve a elegirlo en la lista de modelos (puede que el guardado en segundo plano haya fallado)."
 }

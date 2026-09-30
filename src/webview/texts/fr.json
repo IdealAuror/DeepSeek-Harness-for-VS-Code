@@ -627,5 +627,17 @@
   "当前上下文已超出该模型的上下文窗口:{message}": "Le contexte actuel dépasse la fenêtre de contexte de ce modèle : {message}",
   "本次输入预计使上下文达到约 {used} / {limit} tokens,已超出该模型窗口;宿主会自动压缩或重试,若失败请手动压缩或换用更大窗口的模型。": "Cette saisie porte le contexte à environ {used} / {limit} tokens, au-delà de la fenêtre du modèle. L'hôte compresse et réessaie automatiquement ; en cas d'échec, compressez manuellement ou changez de modèle.",
   "本次输入预计使上下文达到约 {used} / {limit} tokens,接近该模型窗口上限;建议先压缩上下文再继续。": "Cette saisie porte le contexte à environ {used} / {limit} tokens, près de la limite de la fenêtre. Compressez le contexte avant de continuer.",
-  "宿主未提供失败详情(旧版宿主或运行中止)": "L'hôte n'a fourni aucun détail d'échec (hôte plus ancien ou exécution interrompue)"
+  "宿主未提供失败详情(旧版宿主或运行中止)": "L'hôte n'a fourni aucun détail d'échec (hôte plus ancien ou exécution interrompue)",
+  "⌨️ 发送与输入": "⌨️ Envoi et saisie",
+  "Ctrl+Enter 发送": "Ctrl+Entrée envoie",
+  "Shift+Enter 发送": "Maj+Entrée envoie",
+  "Enter 发送,Shift+Enter 换行": "Entrée envoie, Maj+Entrée insère un saut de ligne",
+  "Ctrl+Enter 发送,Enter 换行(习惯用 Enter 换行时选它)": "Ctrl+Entrée envoie, Entrée insère un saut de ligne (si vous préférez Entrée pour aller à la ligne)",
+  "Shift+Enter 发送,Enter 换行": "Maj+Entrée envoie, Entrée insère un saut de ligne",
+  "发送快捷键:{current}": "Raccourci d'envoi : {current}",
+  "输入区字体(留空跟随 VS Code 界面字体)": "Police de la zone de saisie (vide = police de l'interface VS Code)",
+  "产物文件列表默认折叠": "Replier la liste des fichiers produits par défaut",
+  "默认把每轮的产物文件折叠为一行摘要,避免长对话被文件卡占满": "Replie par défaut les fichiers produits de chaque tour sur une ligne, pour éviter que les longues conversations soient saturées de cartes",
+  "按 Enter 是发送还是换行由此决定;输入框左下角的胶囊也能一键切换,设置会全局保存(dsh.sendKey)。": "C'est ici que l'on choisit si Entrée envoie ou passe à la ligne ; la pastille en bas à gauche du champ permet aussi de basculer. Le réglage est enregistré globalement (dsh.sendKey).",
+  "当前:{current}。点击切换为「{next}」。": "Actuel : {current}. Cliquez pour passer à « {next} »."
 }

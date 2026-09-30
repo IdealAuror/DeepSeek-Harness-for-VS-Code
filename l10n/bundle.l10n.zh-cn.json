@@ -196,5 +196,6 @@
   "perm.desc.readOnly": "只读访问:不能修改文件或执行命令;外部文件与网络访问按策略询问",
   "perm.desc.workspaceWrite": "可修改工作区内的文件;外部文件与网络访问按策略询问",
   "perm.desc.dangerFullAccess": "可不受限制地访问互联网和你电脑上的任何文件",
-  "perm.desc.custom": "自定义组合(在设置中编辑)"
+  "perm.desc.custom": "自定义组合(在设置中编辑)",
+  "commit.modelRestoreFailed": "提交消息已生成,但默认模型未能恢复为 {model}。请在模型下拉里重新选择一次(宿主后台保存可能失败)。"
 }

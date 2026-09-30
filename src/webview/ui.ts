@@ -588,6 +588,18 @@ const panels = createPanels({
   get presetAuthoring() {
     return state.presetAuthoring;
   },
+  // 输入区偏好:设置面板「发送与输入」读写同一份状态
+  composerPrefs: {
+    get sendKey() {
+      return sendKeyMode;
+    },
+    get fontFamily() {
+      return composerFontFamily;
+    },
+    get autoCollapseProducedFiles() {
+      return autoCollapseProducedFiles;
+    },
+  },
 } as PanelsContext);
 
 /** 权限预设的中文名称(经 t() 翻译)。 */
@@ -948,6 +960,14 @@ const EN_TEXT: Record<string, string> = {
   "工作区(分组 / 搜索 / 归档)": "Workspaces (groups / search / archive)",
   "后台任务": "Background jobs",
   "自动化任务": "Automation tasks",
+  // ---- 发送快捷键(设置面板 + 输入框提示胶囊) ----
+  "⌨️ 发送与输入": "⌨️ Sending & input",
+  "按 Enter 是发送还是换行由此决定;输入框左下角的胶囊也能一键切换,设置会全局保存(dsh.sendKey)。":
+    "This decides whether Enter sends or inserts a newline. The pill at the bottom-left of the composer switches it too; the choice is stored globally (dsh.sendKey).",
+  "输入区字体(留空跟随 VS Code 界面字体)": "Composer font (empty = follow the VS Code UI font)",
+  "产物文件列表默认折叠": "Collapse produced-file lists by default",
+  "默认把每轮的产物文件折叠为一行摘要,避免长对话被文件卡占满":
+    "Collapse each turn's produced files into a one-line summary by default, so long conversations are not filled with file cards.",
   "旧会话无法撤销反馈": "Older sessions cannot revoke feedback",
   // ---- 定时任务(0.1.7 自动化任务面板) ----
   "一次性": "Once",
@@ -1152,6 +1172,8 @@ const EN_TEXT: Record<string, string> = {
   "向子代理发送消息(仅 continuable)…": "Message the subagent (continuable only)…",
   "发送": "Send",
   "Enter 发送": "Enter to send",
+  "Ctrl+Enter 发送": "Ctrl+Enter to send",
+  "Shift+Enter 发送": "Shift+Enter to send",
   "加载子代理记录中…": "Loading subagent transcript…",
   "执行中…": "Running…",
   "加载更早的记录": "Load earlier records",
@@ -1372,6 +1394,22 @@ btnJobs.append(lineIcon(ICONS.list, 15));
 const btnSchedule = el("button", "btn btn-icon");
 btnSchedule.title = t("自动化任务");
 btnSchedule.append(lineIcon(ICONS.alarmClock, 15));
+/** 发送键快捷入口的文案与提示(设置面板与输入框胶囊共用同一份描述)。 */
+const SEND_KEY_LABELS: Record<"enter" | "ctrl-enter" | "shift-enter", string> = {
+  enter: "Enter 发送",
+  "ctrl-enter": "Ctrl+Enter 发送",
+  "shift-enter": "Shift+Enter 发送",
+};
+const SEND_KEY_DESCRIPTIONS: Record<"enter" | "ctrl-enter" | "shift-enter", string> = {
+  enter: "Enter 发送,Shift+Enter 换行",
+  "ctrl-enter": "Ctrl+Enter 发送,Enter 换行(习惯用 Enter 换行时选它)",
+  "shift-enter": "Shift+Enter 发送,Enter 换行",
+};
+
+const SEND_KEY_ORDER: ("enter" | "ctrl-enter" | "shift-enter")[] = ["enter", "ctrl-enter", "shift-enter"];
+
+// 发送快捷键不再占据头部按钮:入口保留在「设置 → ⌨️ 发送与输入」,
+// 输入框提示行旁的胶囊(dsh.sendKey 的可视状态)可一键切换。
 const btnTrajectory = el("button", "btn btn-icon");
 btnTrajectory.title = t("轨迹(事件台账)");
 btnTrajectory.append(lineIcon(ICONS.ledger, 15));
@@ -2095,8 +2133,11 @@ composerBottom.append(btnPlus, permissionPill, modelPill);
 // 发送提示:独占一行,位于输入框左下角;文案按 dsh.sendKey 动态生成(issue #21 第 1 条)
 const hint = el("div", "hint", t("Enter 发送 · Shift+Enter 换行"));
 const composerHintText = hint;
+// 发送键切换胶囊:紧跟提示文案,点一下即切换(Enter 发送 ⇄ Ctrl+Enter 发送),无需进设置
+const sendKeyChip = el("button", "hint-sendkey") as HTMLButtonElement;
+sendKeyChip.type = "button";
 const hintRow = el("div", "hint-row");
-hintRow.append(hint);
+hintRow.append(hint, sendKeyChip);
 // 对话框顶部行:左上角 ＋ 添加文件 + 附件芯片;右上角 预设(新会话下拉 / 已开始会话纯文本标签)
 const composerTop = el("div", "composer-top");
 attachmentsRow.append(btnAddAttach);
@@ -2422,6 +2463,8 @@ function updateSlash() {
 }
 
 input.rows = 1;
+// 主输入框标记(自动化夹具用它精确定位,避免与子代理/对话框输入框混淆)
+input.dataset.role = "composer";
 input.addEventListener("input", () => {
   autoResize();
   updateSendButton();
@@ -3176,6 +3219,8 @@ restoreInputHistory();
 let sendKeyMode: "enter" | "ctrl-enter" | "shift-enter" = "enter";
 /** 产物文件列表是否默认折叠为一行摘要(避免多轮对话被卡片占满)。默认折叠:与设置默认值一致。 */
 let autoCollapseProducedFiles = true;
+/** 输入区字体(留空跟随 VS Code 界面字体)。 */
+let composerFontFamily = "";
 
 function applyComposerPrefs(prefs: { sendKey?: string; fontFamily?: string; autoCollapseProducedFiles?: boolean } | undefined) {
   if (!prefs) return;
@@ -3183,6 +3228,7 @@ function applyComposerPrefs(prefs: { sendKey?: string; fontFamily?: string; auto
   if (typeof prefs.autoCollapseProducedFiles === "boolean") autoCollapseProducedFiles = prefs.autoCollapseProducedFiles;
   // 字体:用户显式配置时覆盖主题字体(--dsh-font);留空则继续跟随 VS Code 界面字体
   const family = (prefs.fontFamily ?? "").trim();
+  composerFontFamily = family;
   if (family) document.documentElement.style.setProperty("--dsh-font", family);
   else document.documentElement.style.removeProperty("--dsh-font");
   // 快捷键提示行跟随当前模式
@@ -3214,14 +3260,41 @@ function isPopupAcceptEnter(e: KeyboardEvent): boolean {
  * 注意用占位符而不是字符串拼接,便于各语言调整语序。
  */
 function refreshComposerHint() {
-  if (!composerHintText) return;
-  composerHintText.textContent =
-    sendKeyMode === "enter"
-      ? t("Enter 发送 · Shift+Enter 换行")
-      : sendKeyMode === "ctrl-enter"
-        ? t("Ctrl+Enter 发送 · Enter 换行")
-        : t("Shift+Enter 发送 · Enter 换行");
+  if (composerHintText) {
+    composerHintText.textContent =
+      sendKeyMode === "enter"
+        ? t("Enter 发送 · Shift+Enter 换行")
+        : sendKeyMode === "ctrl-enter"
+          ? t("Ctrl+Enter 发送 · Enter 换行")
+          : t("Shift+Enter 发送 · Enter 换行");
+  }
+  refreshSendKeyChip();
 }
+
+
+/** 切换发送快捷键:本地立即生效(输入框即时换行为准),同时写回 dsh.sendKey 设置。 */
+function setSendKeyMode(mode: "enter" | "ctrl-enter" | "shift-enter") {
+  sendKeyMode = mode;
+  refreshComposerHint();
+  vscode.postMessage({ kind: "setSendKey", sendKey: mode });
+}
+
+/** 输入框左下角的发送键胶囊:显示当前模式,点击切换;悬停说明下一种模式。 */
+function refreshSendKeyChip() {
+  if (!sendKeyChip) return;
+  sendKeyChip.textContent = t(SEND_KEY_LABELS[sendKeyMode]);
+  const next = SEND_KEY_ORDER[(SEND_KEY_ORDER.indexOf(sendKeyMode) + 1) % SEND_KEY_ORDER.length];
+  sendKeyChip.title = t("当前:{current}。点击切换为「{next}」。", {
+    current: t(SEND_KEY_DESCRIPTIONS[sendKeyMode]),
+    next: t(SEND_KEY_LABELS[next]),
+  });
+  sendKeyChip.setAttribute("aria-label", sendKeyChip.title);
+}
+
+sendKeyChip.addEventListener("click", () => {
+  const next = SEND_KEY_ORDER[(SEND_KEY_ORDER.indexOf(sendKeyMode) + 1) % SEND_KEY_ORDER.length];
+  setSendKeyMode(next);
+});
 
 // ---------- 渲染:消息 ----------
 
@@ -7153,6 +7226,7 @@ function applyStaticLabels() {
   btnWorkspaces.title = t("工作区(分组 / 搜索 / 归档)");
   btnJobs.title = t("后台任务");
   btnSchedule.title = t("自动化任务");
+  refreshSendKeyChip();
   btnTrajectory.title = t("轨迹(事件台账)");
   btnSettings.title = t("设置(常规 / 模型 / 预设)");
   btnSubagents.title = t("子代理目录");
@@ -7235,6 +7309,11 @@ function applyLanguage() {
 
 function handleMessage(msg: any) {
   switch (msg.kind) {
+    // 输入区偏好回执(切换发送快捷键后宿主回写设置,以设置为准回同步)
+    case "composerPrefs": {
+      applyComposerPrefs(msg.value);
+      break;
+    }
     case "init": {
       stopTurnStatus();
       // 输入区偏好(issue #21):发送快捷键 / 面板字体 / 产物列表默认折叠

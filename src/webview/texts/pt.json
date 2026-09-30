@@ -627,5 +627,17 @@
   "当前上下文已超出该模型的上下文窗口:{message}": "O contexto atual excede a janela de contexto deste modelo: {message}",
   "本次输入预计使上下文达到约 {used} / {limit} tokens,已超出该模型窗口;宿主会自动压缩或重试,若失败请手动压缩或换用更大窗口的模型。": "Esta entrada leva o contexto a cerca de {used} / {limit} tokens, acima da janela do modelo. O host compacta e tenta de novo automaticamente; se falhar, compacte manualmente ou troque de modelo.",
   "本次输入预计使上下文达到约 {used} / {limit} tokens,接近该模型窗口上限;建议先压缩上下文再继续。": "Esta entrada leva o contexto a cerca de {used} / {limit} tokens, perto do limite da janela. Compacte o contexto antes de continuar.",
-  "宿主未提供失败详情(旧版宿主或运行中止)": "O host não forneceu detalhes da falha (host antigo ou execução interrompida)"
+  "宿主未提供失败详情(旧版宿主或运行中止)": "O host não forneceu detalhes da falha (host antigo ou execução interrompida)",
+  "⌨️ 发送与输入": "⌨️ Envio e entrada",
+  "Ctrl+Enter 发送": "Ctrl+Enter envia",
+  "Shift+Enter 发送": "Shift+Enter envia",
+  "Enter 发送,Shift+Enter 换行": "Enter envia, Shift+Enter insere uma nova linha",
+  "Ctrl+Enter 发送,Enter 换行(习惯用 Enter 换行时选它)": "Ctrl+Enter envia, Enter insere nova linha (para quem usa Enter para quebrar linha)",
+  "Shift+Enter 发送,Enter 换行": "Shift+Enter envia, Enter insere nova linha",
+  "发送快捷键:{current}": "Atalho de envio: {current}",
+  "输入区字体(留空跟随 VS Code 界面字体)": "Fonte do campo de entrada (vazio = fonte da interface do VS Code)",
+  "产物文件列表默认折叠": "Recolher a lista de arquivos gerados por padrão",
+  "默认把每轮的产物文件折叠为一行摘要,避免长对话被文件卡占满": "Recolhe por padrão os arquivos gerados de cada turno em uma linha, para que conversas longas não fiquem cheias de cartões",
+  "按 Enter 是发送还是换行由此决定;输入框左下角的胶囊也能一键切换,设置会全局保存(dsh.sendKey)。": "Aqui se decide se Enter envia ou quebra linha; a pílula no canto inferior esquerdo do campo também alterna. A configuração é salva globalmente (dsh.sendKey).",
+  "当前:{current}。点击切换为「{next}」。": "Atual: {current}. Clique para mudar para «{next}»."
 }

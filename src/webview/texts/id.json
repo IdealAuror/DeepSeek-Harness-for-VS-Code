@@ -627,5 +627,17 @@
   "当前上下文已超出该模型的上下文窗口:{message}": "Konteks saat ini melewati jendela konteks model ini: {message}",
   "本次输入预计使上下文达到约 {used} / {limit} tokens,已超出该模型窗口;宿主会自动压缩或重试,若失败请手动压缩或换用更大窗口的模型。": "Input ini membawa konteks ke sekitar {used} / {limit} token, melewati jendela model. Host akan memadatkan dan mencoba ulang otomatis; jika gagal, padatkan manual atau ganti ke model berjendela lebih besar.",
   "本次输入预计使上下文达到约 {used} / {limit} tokens,接近该模型窗口上限;建议先压缩上下文再继续。": "Input ini membawa konteks ke sekitar {used} / {limit} token, mendekati batas jendela model. Padatkan konteks sebelum melanjutkan.",
-  "宿主未提供失败详情(旧版宿主或运行中止)": "Host tidak memberikan detail kegagalan (host lama atau eksekusi terhenti)"
+  "宿主未提供失败详情(旧版宿主或运行中止)": "Host tidak memberikan detail kegagalan (host lama atau eksekusi terhenti)",
+  "⌨️ 发送与输入": "⌨️ Kirim dan input",
+  "Ctrl+Enter 发送": "Ctrl+Enter mengirim",
+  "Shift+Enter 发送": "Shift+Enter mengirim",
+  "Enter 发送,Shift+Enter 换行": "Enter mengirim, Shift+Enter baris baru",
+  "Ctrl+Enter 发送,Enter 换行(习惯用 Enter 换行时选它)": "Ctrl+Enter mengirim, Enter baris baru (bila terbiasa Enter untuk baris baru)",
+  "Shift+Enter 发送,Enter 换行": "Shift+Enter mengirim, Enter baris baru",
+  "发送快捷键:{current}": "Pintasan kirim: {current}",
+  "输入区字体(留空跟随 VS Code 界面字体)": "Font kotak masukan (kosong = font antarmuka VS Code)",
+  "产物文件列表默认折叠": "Ciutkan daftar berkas hasil secara bawaan",
+  "默认把每轮的产物文件折叠为一行摘要,避免长对话被文件卡占满": "Meringkas berkas hasil tiap turn menjadi satu baris secara bawaan agar percakapan panjang tidak penuh kartu",
+  "按 Enter 是发送还是换行由此决定;输入框左下角的胶囊也能一键切换,设置会全局保存(dsh.sendKey)。": "Di sini ditentukan apakah Enter mengirim atau membuat baris baru; chip di kiri bawah kotak masukan juga bisa menggantinya. Pengaturan disimpan global (dsh.sendKey).",
+  "当前:{current}。点击切换为「{next}」。": "Saat ini: {current}. Klik untuk beralih ke «{next}»."
 }

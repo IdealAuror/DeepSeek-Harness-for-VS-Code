@@ -105,6 +105,8 @@ export interface PanelsContext {
   };
   /** 宿主是否仍提供预设作者端点(0.1.7-rc.2 起移除;undefined = 尚未探测)。 */
   presetAuthoring?: boolean;
+  /** 输入区偏好(发送快捷键 / 字体 / 产物折叠);由宿主 init 与设置回执下发。 */
+  composerPrefs?: { sendKey?: string; fontFamily?: string; autoCollapseProducedFiles?: boolean };
   post: (msg: Record<string, unknown>) => void;
   el: (tag: string, cls?: string, text?: string) => HTMLElement;
   t: (zh: string, params?: Record<string, string | number>) => string;
@@ -1122,6 +1124,8 @@ export function createPanels(ctx: PanelsContext) {
   }
 
   function renderGeneralTab(body: HTMLElement) {
+    // 发送快捷键与输入偏好:扩展自身设置(不随宿主命名空间),放在最前面便于随时调整
+    renderComposerSection(body);
     // 语言切换(便于快速验证多语言;写入 dsh.language 设置)
     const langSection = ctx.el("div", "settings-section");
     langSection.append(ctx.el("div", "settings-section-title", t("🌐 语言 / Language")));
@@ -1207,6 +1211,57 @@ export function createPanels(ctx: PanelsContext) {
     const general = desc.namespaces.filter((n) => nsGroup(n.ns) === "general" && n.ns !== "permission");
     for (const ns of general) body.append(renderNamespaceSection(ns));
     if (general.length === 0) body.append(ctx.el("div", "ws-note", t("没有可配置的常规设置项。")));
+  }
+
+  /**
+   * 发送快捷键与输入偏好(扩展自身设置,不随宿主命名空间):
+   * dsh.sendKey / dsh.uiFontFamily / dsh.autoCollapseProducedFiles。
+   */
+  const SEND_KEY_MODES: { id: "enter" | "ctrl-enter" | "shift-enter"; label: string; description: string }[] = [
+    { id: "enter", label: "Enter 发送", description: "Enter 发送,Shift+Enter 换行" },
+    { id: "ctrl-enter", label: "Ctrl+Enter 发送", description: "Ctrl+Enter 发送,Enter 换行(习惯用 Enter 换行时选它)" },
+    { id: "shift-enter", label: "Shift+Enter 发送", description: "Shift+Enter 发送,Enter 换行" },
+  ];
+
+  function renderComposerSection(body: HTMLElement) {
+    const section = ctx.el("div", "settings-section");
+    section.append(ctx.el("div", "settings-section-title", t("⌨️ 发送与输入")));
+
+    const row = ctx.el("div", "settings-language-row");
+    for (const mode of SEND_KEY_MODES) {
+      const active = (ctx.composerPrefs?.sendKey ?? "enter") === mode.id;
+      const btn = ctx.el("button", "settings-tab" + (active ? " active" : ""), `${active ? "✓" : " "} ${t(mode.label)}`) as HTMLButtonElement;
+      btn.title = t(mode.description);
+      btn.addEventListener("click", () => {
+        if (active) return;
+        post({ kind: "setSendKey", sendKey: mode.id });
+      });
+      row.append(btn);
+    }
+    section.append(row);
+    section.append(
+      ctx.el(
+        "div",
+        "ws-note",
+        t("按 Enter 是发送还是换行由此决定;输入框左下角的胶囊也能一键切换,设置会全局保存(dsh.sendKey)。"),
+      ),
+    );
+
+    // 输入字体与产物折叠:与 dsh.uiFontFamily / dsh.autoCollapseProducedFiles 同步
+    const font = ctx.el("input", "sched-search") as HTMLInputElement;
+    font.type = "text";
+    font.value = ctx.composerPrefs?.fontFamily ?? "";
+    font.placeholder = t("输入区字体(留空跟随 VS Code 界面字体)");
+    font.addEventListener("change", () => post({ kind: "setUiFontFamily", value: font.value }));
+    section.append(font);
+
+    const collapsed = ctx.composerPrefs?.autoCollapseProducedFiles !== false;
+    const collapse = ctx.el("button", "settings-tab" + (collapsed ? " active" : "")) as HTMLButtonElement;
+    collapse.textContent = `${collapsed ? "✅" : "☐"} ${t("产物文件列表默认折叠")}`;
+    collapse.title = t("默认把每轮的产物文件折叠为一行摘要,避免长对话被文件卡占满");
+    collapse.addEventListener("click", () => post({ kind: "setAutoCollapseProducedFiles", value: !collapsed }));
+    section.append(collapse);
+    body.append(section);
   }
 
   /** 默认权限预设专属行:带图标的按钮组 + 完全访问风险确认(网页端 ui-permission-presets 同款行为)。 */

@@ -196,5 +196,6 @@
   "perm.desc.readOnly": "Salt okunur: dosya değişikliği veya komut çalıştırma yok; dış dosyalar ve ağ, onay ilkesine tabidir.",
   "perm.desc.workspaceWrite": "Çalışma alanı içindeki dosyaları değiştirebilir; dış dosyalar ve ağ, onay ilkesine tabidir.",
   "perm.desc.dangerFullAccess": "İnternete ve bilgisayarınızdaki her dosyaya sınırsız erişim.",
-  "perm.desc.custom": "Özel bileşim (Ayarlar'dan düzenleyin)."
+  "perm.desc.custom": "Özel bileşim (Ayarlar'dan düzenleyin).",
+  "commit.modelRestoreFailed": "Commit mesajı oluşturuldu ancak varsayılan model {model} olarak geri alınamadı. Lütfen model listesinden yeniden seçin (arka planda kaydetme başarısız olmuş olabilir)."
 }

@@ -627,5 +627,17 @@
   "当前上下文已超出该模型的上下文窗口:{message}": "Geçerli bağlam bu modelin bağlam penceresini aşıyor: {message}",
   "本次输入预计使上下文达到约 {used} / {limit} tokens,已超出该模型窗口;宿主会自动压缩或重试,若失败请手动压缩或换用更大窗口的模型。": "Bu giriş bağlamı yaklaşık {used} / {limit} tokena çıkararak model penceresini aşıyor. Ana süreç otomatik sıkıştırıp yeniden dener; başarısız olursa elle sıkıştırın veya daha büyük pencereli bir modele geçin.",
   "本次输入预计使上下文达到约 {used} / {limit} tokens,接近该模型窗口上限;建议先压缩上下文再继续。": "Bu giriş bağlamı yaklaşık {used} / {limit} tokena çıkararak pencere sınırına yaklaştırıyor. Devam etmeden önce bağlamı sıkıştırın.",
-  "宿主未提供失败详情(旧版宿主或运行中止)": "Ana süreç hata ayrıntısı vermedi (eski sürüm veya kesilen çalışma)"
+  "宿主未提供失败详情(旧版宿主或运行中止)": "Ana süreç hata ayrıntısı vermedi (eski sürüm veya kesilen çalışma)",
+  "⌨️ 发送与输入": "⌨️ Gönderme ve giriş",
+  "Ctrl+Enter 发送": "Ctrl+Enter gönderir",
+  "Shift+Enter 发送": "Shift+Enter gönderir",
+  "Enter 发送,Shift+Enter 换行": "Enter gönderir, Shift+Enter yeni satır",
+  "Ctrl+Enter 发送,Enter 换行(习惯用 Enter 换行时选它)": "Ctrl+Enter gönderir, Enter yeni satır (Enter ile satır atlamaya alışkınsanız)",
+  "Shift+Enter 发送,Enter 换行": "Shift+Enter gönderir, Enter yeni satır",
+  "发送快捷键:{current}": "Gönderme kısayolu: {current}",
+  "输入区字体(留空跟随 VS Code 界面字体)": "Giriş alanı yazı tipi (boş = VS Code arayüz yazı tipi)",
+  "产物文件列表默认折叠": "Üretilen dosya listesini varsayılan olarak daralt",
+  "默认把每轮的产物文件折叠为一行摘要,避免长对话被文件卡占满": "Her turun üretilen dosyalarını varsayılan olarak tek satıra indirir; böylece uzun sohbetler kartlarla dolmaz",
+  "按 Enter 是发送还是换行由此决定;输入框左下角的胶囊也能一键切换,设置会全局保存(dsh.sendKey)。": "Enter'ın gönderip göndermeyeceği burada belirlenir; giriş kutusunun sol alt köşesindeki çip de değiştirir. Ayar genel olarak kaydedilir (dsh.sendKey).",
+  "当前:{current}。点击切换为「{next}」。": "Geçerli: {current}. «{next}» için tıklayın."
 }

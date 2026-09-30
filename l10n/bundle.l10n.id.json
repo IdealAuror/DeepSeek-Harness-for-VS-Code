@@ -196,5 +196,6 @@
   "perm.desc.readOnly": "Hanya baca: tidak ada perubahan berkas atau eksekusi perintah; berkas luar dan jaringan mengikuti kebijakan persetujuan.",
   "perm.desc.workspaceWrite": "Dapat mengubah berkas di dalam ruang kerja; berkas luar dan jaringan mengikuti kebijakan persetujuan.",
   "perm.desc.dangerFullAccess": "Akses tanpa batas ke internet dan berkas apa pun di komputer Anda.",
-  "perm.desc.custom": "Kombinasi kustom (edit di Pengaturan)."
+  "perm.desc.custom": "Kombinasi kustom (edit di Pengaturan).",
+  "commit.modelRestoreFailed": "Pesan commit berhasil dibuat, tetapi model bawaan tidak dapat dikembalikan ke {model}. Pilih lagi di daftar model (penyimpanan latar belakang host mungkin gagal)."
 }
