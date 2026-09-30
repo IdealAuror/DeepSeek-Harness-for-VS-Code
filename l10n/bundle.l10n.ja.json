@@ -190,5 +190,6 @@
   "commit.diffStaged": "ステージ済みの変更 (index vs HEAD)",
   "commit.diffUnstaged": "未ステージの変更 (working tree vs index)",
   "commit.onlyUntracked": "DSH: 生成できる内容がありません — {n} 個の未追跡ファイルは git diff に含まれません。git add してから再試行してください。",
-  "commit.empty": "DSH: モデルが有効なコミットメッセージを返しませんでした(ターン終了理由: {reason}、イベント {events} 件、アシスタントメッセージ {messages} 件)。"
+  "commit.empty": "DSH: モデルが有効なコミットメッセージを返しませんでした(ターン終了理由: {reason}、イベント {events} 件、アシスタントメッセージ {messages} 件)。",
+  "notice.sessionInUse": "このセッションは別の DSH インスタンス(デスクトップアプリや別の dsh web など)が使用中のため、モデル切替・名前変更・メッセージ送信は拒否されます。VS Code で別のセッションに切り替えるか、もう一方の DSH を終了して再試行してください。"
 }

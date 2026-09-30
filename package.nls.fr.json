@@ -53,5 +53,13 @@
   "config.agentDirs.dshUserSkills": "Afficher / masquer les compétences globales utilisateur DSH dans la liste (~/.dsh/skills, ~/.agents/skills)",
   "config.language.ru": "Russe",
   "cmd.openCordisPanel.title": "Ouvrir le panneau des plugins Cordis",
-  "cmd.updateServer.title": "Mettre à jour le serveur DSH"
+  "cmd.updateServer.title": "Mettre à jour le serveur DSH",
+  "config.sendKey": "Raccourci d'envoi d'un message. Par défaut Entrée envoie et Maj+Entrée insère un saut de ligne ; si vous préférez qu'Entrée insère un saut de ligne, choisissez Ctrl+Entrée ou Maj+Entrée.",
+  "config.sendKey.enter": "Entrée envoie, Maj+Entrée saute une ligne (par défaut)",
+  "config.sendKey.ctrlEnter": "Ctrl+Entrée envoie (Entrée saute une ligne)",
+  "config.sendKey.shiftEnter": "Maj+Entrée envoie (Entrée saute une ligne)",
+  "config.uiFontFamily": "Police (CSS font-family) du panneau de discussion. Laisser vide pour suivre la police de l'interface VS Code.",
+  "config.newSessionOnStartup": "Créer automatiquement une session vide à l'ouverture du panneau (sans cliquer sur +) ; une session mémorisée est restaurée à la place.",
+  "config.rememberLastSession": "Mémoriser la dernière session utilisée par espace de travail et la restaurer au redémarrage de VS Code.",
+  "config.autoCollapseProducedFiles": "Réduire la liste des fichiers produits à un résumé d'une ligne (cliquer pour développer), pour éviter que les longues discussions soient remplies de cartes."
 }

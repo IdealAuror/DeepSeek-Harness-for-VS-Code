@@ -190,5 +190,6 @@
   "commit.diffStaged": "bereitgestellte Änderungen (Index vs. HEAD)",
   "commit.diffUnstaged": "nicht bereitgestellte Änderungen (Arbeitsbaum vs. Index)",
   "commit.onlyUntracked": "DSH: nichts zu generieren — {n} nicht verfolgte Datei(en) sind nicht Teil eines git diff. Bitte zuerst git add ausführen.",
-  "commit.empty": "DSH: Das Modell hat keine gültige Commit-Meldung geliefert (Turn-Ende: {reason}, {events} Ereignisse, {messages} Assistenten-Nachrichten)."
+  "commit.empty": "DSH: Das Modell hat keine gültige Commit-Meldung geliefert (Turn-Ende: {reason}, {events} Ereignisse, {messages} Assistenten-Nachrichten).",
+  "notice.sessionInUse": "Diese Sitzung wird von einer anderen laufenden DSH-Instanz gehalten (z. B. Desktop-App oder ein weiteres dsh web); Modellwechsel, Umbenennen und Senden werden abgelehnt. Wechseln Sie in VS Code zu einer anderen Sitzung oder beenden Sie die andere DSH-Instanz und versuchen Sie es erneut."
 }

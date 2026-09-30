@@ -190,5 +190,6 @@
   "commit.diffStaged": "스테이징된 변경 (index vs HEAD)",
   "commit.diffUnstaged": "스테이징되지 않은 변경 (working tree vs index)",
   "commit.onlyUntracked": "DSH: 생성할 내용이 없습니다 — 추적되지 않은 파일 {n}개는 git diff에 포함되지 않습니다. git add 후 다시 시도하세요.",
-  "commit.empty": "DSH: 모델이 유효한 커밋 메시지를 반환하지 않았습니다(턴 종료 사유: {reason}, 이벤트 {events}개, 어시스턴트 메시지 {messages}개)."
+  "commit.empty": "DSH: 모델이 유효한 커밋 메시지를 반환하지 않았습니다(턴 종료 사유: {reason}, 이벤트 {events}개, 어시스턴트 메시지 {messages}개).",
+  "notice.sessionInUse": "이 세션은 다른 DSH 인스턴스(데스크톱 앱 또는 다른 dsh web)가 사용 중이라 모델 전환·이름 변경·메시지 전송이 거부됩니다. VS Code에서 다른 세션으로 전환하거나 다른 DSH 인스턴스를 종료한 뒤 다시 시도하세요."
 }

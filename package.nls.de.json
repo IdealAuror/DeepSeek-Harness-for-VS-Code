@@ -53,5 +53,13 @@
   "config.agentDirs.dshUserSkills": "DSH-Benutzerskills global in der Skillliste anzeigen/ausblenden (~/.dsh/skills, ~/.agents/skills)",
   "config.language.ru": "Russisch",
   "cmd.openCordisPanel.title": "Cordis-Plugins-Bedienfeld öffnen",
-  "cmd.updateServer.title": "DSH-Server aktualisieren"
+  "cmd.updateServer.title": "DSH-Server aktualisieren",
+  "config.sendKey": "Tastenkürzel zum Senden einer Nachricht. Standard: Enter sendet, Shift+Enter fügt einen Zeilenumbruch ein; wenn Enter umbrechen soll, auf Ctrl+Enter oder Shift+Enter umstellen.",
+  "config.sendKey.enter": "Enter sendet, Shift+Enter bricht um (Standard)",
+  "config.sendKey.ctrlEnter": "Ctrl+Enter sendet (Enter bricht um)",
+  "config.sendKey.shiftEnter": "Shift+Enter sendet (Enter bricht um)",
+  "config.uiFontFamily": "Schriftfamilie (CSS font-family) für das Chat-Panel. Leer lassen, um der VS-Code-UI-Schrift zu folgen.",
+  "config.newSessionOnStartup": "Beim Öffnen des Chat-Panels automatisch eine leere Sitzung anlegen (kein Klick auf + nötig); eine gemerkte Sitzung wird stattdessen wiederhergestellt.",
+  "config.rememberLastSession": "Die zuletzt in jedem Arbeitsbereich verwendete Sitzung merken und beim Neustart von VS Code wiederherstellen.",
+  "config.autoCollapseProducedFiles": "Die Liste erzeugter Dateien standardmäßig zu einer Zeile zusammenklappen (zum Aufklappen klicken), damit lange Chats nicht mit Dateikarten gefüllt werden."
 }

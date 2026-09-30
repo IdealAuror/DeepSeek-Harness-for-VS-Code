@@ -53,5 +53,13 @@
   "config.agentDirs.dshUserSkills": "사용 가능한 스킬 목록에서 DSH 사용자 전역 스킬 표시/숨기기(~/.dsh/skills, ~/.agents/skills)",
   "config.language.ru": "러시아어",
   "cmd.openCordisPanel.title": "Cordis 플러그인 패널 열기",
-  "cmd.updateServer.title": "DSH 서버 업데이트"
+  "cmd.updateServer.title": "DSH 서버 업데이트",
+  "config.sendKey": "메시지 전송 단축키입니다. 기본값은 Enter 전송, Shift+Enter 줄바꿈이며, Enter로 줄바꿈하려면 Ctrl+Enter 또는 Shift+Enter 전송으로 변경하세요.",
+  "config.sendKey.enter": "Enter 전송, Shift+Enter 줄바꿈(기본)",
+  "config.sendKey.ctrlEnter": "Ctrl+Enter 전송(Enter는 줄바꿈)",
+  "config.sendKey.shiftEnter": "Shift+Enter 전송(Enter는 줄바꿈)",
+  "config.uiFontFamily": "채팅 패널 글꼴(CSS font-family). 비워 두면 VS Code UI 글꼴을 따릅니다. 한국어는 \"Malgun Gothic\", sans-serif 를 권장합니다.",
+  "config.newSessionOnStartup": "채팅 패널을 열 때 빈 세션을 자동으로 만듭니다(＋를 누를 필요 없음). 기억된 세션이 있으면 그것을 복원합니다.",
+  "config.rememberLastSession": "작업 영역별로 마지막으로 사용한 세션을 기억하고 VS Code 재시작 시 복원합니다.",
+  "config.autoCollapseProducedFiles": "산출물 파일 목록을 기본적으로 한 줄 요약으로 접습니다(클릭하여 펼침). 긴 대화가 산출물 카드로 가득 차는 것을 막습니다."
 }

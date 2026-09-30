@@ -190,5 +190,6 @@
   "commit.diffStaged": "staged changes (index vs HEAD)",
   "commit.diffUnstaged": "unstaged changes (working tree vs index)",
   "commit.onlyUntracked": "DSH: nothing to generate from — {n} untracked file(s) are not part of a git diff. Stage them (git add) and try again.",
-  "commit.empty": "DSH: the model returned no commit message (turn end: {reason}, {events} events, {messages} assistant messages)."
+  "commit.empty": "DSH: the model returned no commit message (turn end: {reason}, {events} events, {messages} assistant messages).",
+  "notice.sessionInUse": "This session is held by another running DSH instance (for example the desktop app or another dsh web), so switching the model, renaming, or sending a message is refused. Switch to another session in VS Code, or quit the other DSH instance and retry."
 }

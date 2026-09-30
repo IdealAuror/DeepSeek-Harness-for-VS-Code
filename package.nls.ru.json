@@ -53,5 +53,13 @@
   "config.agentDirs.dshUserSkills": "Показывать / скрывать глобальные пользовательские навыки DSH (~/.dsh/skills, ~/.agents/skills) в списке доступных навыков",
   "config.language.ru": "Русский",
   "cmd.openCordisPanel.title": "Открыть панель плагинов Cordis",
-  "cmd.updateServer.title": "Обновить сервер DSH"
+  "cmd.updateServer.title": "Обновить сервер DSH",
+  "config.sendKey": "Сочетание клавиш для отправки сообщения. По умолчанию Enter отправляет, Shift+Enter переносит строку; если хотите, чтобы Enter переносил строку, выберите Ctrl+Enter или Shift+Enter.",
+  "config.sendKey.enter": "Enter отправляет, Shift+Enter переносит строку (по умолчанию)",
+  "config.sendKey.ctrlEnter": "Ctrl+Enter отправляет (Enter переносит строку)",
+  "config.sendKey.shiftEnter": "Shift+Enter отправляет (Enter переносит строку)",
+  "config.uiFontFamily": "Семейство шрифтов (CSS font-family) панели чата. Оставьте пустым, чтобы использовать шрифт интерфейса VS Code.",
+  "config.newSessionOnStartup": "Автоматически создавать пустую сессию при открытии панели чата (без нажатия «+»); запомненная сессия восстанавливается вместо неё.",
+  "config.rememberLastSession": "Запоминать последнюю сессию каждого рабочего пространства и восстанавливать её при запуске VS Code.",
+  "config.autoCollapseProducedFiles": "Сворачивать список созданных файлов в одну строку (разворачивается по клику), чтобы длинные диалоги не заполнялись карточками."
 }

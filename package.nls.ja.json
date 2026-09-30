@@ -53,5 +53,13 @@
   "config.agentDirs.dshUserSkills": "利用可能なスキル一覧で DSH ユーザー全体スキルを表示/非表示(~/.dsh/skills、~/.agents/skills)",
   "config.language.ru": "ロシア語",
   "cmd.openCordisPanel.title": "Cordis プラグインパネルを開く",
-  "cmd.updateServer.title": "DSH サーバーを更新"
+  "cmd.updateServer.title": "DSH サーバーを更新",
+  "config.sendKey": "メッセージ送信のショートカット。既定では Enter で送信、Shift+Enter で改行します。Enter で改行したい場合は Ctrl+Enter または Shift+Enter 送信に変更してください。",
+  "config.sendKey.enter": "Enter で送信、Shift+Enter で改行(既定)",
+  "config.sendKey.ctrlEnter": "Ctrl+Enter で送信(Enter は改行)",
+  "config.sendKey.shiftEnter": "Shift+Enter で送信(Enter は改行)",
+  "config.uiFontFamily": "チャットパネルのフォント(CSS font-family)。空欄なら VS Code の UI フォントに従います。日本語なら \"Yu Gothic UI\", \"Meiryo\", sans-serif など。",
+  "config.newSessionOnStartup": "チャットパネルを開いたときに空のセッションを自動作成します(「＋」を押す必要なし)。前回のセッションがあればそちらを復元します。",
+  "config.rememberLastSession": "ワークスペースごとに最後に使ったセッションを記憶し、VS Code の再起動時に復元します。",
+  "config.autoCollapseProducedFiles": "成果物ファイル一覧を既定で 1 行の要約に折りたたみます(クリックで展開)。長い会話が成果物カードで埋まるのを防ぎます。"
 }

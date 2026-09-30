@@ -190,5 +190,6 @@
   "commit.diffStaged": "已暫存改動(index vs HEAD)",
   "commit.diffUnstaged": "未暫存改動(工作區 vs index)",
   "commit.onlyUntracked": "DSH:沒有可產生的內容——有 {n} 個未追蹤檔案不屬於 git diff,請先 git add 後重試。",
-  "commit.empty": "DSH: 模型未回傳有效提交訊息(回合結束原因:{reason},事件 {events} 筆,助手訊息 {messages} 筆)。"
+  "commit.empty": "DSH: 模型未回傳有效提交訊息(回合結束原因:{reason},事件 {events} 筆,助手訊息 {messages} 筆)。",
+  "notice.sessionInUse": "目前工作階段已被其他正在執行的 DSH 實例占用(例如桌面端或另一個 dsh web),切換模型 / 重新命名 / 傳送訊息都會被拒絕。請在 VS Code 中改用其他工作階段,或結束另一個 DSH 實例後重試。"
 }

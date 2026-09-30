@@ -190,5 +190,6 @@
   "commit.diffStaged": "cambios preparados (index vs HEAD)",
   "commit.diffUnstaged": "cambios sin preparar (árbol de trabajo vs index)",
   "commit.onlyUntracked": "DSH: no hay nada que generar — {n} archivo(s) sin seguimiento no forman parte de un git diff. Ejecuta git add y vuelve a intentarlo.",
-  "commit.empty": "DSH: el modelo no devolvió un mensaje de commit válido (fin de turno: {reason}, {events} eventos, {messages} mensajes del asistente)."
+  "commit.empty": "DSH: el modelo no devolvió un mensaje de commit válido (fin de turno: {reason}, {events} eventos, {messages} mensajes del asistente).",
+  "notice.sessionInUse": "Otra instancia de DSH en ejecución (la app de escritorio u otro dsh web) está usando esta sesión, por lo que cambiar el modelo, renombrar o enviar mensajes se rechaza. Cambia a otra sesión en VS Code o cierra la otra instancia de DSH y reinténtalo."
 }

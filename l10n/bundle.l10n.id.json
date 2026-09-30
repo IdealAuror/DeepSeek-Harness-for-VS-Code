@@ -190,5 +190,6 @@
   "commit.diffStaged": "perubahan ter-staged (index vs HEAD)",
   "commit.diffUnstaged": "perubahan belum ter-staged (working tree vs index)",
   "commit.onlyUntracked": "DSH: tidak ada yang bisa dibuat — {n} berkas tak terlacak tidak termasuk dalam git diff. Jalankan git add lalu coba lagi.",
-  "commit.empty": "DSH: model tidak mengembalikan pesan commit yang valid (akhir turn: {reason}, {events} peristiwa, {messages} pesan asisten)."
+  "commit.empty": "DSH: model tidak mengembalikan pesan commit yang valid (akhir turn: {reason}, {events} peristiwa, {messages} pesan asisten).",
+  "notice.sessionInUse": "Sesi ini dipegang oleh instans DSH lain yang sedang berjalan (misalnya aplikasi desktop atau dsh web lain), sehingga mengganti model, menamai ulang, atau mengirim pesan ditolak. Beralihlah ke sesi lain di VS Code, atau tutup instans DSH yang lain lalu coba lagi."
 }

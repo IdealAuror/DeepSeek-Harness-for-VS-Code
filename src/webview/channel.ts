@@ -101,6 +101,8 @@ function parseAgentFrontMatter(raw: string, fallbackName: string): { name: strin
 
 /** 计划文件路径持久化键(globalState)。 */
 const PLAN_FILES_KEY = "dsh.planFiles";
+/** 上次会话记忆:工作区目录(规范化)→ sessionId(issue #21 第 5 条)。 */
+const LAST_SESSION_KEY = "dsh.lastSessionByFolder";
 
 /**
  * 聊天面板宿主抽象:同一个 ChatChannel 可挂在侧边栏 WebviewView 或编辑器区 WebviewPanel 上。
@@ -437,9 +439,86 @@ export class ChatChannel {
     await this.hub.ensureReady();
     // 启动/激活时:不主动选中任何会话(下拉保持「— 选择会话 —」),仅清理跨目录残留选择
     await this.clearCrossFolderSession(this.workspaceFolder());
+    if (await this.restoreOrCreateSession()) {
+      await this.pushFullState();
+      return;
+    }
     const current = this.hub.store.currentSessionId;
     if (current) void this.hub.updateCurrentModel(current);
     await this.pushFullState();
+  }
+
+  /**
+   * 输入区偏好(issue #21):发送快捷键、面板字体、产物列表默认折叠。
+   * 从设置读取,init 时下发(设置变更后 VS Code 会重新解析 webview)。
+   */
+  private composerPrefs(): { sendKey: "enter" | "ctrl-enter" | "shift-enter"; fontFamily: string; autoCollapseProducedFiles: boolean } {
+    const cfg = vscode.workspace.getConfiguration("dsh");
+    const raw = cfg.get<string>("sendKey");
+    const sendKey = raw === "ctrl-enter" || raw === "shift-enter" ? raw : "enter";
+    return {
+      sendKey,
+      fontFamily: (cfg.get<string>("uiFontFamily") ?? "").trim(),
+      autoCollapseProducedFiles: cfg.get<boolean>("autoCollapseProducedFiles") !== false,
+    };
+  }
+
+  /**
+   * 打开面板时自动选中会话(issue #21 第 5 条):
+   * ① 记住上次会话(dsh.rememberLastSession)→ 恢复本工作区上次使用且仍存在的会话;
+   * ② 否则若 dsh.newSessionOnStartup(默认开)→ 自动新建一个空会话,省去手动点「＋」;
+   * ③ 被其他 DSH 实例占用的会话不自动选中(避免一进来就写不进去)。
+   * 返回 true 表示已选中会话。
+   */
+  private async restoreOrCreateSession(): Promise<boolean> {
+    const store = this.hub.store;
+    if (store.currentSessionId) return false; // 已有选择(用户刚选过),不覆盖
+    const folder = this.workspaceFolder();
+    const cfg = vscode.workspace.getConfiguration("dsh");
+    if (cfg.get<boolean>("rememberLastSession") !== false && folder) {
+      const remembered = this.lastSessionByFolder().get(this.normalizeFolder(folder));
+      const candidate = remembered ? store.sessions.get(remembered) : undefined;
+      const usable = remembered !== undefined && candidate !== undefined && !store.archivedSessionIds.has(remembered) && !this.lockedSessions.has(remembered);
+      if (usable) {
+        try {
+          await this.hub.openSession(remembered);
+          return true;
+        } catch {
+          // 该会话已不可用(被删/被占用)→ 落到自动新建
+        }
+      }
+    }
+    if (cfg.get<boolean>("newSessionOnStartup") === false) return false;
+    try {
+      const created = await this.hub.createSession();
+      if (created) {
+        await this.hub.openSession(created);
+        await this.hub.refreshSessions();
+        return true;
+      }
+    } catch (error) {
+      console.error("[dsh] auto-create session failed:", error);
+    }
+    return false;
+  }
+
+  /** 工作区目录 → 上次会话 id(globalState 持久化)。 */
+  private lastSessionByFolder(): Map<string, string> {
+    const raw = this.ctx.globalState.get<Record<string, string>>(LAST_SESSION_KEY) ?? {};
+    return new Map(Object.entries(raw));
+  }
+
+  private rememberLastSession(sessionId: string | undefined) {
+    const folder = this.workspaceFolder();
+    if (!folder || !sessionId) return;
+    if (vscode.workspace.getConfiguration("dsh").get<boolean>("rememberLastSession") === false) return;
+    const map = this.lastSessionByFolder();
+    map.set(this.normalizeFolder(folder), sessionId);
+    void this.ctx.globalState.update(LAST_SESSION_KEY, Object.fromEntries(map));
+  }
+
+  private normalizeFolder(path: string): string {
+    return path.replace(/[\\/]+$/, "").replace(/\\/g, "/").toLowerCase();
   }
 
   /**
@@ -544,6 +623,30 @@ export class ChatChannel {
   private schedulePanelOpen = false;
   /** 限时提问的等待流句柄(frameRpcId → 句柄),作答/取消/到期后释放。 */
   private readonly questionWaits = new Map<string, { cancel(): void }>();
+  /** 被其他 DSH 实例占用的会话(写操作被拒 → session/writer-held)。 */
+  private readonly lockedSessions = new Set<string>();
+
+  /**
+   * 会话被其他 DSH 实例占用(session/writer-held)时的处理。
+   * 触发条件:同一 DSH_HOME 下同时跑着多个 DSH 实例(桌面端 / 另一个 dsh web / 本扩展启动的服务器),
+   * 其中一方已把该会话挂上写句柄,另一方任何写操作(切模型 / 重命名 / 发消息)都会被拒绝。
+   * 这类故障与扩展自身无关,但原始报错难以理解 —— 这里换成可操作的中文说明,并在输入框上方挂一条占用提示。
+   * 返回 true 表示已按占用处理(调用方不要再报通用错误)。
+   */
+  private reportSessionLock(error: unknown, sessionId: string | null | undefined): boolean {
+    const held = error instanceof DshApiError && (error.code === "session/writer-held" || /already owned by an active write handle/i.test(error.message));
+    if (!held) return false;
+    if (sessionId) this.lockedSessions.add(sessionId);
+    this.post({ kind: "sessionLocked", sessionId: sessionId ?? null, locked: true });
+    this.post({ kind: "notice", message: t("notice.sessionInUse"), level: "warning" });
+    return true;
+  }
+
+  /** 写操作成功 → 该会话的占用已解除(用户可能已在另一端退出)。 */
+  private clearSessionLock(sessionId: string | null | undefined): void {
+    if (!sessionId || !this.lockedSessions.delete(sessionId)) return;
+    this.post({ kind: "sessionLocked", sessionId, locked: false });
+  }
 
   /**
    * 由 subagentCatalog 投影构造子代理目录条目(0.1.7 起取代 subagents/list 端点)。
@@ -655,6 +758,7 @@ export class ChatChannel {
       lang: effectiveLanguage(),
       languagePref: this.languagePref(),
       agentDirs: this.agentDirsConfig(),
+      composerPrefs: this.composerPrefs(),
       status: this.hub.status,
       sessions: this.serializeSessions(),
       ...this.serializeWorkspaces(),
@@ -799,8 +903,9 @@ export class ChatChannel {
                 await this.hub.send(current, text);
               }
             }
-          } catch {
-            // 错误已通过 notice 提示
+          } catch (error) {
+            // 错误已通过 notice 提示;若因会话被其他 DSH 实例占用,则额外挂占用提示条
+            this.reportSessionLock(error, current);
           }
         }
         break;
@@ -1160,6 +1265,7 @@ export class ChatChannel {
       case "select":
         if (typeof msg.sessionId === "string") {
           await this.hub.openSession(msg.sessionId);
+          this.rememberLastSession(msg.sessionId);
           void this.hub.updateCurrentModel(msg.sessionId);
           await this.pushFullState();
           // 重新打开该会话的计划文本(上次会话的计划可继续查看/修改)
@@ -1171,6 +1277,7 @@ export class ChatChannel {
         const cwd = folderCwd();
         try {
           const sessionId = await this.hub.createSession(cwd);
+          this.rememberLastSession(sessionId);
           // 0.1.2:会话事件只随 session/follow 流推送,新建后立即跟随
           void this.hub.openSession(sessionId);
           void this.hub.applyDefaultReasoningEffort(sessionId);
@@ -1199,7 +1306,9 @@ export class ChatChannel {
             const value = await this.hub.getSessionModels(current);
             this.post({ kind: "models", sessionId: current, value });
             void this.hub.updateCurrentModel(current);
+            this.clearSessionLock(current);
           } catch (error) {
+            if (this.reportSessionLock(error, current)) break;
             this.post({ kind: "notice", message: t("notice.modelFailed", { error: String(error) }), level: "error" });
           }
         }
@@ -1232,7 +1341,9 @@ export class ChatChannel {
             await this.hub.renameSession(current, msg.title.trim());
             await this.hub.refreshSessions();
             this.post({ kind: "sessions", sessions: this.serializeSessions() });
+            this.clearSessionLock(current);
           } catch (error) {
+            if (this.reportSessionLock(error, current)) break;
             this.post({ kind: "notice", message: t("notice.renameFailed", { error: String(error) }), level: "error" });
           }
         }

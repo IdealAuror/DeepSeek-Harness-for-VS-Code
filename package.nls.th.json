@@ -53,5 +53,13 @@
   "config.agentDirs.dshUserSkills": "แสดง / ซ่อนสกิลผู้ใช้ส่วนกลางของ DSH ในรายการสกิล (~/.dsh/skills, ~/.agents/skills)",
   "config.language.ru": "รัสเซีย",
   "cmd.openCordisPanel.title": "เปิดแผงปลั๊กอิน Cordis",
-  "cmd.updateServer.title": "อัปเดตเซิร์ฟเวอร์ DSH"
+  "cmd.updateServer.title": "อัปเดตเซิร์ฟเวอร์ DSH",
+  "config.sendKey": "ปุ่มลัดสำหรับส่งข้อความ ค่าเริ่มต้นคือ Enter ส่ง และ Shift+Enter ขึ้นบรรทัดใหม่ หากต้องการให้ Enter ขึ้นบรรทัดใหม่ ให้เปลี่ยนเป็น Ctrl+Enter หรือ Shift+Enter",
+  "config.sendKey.enter": "Enter ส่ง, Shift+Enter ขึ้นบรรทัดใหม่ (ค่าเริ่มต้น)",
+  "config.sendKey.ctrlEnter": "Ctrl+Enter ส่ง (Enter ขึ้นบรรทัดใหม่)",
+  "config.sendKey.shiftEnter": "Shift+Enter ส่ง (Enter ขึ้นบรรทัดใหม่)",
+  "config.uiFontFamily": "ฟอนต์ (CSS font-family) ของแผงแชท เว้นว่างเพื่อใช้ฟอนต์ UI ของ VS Code",
+  "config.newSessionOnStartup": "สร้างเซสชันว่างอัตโนมัติเมื่อเปิดแผงแชท (ไม่ต้องกด +) และจะกู้เซสชันที่จำไว้ก่อน",
+  "config.rememberLastSession": "จดจำเซสชันล่าสุดของแต่ละเวิร์กสเปซและกู้คืนเมื่อเปิด VS Code ใหม่",
+  "config.autoCollapseProducedFiles": "ย่อรายการไฟล์ผลลัพธ์เป็นสรุปหนึ่งบรรทัด (คลิกเพื่อขยาย) เพื่อไม่ให้บทสนทนายาวเต็มไปด้วยการ์ดไฟล์"
 }

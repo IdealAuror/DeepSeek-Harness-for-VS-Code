@@ -609,19 +609,27 @@ function permissionLabel(value: string, fallback?: string): string {
 const BUILT_IN_PRESET_TEXTS: Record<string, { name: string; description: string }> = {
   standard: {
     name: "标准模式",
-    description: "功能完整的编码 Agent,支持文件编辑、Shell、文件与网页检索、Skills、计划、目标、子代理和工作流。",
+    description: "处理代码、文件和资料,适合大多数任务。Agent 会按需使用检索、编辑和终端等工具。",
   },
+  // DSH 0.2.0 起内置预设由 code 改名为 ptc(PTC = 批量工具调用派发):
+  // 宿主 agentPresets/list 对内置预设只下发 id/order/isDefault(无 name/description),
+  // 文案由客户端词典提供 —— 缺这一项时下拉里只剩一个光秃秃的「ptc」。
+  ptc: {
+    name: "PTC 模式",
+    description: "包含标准模式的所有能力,更适合批量调用工具,并对结果进行筛选、整理、去重、统计或汇总的任务。",
+  },
+  // 0.1.x 的内置 id(更名前的部署仍可能出现)
   code: {
-    name: "编码模式",
-    description: "具备标准模式的全部能力,并通过 Code Mode SDK 呈现工具,让模型用一个 TypeScript 程序组合多步操作。",
+    name: "PTC 模式",
+    description: "包含标准模式的所有能力,更适合批量调用工具,并对结果进行筛选、整理、去重、统计或汇总的任务。",
   },
   minimal: {
     name: "极简模式",
-    description: "仅提供持久 bash 与 str_replace_editor 的双工具编码 Agent。",
+    description: "Agent 仅使用终端工具完成任务,适合测试和对比其基础表现。",
   },
   cordis: {
     name: "创造模式",
-    description: "用于创建自定义 Agent preset:具备标准模式的全部能力,并提供运行时检查、插件实验和 preset 创作指导。",
+    description: "用对话定制 DSH:让 Agent 编写插件,添加新功能或界面;也能组合工具和提示词,创建自己的模式。",
   },
 };
 
@@ -955,6 +963,16 @@ const EN_TEXT: Record<string, string> = {
     "The wait expired and the agent carried on; your answer is delivered as a follow-up message.",
   "限时提问:等待到期后 Agent 会先继续工作,你仍可稍后回答":
     "Timed question: when the wait expires the agent carries on, and you can still answer later.",
+  // ---- 输入历史(↑/↓ 调回,issue #20) ----
+  "历史 {index}/{total}": "History {index}/{total}",
+  "已是最早的输入": "Already at the earliest input",
+  // ---- 会话被其他 DSH 实例占用(session/writer-held) ----
+  "当前会话已被其他 DSH 实例占用(桌面端 / 另一个 dsh web),不能切换模型、重命名或发送消息;换一个会话或退出该实例后重试":
+    "Another running DSH instance (the desktop app or another dsh web) holds this session, so switching the model, renaming or sending is refused. Switch to another session, or quit that instance and retry.",
+  // ---- 发送快捷键提示(issue #21 第 1 条) ----
+  "Ctrl+Enter 发送 · Enter 换行": "Ctrl+Enter sends · Enter inserts a newline",
+  "Shift+Enter 发送 · Enter 换行": "Shift+Enter sends · Enter inserts a newline",
+  "Shift/Ctrl+Enter 确认 · Esc 取消": "Shift/Ctrl+Enter confirms · Esc cancels",
   "执行了 {n} 条命令": "{n} command(s)",
   "读取了 {n} 个文件": "{n} file(s) read",
   "修改了 {n} 个文件": "{n} file(s) changed",
@@ -1197,15 +1215,18 @@ const EN_TEXT: Record<string, string> = {
   "＋ 其余 {n} 个文件": "+ {n} more files",
   "收起": "Collapse",
   "在资源管理器中显示": "Reveal in File Explorer",
-  // ---- 内置 Agent 预设(按 id 本地化,与网页端一致) ----
+  // ---- 内置 Agent 预设(按 id 本地化,与网页端一致;文案随 DSH 0.2.0 更新) ----
   "标准模式": "Standard mode",
-  "功能完整的编码 Agent,支持文件编辑、Shell、文件与网页检索、Skills、计划、目标、子代理和工作流。": "Full coding agent with file editing, shell, file and web search, skills, planning, goals, subagents, and workflows.",
-  "编码模式": "PTC mode",
-  "具备标准模式的全部能力,并通过 Code Mode SDK 呈现工具,让模型用一个 TypeScript 程序组合多步操作。": "All Standard mode capabilities, with tools exposed through the Code Mode SDK so the model can combine multi-step operations in one TypeScript program.",
+  "处理代码、文件和资料,适合大多数任务。Agent 会按需使用检索、编辑和终端等工具。":
+    "Works on code, files and documents; suits most tasks. The agent uses search, editing and terminal tools as needed.",
+  "PTC 模式": "PTC mode",
+  "包含标准模式的所有能力,更适合批量调用工具,并对结果进行筛选、整理、去重、统计或汇总的任务。":
+    "All Standard mode capabilities, better suited to tasks that call tools in batches and then filter, organize, deduplicate, count or summarize the results.",
   "极简模式": "Minimal mode",
-  "仅提供持久 bash 与 str_replace_editor 的双工具编码 Agent。": "Two-tool coding agent with persistent bash and str_replace_editor.",
+  "Agent 仅使用终端工具完成任务,适合测试和对比其基础表现。": "The agent works using only a terminal tool; useful for testing and comparing its basic performance.",
   "创造模式": "Creator mode",
-  "用于创建自定义 Agent preset:具备标准模式的全部能力,并提供运行时检查、插件实验和 preset 创作指导。": "Built for creating custom agent presets, with all Standard mode capabilities plus runtime inspection, plugin experiments, and preset-authoring guidance.",
+  "用对话定制 DSH:让 Agent 编写插件,添加新功能或界面;也能组合工具和提示词,创建自己的模式。":
+    "Customize DSH by conversation: have the agent write plugins to add features or UI, or compose tools and prompts into your own mode.",
   // ---- 设置命名空间与字段本地化 ----
   "引导设置": "Onboarding",
   "网页搜索(DeepSeek)": "Web search (DeepSeek)",
@@ -1374,29 +1395,47 @@ const dialogBox = el("div", "dialog-box");
 const dialogTitle = el("div", "dialog-title");
 const dialogText = el("div", "dialog-text");
 const dialogInput = el("input", "dialog-input");
+// issue #21 第 11 条:多行编辑(排队消息等)用 textarea,默认 6 行高、可拖拽调整
+const dialogTextarea = el("textarea", "dialog-input dialog-textarea");
+dialogTextarea.rows = 6;
 const dialogRow = el("div", "dialog-actions");
 const dialogCancel = el("button", "btn dialog-cancel", t("取消"));
 const dialogConfirm2 = el("button", "btn dialog-confirm2", t("清除"));
 const dialogConfirm = el("button", "btn dialog-confirm", t("确定"));
 dialogRow.append(dialogCancel, dialogConfirm2, dialogConfirm);
-dialogBox.append(dialogTitle, dialogText, dialogInput, dialogRow);
+dialogBox.append(dialogTitle, dialogText, dialogInput, dialogTextarea, dialogRow);
 dialogOverlay.append(dialogBox);
 root.append(dialogOverlay);
 
-/** 显示对话框;input=true 时返回输入内容(空串视为取消),否则确认返回 "yes"、第二确认返回 "alt"、取消返回 null。 */
-function showDialog(opts: { title: string; text: string; input?: boolean; confirmLabel?: string; confirm2Label?: string; value?: string }): Promise<string | null> {
+/**
+ * 显示对话框;input=true 时返回输入内容(空串视为取消),否则确认返回 "yes"、第二确认返回 "alt"、取消返回 null。
+ * multiline=true 时使用多行编辑框(Enter 换行、Ctrl/Cmd+Enter 或 Shift+Enter 确认、Esc 取消)。
+ */
+function showDialog(opts: {
+  title: string;
+  text: string;
+  input?: boolean;
+  multiline?: boolean;
+  confirmLabel?: string;
+  confirm2Label?: string;
+  value?: string;
+}): Promise<string | null> {
   return new Promise((resolve) => {
     dialogTitle.textContent = opts.title;
     dialogText.textContent = opts.text;
     dialogConfirm.textContent = opts.confirmLabel ?? t("确定");
     dialogConfirm2.textContent = opts.confirm2Label ?? t("清除");
     dialogConfirm2.hidden = !opts.confirm2Label || !!opts.input;
-    dialogInput.value = opts.value ?? "";
-    dialogInput.hidden = !opts.input;
+    const multiline = opts.input === true && opts.multiline === true;
+    const field: HTMLInputElement | HTMLTextAreaElement = multiline ? dialogTextarea : dialogInput;
+    dialogInput.value = multiline ? "" : opts.value ?? "";
+    dialogTextarea.value = multiline ? opts.value ?? "" : "";
+    dialogInput.hidden = !opts.input || multiline;
+    dialogTextarea.hidden = !multiline;
     dialogOverlay.hidden = false;
     if (opts.input) {
-      dialogInput.focus();
-      dialogInput.select();
+      field.focus();
+      field.select();
     } else {
       dialogConfirm.focus();
     }
@@ -1406,10 +1445,11 @@ function showDialog(opts: { title: string; text: string; input?: boolean; confir
       dialogConfirm.onclick = null;
       dialogConfirm2.onclick = null;
       dialogInput.onkeydown = null;
+      dialogTextarea.onkeydown = null;
       resolve(value);
     };
     dialogCancel.onclick = () => finish(null);
-    dialogConfirm.onclick = () => finish(opts.input ? dialogInput.value : "yes");
+    dialogConfirm.onclick = () => finish(opts.input ? field.value : "yes");
     dialogConfirm2.onclick = () => finish("alt");
     dialogInput.onkeydown = (e) => {
       if (e.key === "Enter") {
@@ -1417,6 +1457,17 @@ function showDialog(opts: { title: string; text: string; input?: boolean; confir
         finish(opts.input ? dialogInput.value : "yes");
       } else if (e.key === "Escape") {
         finish(null);
+      }
+    };
+    // 多行:Enter 换行,Shift/Ctrl/Cmd+Enter 确认(与主输入框的发送习惯区分开,避免误提交)
+    dialogTextarea.onkeydown = (e) => {
+      if (e.key === "Escape") {
+        finish(null);
+        return;
+      }
+      if (e.key === "Enter" && (e.shiftKey || e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        finish(dialogTextarea.value);
       }
     };
   });
@@ -1967,6 +2018,17 @@ conversationBottom.append(btnBackToMain, todoPanel);
 const statusRow = el("div", "status-row");
 statusRow.append(turnStatus, modeChips);
 
+// 输入历史提示(issue #20):↑/↓ 调出历史输入时在状态行右侧显示位置,短暂驻留后自动淡出
+const historyHint = el("span", "history-hint");
+historyHint.hidden = true;
+statusRow.append(historyHint);
+
+// 会话被其他 DSH 实例占用(session/writer-held):输入框上方常驻提示条,直到该会话写操作恢复
+const lockNotice = el("div", "lock-notice");
+lockNotice.hidden = true;
+const lockNoticeText = el("span", "lock-notice-text");
+lockNotice.append(lockNoticeText);
+
 // 输入框底部行:左下角 / 命令菜单、权限;右下角 模型 + 思考按钮
 const composerBottom = el("div", "composer-bottom");
 const btnPlus = el("button", "btn-icon-btn plus-btn");
@@ -1998,8 +2060,9 @@ permissionPillPop.append(ppHeader, permissionPillList);
 permissionPill.append(permissionPillHead, permissionPillPop);
 // 底部行:左下角 / 命令菜单、权限;右下角 模型 + 思考按钮
 composerBottom.append(btnPlus, permissionPill, modelPill);
-// 发送提示:独占一行,位于输入框左下角
+// 发送提示:独占一行,位于输入框左下角;文案按 dsh.sendKey 动态生成(issue #21 第 1 条)
 const hint = el("div", "hint", t("Enter 发送 · Shift+Enter 换行"));
+const composerHintText = hint;
 const hintRow = el("div", "hint-row");
 hintRow.append(hint);
 // 对话框顶部行:左上角 ＋ 添加文件 + 附件芯片;右上角 预设(新会话下拉 / 已开始会话纯文本标签)
@@ -2009,7 +2072,7 @@ const presetTag = el("span", "preset-tag");
 presetTag.hidden = true;
 // 上下文进度环固定在输入框右上角、预设胶囊右侧(弹层向上展开到对话区)
 composerTop.append(attachmentsRow, presetPill, presetTag, contextMeter);
-composer.append(composerTop, inputWrap, composerBottom, hintRow);
+composer.append(lockNotice, composerTop, inputWrap, composerBottom, hintRow);
 
 // 添加文件/文件夹选择菜单(挂在 composer 内)
 const attachMenu = el("div", "plus-menu attach-menu");
@@ -2332,6 +2395,12 @@ input.addEventListener("input", () => {
   updateSendButton();
   updateMention();
   updateSlash();
+  // 用户手动编辑历史调回的文本 = 放弃历史浏览并保留当前文本(避免 ↓ 把编辑内容顶掉)
+  if (historyCursor !== -1 && !writingHistoryText) {
+    historyDraft = input.value;
+    historyCursor = -1;
+    hideHistoryHint();
+  }
 });
 input.addEventListener("keydown", (e) => {
   // 提及弹层打开时:方向键导航、Enter 选择、Esc 关闭(不触发发送)
@@ -2353,7 +2422,7 @@ input.addEventListener("keydown", (e) => {
       closeMention();
       return;
     }
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    if (e.key === "Enter" && isPopupAcceptEnter(e)) {
       e.preventDefault();
       const item = mentionState.items[mentionState.selected];
       if (item) selectMention(item);
@@ -2379,15 +2448,44 @@ input.addEventListener("keydown", (e) => {
       closeSlash();
       return;
     }
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    if (e.key === "Enter" && isPopupAcceptEnter(e)) {
       e.preventDefault();
       selectSlash(slashState.items[slashState.selected].token);
       return;
     }
   }
-  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
-    e.preventDefault();
-    sendCurrent();
+  // 输入历史(issue #20):↑/↓ 调回之前发送的内容。
+  // 规则:未在浏览历史时,只有光标位于首行行首 / 末行末尾(或全选)才接管,避免劫持文本内的光标移动;
+  // 已在浏览历史时,↑ 继续回溯而不再重复「行首」判定(调回后光标在末尾,否则第二次 ↑ 就失效)。
+  if (!e.isComposing && !mentionState && !slashState) {
+    if (e.key === "ArrowUp" && canRecallBackward()) {
+      e.preventDefault();
+      historyBackward();
+      return;
+    }
+    if (e.key === "ArrowDown" && historyCursor !== -1 && (caretAtEnd() || allSelected())) {
+      e.preventDefault();
+      historyForward();
+      return;
+    }
+    if (e.key === "Escape" && historyCursor !== -1) {
+      e.preventDefault();
+      historyForwardAtLatest();
+      return;
+    }
+  }
+  if (e.key === "Enter" && !e.isComposing) {
+    // 发送快捷键按设置裁决(issue #21 第 1 条):
+    // enter → Enter 发送、Shift+Enter 换行;ctrl-enter / shift-enter → 反之为换行,组合键发送。
+    const withShift = e.shiftKey;
+    const withCtrl = e.ctrlKey || e.metaKey;
+    const send =
+      sendKeyMode === "enter" ? !withShift && !withCtrl : sendKeyMode === "ctrl-enter" ? withCtrl && !withShift : withShift && !withCtrl;
+    if (send) {
+      e.preventDefault();
+      sendCurrent();
+    }
+    // 不发送时:交给输入框默认行为(换行),因此这里不 preventDefault
   }
 });
 input.addEventListener("blur", () => {
@@ -2878,6 +2976,221 @@ function autoResize() {
   input.style.height = Math.min(input.scrollHeight, 320) + "px";
 }
 
+// ---------- 输入历史(↑ / ↓ 调回之前发送的内容;issue #20) ----------
+
+/** 历史条数上限(仅本次 webview 生命周期内保留,随 VS Code 窗口状态持久化)。 */
+const INPUT_HISTORY_MAX = 50;
+/** 历史栈(旧 → 新)。 */
+let inputHistory: string[] = [];
+/** 历史浏览游标:inputHistory.length = 未浏览(正在编辑新内容)。 */
+let historyCursor = -1;
+/** 进入历史浏览前的草稿:Esc 或回到最新位置时恢复。 */
+let historyDraft = "";
+let historyHintTimer: number | null = null;
+/** 程序化写入输入框期间为 true:避免把「历史调回」误判为用户编辑。 */
+let writingHistoryText = false;
+
+/** 从 VS Code webview 状态恢复历史(窗口重载后仍可用;旧版 API 缺失时静默跳过)。 */
+function restoreInputHistory() {
+  try {
+    const saved = vscode.getState?.() as { inputHistory?: unknown } | undefined;
+    if (Array.isArray(saved?.inputHistory)) {
+      inputHistory = saved.inputHistory.filter((item): item is string => typeof item === "string" && item.trim() !== "").slice(-INPUT_HISTORY_MAX);
+    }
+  } catch {
+    inputHistory = [];
+  }
+}
+
+/** 持久化历史(失败不影响输入)。 */
+function persistInputHistory() {
+  try {
+    const current = (vscode.getState?.() as Record<string, unknown> | undefined) ?? {};
+    vscode.setState?.({ ...current, inputHistory });
+  } catch {
+    // 状态 API 不可用:本次会话内仍可用,只是不跨窗口重载
+  }
+}
+
+/** 记录一条已发送的输入(连续重复不入栈)。 */
+function rememberInput(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  if (inputHistory[inputHistory.length - 1] === trimmed) {
+    exitHistoryBrowsing();
+    return;
+  }
+  inputHistory.push(trimmed);
+  if (inputHistory.length > INPUT_HISTORY_MAX) inputHistory = inputHistory.slice(-INPUT_HISTORY_MAX);
+  persistInputHistory();
+  exitHistoryBrowsing();
+}
+
+/** 历史浏览提示:显示位置后 1.6s 自动隐藏(不打断输入)。 */
+function showHistoryHint(label: string) {
+  historyHint.textContent = label;
+  historyHint.hidden = false;
+  if (historyHintTimer !== null) window.clearTimeout(historyHintTimer);
+  historyHintTimer = window.setTimeout(() => {
+    historyHint.hidden = true;
+    historyHintTimer = null;
+  }, 1600);
+}
+
+function hideHistoryHint() {
+  if (historyHintTimer !== null) {
+    window.clearTimeout(historyHintTimer);
+    historyHintTimer = null;
+  }
+  historyHint.hidden = true;
+}
+
+/** 退出历史浏览(保留当前文本)。 */
+function exitHistoryBrowsing() {
+  historyCursor = -1;
+  historyDraft = "";
+  hideHistoryHint();
+}
+
+/** 写入输入框并复位光标/高度(历史调回与草稿恢复共用)。
+ *  光标必须落在末尾:若停在 0,下一次 ↑ 会被「首行行首」判定当成光标移动而不再回溯。 */
+function setInputText(text: string) {
+  writingHistoryText = true;
+  try {
+    input.value = text;
+    const end = text.length;
+    input.setSelectionRange(end, end);
+  } finally {
+    writingHistoryText = false;
+  }
+  autoResize();
+  updateSendButton();
+}
+
+/** 光标是否在首行行首(↑ 触发历史的条件:不劫持文本内的光标移动)。 */
+function caretAtStart(): boolean {
+  return (input.selectionStart ?? 0) === 0 && (input.selectionEnd ?? 0) === 0;
+}
+
+/** 光标是否在末行末尾(↓ 触发历史的条件)。 */
+function caretAtEnd(): boolean {
+  const end = input.value.length;
+  return (input.selectionStart ?? end) === end && (input.selectionEnd ?? end) === end;
+}
+
+/** 单行输入(没有换行):此时 ↑/↓ 不涉及跨行移动,可直接用于历史(与 shell 一致)。 */
+function isSingleLine(): boolean {
+  return !input.value.includes("\n");
+}
+
+/** ↑ 是否可接管:浏览历史中、光标在首行行首、全选,或单行且光标在末尾。 */
+function canRecallBackward(): boolean {
+  if (historyCursor !== -1) return true;
+  if (allSelected()) return true;
+  if (caretAtStart()) return true;
+  if (isSingleLine() && caretAtEnd()) return true;
+  return false;
+}
+
+/** 当前文本是否全选(全选时方向键视为整体替换而非移动光标)。 */
+function allSelected(): boolean {
+  const start = input.selectionStart ?? 0;
+  const end = input.selectionEnd ?? 0;
+  return end > start && start === 0 && end === input.value.length;
+}
+
+/** ↑:向更早的输入回溯;到顶后停在最早一条。 */
+function historyBackward() {
+  if (inputHistory.length === 0) return;
+  if (historyCursor === -1) {
+    historyDraft = input.value;
+    historyCursor = inputHistory.length - 1;
+  } else if (historyCursor > 0) {
+    historyCursor -= 1;
+  } else {
+    showHistoryHint(t("已是最早的输入"));
+    return;
+  }
+  setInputText(inputHistory[historyCursor]);
+  showHistoryHint(t("历史 {index}/{total}", { index: String(historyCursor + 1), total: String(inputHistory.length) }));
+}
+
+/** ↓:向更新的输入前进;越过最新一条即恢复进入历史前的草稿。 */
+function historyForward() {
+  if (historyCursor === -1) return;
+  if (historyCursor < inputHistory.length - 1) {
+    historyCursor += 1;
+    setInputText(inputHistory[historyCursor]);
+    showHistoryHint(t("历史 {index}/{total}", { index: String(historyCursor + 1), total: String(inputHistory.length) }));
+    return;
+  }
+  const draft = historyDraft;
+  exitHistoryBrowsing();
+  setInputText(draft);
+}
+
+/** Esc:放弃历史浏览,回到进入历史前正在编辑的草稿。 */
+function historyForwardAtLatest() {
+  const draft = historyDraft;
+  exitHistoryBrowsing();
+  setInputText(draft);
+}
+
+restoreInputHistory();
+
+// ---------- 输入区偏好(issue #21:发送快捷键 / 面板字体 / 产物列表折叠) ----------
+
+/** 发送快捷键:enter(默认)/ ctrl-enter / shift-enter。 */
+let sendKeyMode: "enter" | "ctrl-enter" | "shift-enter" = "enter";
+/** 产物文件列表是否默认折叠为一行摘要(避免多轮对话被卡片占满)。默认折叠:与设置默认值一致。 */
+let autoCollapseProducedFiles = true;
+
+function applyComposerPrefs(prefs: { sendKey?: string; fontFamily?: string; autoCollapseProducedFiles?: boolean } | undefined) {
+  if (!prefs) return;
+  sendKeyMode = prefs.sendKey === "ctrl-enter" || prefs.sendKey === "shift-enter" ? prefs.sendKey : "enter";
+  if (typeof prefs.autoCollapseProducedFiles === "boolean") autoCollapseProducedFiles = prefs.autoCollapseProducedFiles;
+  // 字体:用户显式配置时覆盖主题字体(--dsh-font);留空则继续跟随 VS Code 界面字体
+  const family = (prefs.fontFamily ?? "").trim();
+  if (family) document.documentElement.style.setProperty("--dsh-font", family);
+  else document.documentElement.style.removeProperty("--dsh-font");
+  // 快捷键提示行跟随当前模式
+  refreshComposerHint();
+}
+
+/**
+ * 该 Enter 事件是否应触发主输入框的「发送」(严格按 dsh.sendKey 裁决,
+ * 因此未配置的 Ctrl+Enter / Shift+Enter 会落到输入框默认的换行行为)。
+ */
+function isSendEnter(e: KeyboardEvent): boolean {
+  const withShift = e.shiftKey;
+  const withCtrl = e.ctrlKey || e.metaKey;
+  return sendKeyMode === "enter" ? !withShift && !withCtrl : sendKeyMode === "ctrl-enter" ? withCtrl && !withShift : withShift && !withCtrl;
+}
+
+/**
+ * 弹层(@ 提及 / 斜杠命令)里的 Enter 视为「选择该项」:沿用默认的 Enter 语义
+ * —— 默认模式与 Shift+Enter 发送模式下都接受 Enter,只有 Ctrl+Enter 发送模式要求一起按 Ctrl。
+ */
+function isPopupAcceptEnter(e: KeyboardEvent): boolean {
+  if (e.isComposing) return false;
+  if (sendKeyMode === "ctrl-enter") return (e.ctrlKey || e.metaKey) && !e.shiftKey;
+  return !e.shiftKey && !e.ctrlKey && !e.metaKey;
+}
+
+/**
+ * 输入框下方提示行文案:按当前发送快捷键给出可读的提示。
+ * 注意用占位符而不是字符串拼接,便于各语言调整语序。
+ */
+function refreshComposerHint() {
+  if (!composerHintText) return;
+  composerHintText.textContent =
+    sendKeyMode === "enter"
+      ? t("Enter 发送 · Shift+Enter 换行")
+      : sendKeyMode === "ctrl-enter"
+        ? t("Ctrl+Enter 发送 · Enter 换行")
+        : t("Shift+Enter 发送 · Enter 换行");
+}
+
 // ---------- 渲染:消息 ----------
 
 /**
@@ -3130,7 +3443,13 @@ function renderNode(node: NodeState): HTMLElement {
         actions.append(b);
       };
       mkBtn(t("编辑"), () => {
-        void showDialog({ title: t("编辑排队消息"), text: t("修改后立即生效"), input: true, value: node.text ?? "" }).then((v) => {
+        void showDialog({
+        title: t("编辑排队消息"),
+        text: `${t("修改后立即生效")} · ${t("Shift/Ctrl+Enter 确认 · Esc 取消")}`,
+        input: true,
+        multiline: true,
+        value: node.text ?? "",
+      }).then((v) => {
           if (v && itemId && state.current) {
             vscode.postMessage({ kind: "updateQueue", sessionId: state.current, itemId, action: { kind: "edit", content: [{ type: "text", text: v }] } });
           }
@@ -3208,11 +3527,21 @@ function renderNode(node: NodeState): HTMLElement {
   }
 }
 
-/** 产物文件列表框(网页端 ProducedFiles 同款:最多 6 条,余量折叠 +N;点击在 VS Code 打开)。 */
+/**
+ * 产物文件列表框(网页端 ProducedFiles 同款:最多 6 条,余量折叠 +N;点击在 VS Code 打开)。
+ * issue #21 第 10 条:默认折叠为一行摘要(文件名 + ＋N),避免多轮对话被上一轮的产物卡片占满;
+ * 由 dsh.autoCollapseProducedFiles 控制,展开状态在本次渲染内保持。
+ */
 function buildFilesCard(files: string[]): HTMLElement {
-  const wrap = el("div", "files-card");
-  const head = el("div", "files-card-head");
-  head.append(lineIcon(ICONS.box, 13), el("span", undefined, t("产物 ({n})", { n: String(files.length) })));
+  const wrap = el("details", "files-card" + (autoCollapseProducedFiles ? " files-card-collapsed" : "")) as HTMLDetailsElement;
+  if (!autoCollapseProducedFiles) wrap.open = true;
+  const head = el("summary", "files-card-head");
+  head.append(lineIcon(ICONS.box, 13), el("span", "files-card-title", t("产物 ({n})", { n: String(files.length) })));
+  // 折叠时用文件名做摘要(最多 3 个,余量以 ＋N 表示),展开后摘要隐藏
+  const names = files.map((p) => basename(p));
+  const preview = el("span", "files-card-preview", `${names.slice(0, 3).join(" · ")}${names.length > 3 ? ` ＋${names.length - 3}` : ""}`);
+  preview.title = files.join("\n");
+  head.append(preview);
   const revealAll = el("button", "files-card-reveal", t("在文件夹中显示"));
   revealAll.title = t("在系统资源管理器中显示产物目录");
   const firstDir = files.length ? parentDir(files[0]) : undefined;
@@ -4571,10 +4900,15 @@ let activePopover: HTMLElement | null = null;
 let activePopoverOnClose: (() => void) | undefined;
 
 function closeActivePopover() {
-  activePopover?.remove();
+  const menu = activePopover;
   activePopover = null;
   const onClose = activePopoverOnClose;
   activePopoverOnClose = undefined;
+  // 先派发清理事件(常驻的 document/window 监听在菜单里注册,移除节点前解绑)
+  if (menu) {
+    menu.dispatchEvent(new menu.ownerDocument.defaultView!.Event("dsh:popover-closed"));
+    menu.remove();
+  }
   onClose?.();
 }
 
@@ -4600,13 +4934,38 @@ function openAnchoredMenu(anchor: HTMLElement, build: (menu: HTMLElement) => voi
   menu.addEventListener("click", (ev) => ev.stopPropagation());
   const close = () => {
     if (activePopover === menu) {
-      menu.remove();
       activePopover = null;
       activePopoverOnClose = undefined;
+      menu.dispatchEvent(new menu.ownerDocument.defaultView!.Event("dsh:popover-closed"));
+      menu.remove();
       onClose?.();
     }
   };
-  setTimeout(() => document.addEventListener("click", close, { once: true }), 0);
+  // issue #21 第 9 条:一次点击没关掉时(例如点在别的弹层/被其它处理器吞掉)不会留下收不回的弹层。
+  // 因此不再只挂一次性的捕获监听,而是常驻:点击弹层外部、按 Esc、面板失焦、滚动都关闭。
+  const onDocumentClick = (ev: MouseEvent) => {
+    if (activePopover !== menu) return;
+    const target = ev.target as Node | null;
+    if (target && (menu.contains(target) || anchor.contains(target))) return;
+    close();
+  };
+  const onKeyDown = (ev: KeyboardEvent) => {
+    if (ev.key === "Escape" && activePopover === menu) {
+      ev.preventDefault();
+      close();
+    }
+  };
+  const onBlur = () => close();
+  document.addEventListener("click", onDocumentClick, true);
+  window.addEventListener("blur", onBlur);
+  document.addEventListener("scroll", close, true);
+  window.addEventListener("keydown", onKeyDown, true);
+  menu.addEventListener("dsh:popover-closed", () => {
+    document.removeEventListener("click", onDocumentClick, true);
+    window.removeEventListener("blur", onBlur);
+    document.removeEventListener("scroll", close, true);
+    window.removeEventListener("keydown", onKeyDown, true);
+  });
   return menu;
 }
 
@@ -5952,7 +6311,9 @@ function updateSendButton() {
     btnSendStop.append(lineIcon(ICONS.send, 16));
     btnSendStop.className = "btn-icon-btn send-btn";
     btnSendStop.title = state.running ? t("发送(运行中,消息将排队)") : t("发送(Enter)");
-    hint.textContent = state.running ? t("运行中 · 消息将排队发送") : t("Enter 发送 · Shift+Enter 换行");
+    // 空闲态提示沿用当前发送快捷键(issue #21 第 1 条),不要在这里写死 Enter 文案
+    if (state.running) hint.textContent = t("运行中 · 消息将排队发送");
+    else refreshComposerHint();
   }
   btnSendStop.disabled = !state.current;
 }
@@ -6573,6 +6934,8 @@ function handleMessage(msg: any) {
   switch (msg.kind) {
     case "init": {
       stopTurnStatus();
+      // 输入区偏好(issue #21):发送快捷键 / 面板字体 / 产物列表默认折叠
+      applyComposerPrefs(msg.composerPrefs);
       state.sessions = msg.sessions ?? [];
       state.current = msg.current ?? null;
       state.running = msg.running ?? false;
@@ -6749,16 +7112,14 @@ function handleMessage(msg: any) {
       break;
     }
     case "subagentPreview": {
-      const anchor = document.querySelector(".subagent-chip");
-      const pop = el("div", "msg-popover");
-      pop.append(el("div", "plus-menu-label", t("子代理最近回复")));
-      pop.append(el("div", "subagent-preview", msg.preview ?? t("(暂无)")));
-      pop.append(el("div", "plus-menu-label", t("完整历史请到 DSH 网页版查看")));
-      conversationBottom.append(pop);
-      pop.addEventListener("click", (e) => e.stopPropagation());
-      const close = () => pop.remove();
-      setTimeout(() => document.addEventListener("click", close, { once: true }), 0);
-      void anchor;
+      const anchor = (document.querySelector(".subagent-chip") as HTMLElement | null) ?? btnSubagents;
+      // issue #21 第 9 条:预览浮窗同样走统一弹层(点击外部 / Esc / 滚动 / 失焦都能关掉)
+      openAnchoredMenu(anchor, (pop) => {
+        pop.classList.add("subagent-preview-pop");
+        pop.append(el("div", "plus-menu-label", t("子代理最近回复")));
+        pop.append(el("div", "subagent-preview", msg.preview ?? t("(暂无)")));
+        pop.append(el("div", "plus-menu-label", t("完整历史请到 DSH 网页版查看")));
+      });
       break;
     }
     case "delta": {
@@ -6936,6 +7297,17 @@ function handleMessage(msg: any) {
         question.remainingMs = typeof msg.remainingMs === "number" ? msg.remainingMs : null;
         renderPending();
       }
+      break;
+    }
+    case "sessionLocked": {
+      // 会话被其他 DSH 实例占用:输入框上方常驻提示条(写操作被拒时出现,成功一次后自动消失)
+      const locked = msg.locked !== false;
+      if (locked) {
+        lockNoticeText.textContent = t(
+          "当前会话已被其他 DSH 实例占用(桌面端 / 另一个 dsh web),不能切换模型、重命名或发送消息;换一个会话或退出该实例后重试",
+        );
+      }
+      lockNotice.hidden = !locked;
       break;
     }
     case "questionResolved": {
@@ -7133,6 +7505,8 @@ function sendCurrent() {
     images,
     attachments: state.attachments.map(({ kind, path }) => ({ kind, path })),
   });
+  // 记录输入历史(issue #20):↑/↓ 可调回;连续重复不重复入栈(与 shell 一致)
+  if (text) rememberInput(text);
   state.images = [];
   renderAttachments();
   input.value = "";

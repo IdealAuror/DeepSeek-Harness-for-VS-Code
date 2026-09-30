@@ -53,5 +53,13 @@
   "config.agentDirs.dshUserSkills": "Show / hide DSH user-global skills (~/.dsh/skills, ~/.agents/skills) in the available-skills list",
   "config.language.ru": "Russian",
   "cmd.openCordisPanel.title": "Open Cordis plugins panel",
-  "cmd.updateServer.title": "Update DSH server"
+  "cmd.updateServer.title": "Update DSH server",
+  "config.sendKey": "Keyboard shortcut that sends a message. By default Enter sends and Shift+Enter inserts a newline; if you prefer Enter to insert newlines, switch to Ctrl+Enter or Shift+Enter.",
+  "config.sendKey.enter": "Enter sends, Shift+Enter inserts a newline (default)",
+  "config.sendKey.ctrlEnter": "Ctrl+Enter sends (Enter inserts a newline)",
+  "config.sendKey.shiftEnter": "Shift+Enter sends (Enter inserts a newline)",
+  "config.uiFontFamily": "Font family (CSS font-family) for the chat panel. Leave empty to follow the VS Code UI font. On Windows, \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif gives better Chinese glyphs.",
+  "config.newSessionOnStartup": "Automatically create an empty session when the chat panel opens (no need to click +); a remembered session is restored instead when available.",
+  "config.rememberLastSession": "Remember the last session used in each workspace and restore it when VS Code reopens.",
+  "config.autoCollapseProducedFiles": "Collapse the produced-files list into a one-line summary by default (click to expand), so long conversations are not filled with deliverable cards."
 }

@@ -53,5 +53,13 @@
   "config.agentDirs.dshUserSkills": "Beceri listesinde DSH kullanıcı genel becerilerini göster / gizle (~/.dsh/skills, ~/.agents/skills)",
   "config.language.ru": "Rusça",
   "cmd.openCordisPanel.title": "Cordis eklenti panelini aç",
-  "cmd.updateServer.title": "DSH sunucusunu güncelle"
+  "cmd.updateServer.title": "DSH sunucusunu güncelle",
+  "config.sendKey": "Mesaj gönderme kısayolu. Varsayılan olarak Enter gönderir, Shift+Enter satır atlar; Enter'ın satır atlamasını istiyorsanız Ctrl+Enter veya Shift+Enter seçin.",
+  "config.sendKey.enter": "Enter gönderir, Shift+Enter satır atlar (varsayılan)",
+  "config.sendKey.ctrlEnter": "Ctrl+Enter gönderir (Enter satır atlar)",
+  "config.sendKey.shiftEnter": "Shift+Enter gönderir (Enter satır atlar)",
+  "config.uiFontFamily": "Sohbet paneli için yazı tipi (CSS font-family). Boş bırakılırsa VS Code arayüz yazı tipi kullanılır.",
+  "config.newSessionOnStartup": "Sohbet paneli açıldığında boş bir oturum oluşturur (+ tuşuna gerek yok); hatırlanan oturum varsa o geri yüklenir.",
+  "config.rememberLastSession": "Her çalışma alanında son kullanılan oturumu hatırla ve VS Code yeniden açıldığında geri yükle.",
+  "config.autoCollapseProducedFiles": "Üretilen dosya listesini varsayılan olarak tek satır özete indir (genişletmek için tıkla); uzun sohbetler dosya kartlarıyla dolmasın."
 }

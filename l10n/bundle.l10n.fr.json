@@ -190,5 +190,6 @@
   "commit.diffStaged": "modifications indexées (index vs HEAD)",
   "commit.diffUnstaged": "modifications non indexées (arbre de travail vs index)",
   "commit.onlyUntracked": "DSH : rien à générer — {n} fichier(s) non suivi(s) ne font pas partie d'un git diff. Faites git add puis réessayez.",
-  "commit.empty": "DSH : le modèle n'a pas renvoyé de message de commit valide (fin de tour : {reason}, {events} événements, {messages} messages de l'assistant)."
+  "commit.empty": "DSH : le modèle n'a pas renvoyé de message de commit valide (fin de tour : {reason}, {events} événements, {messages} messages de l'assistant).",
+  "notice.sessionInUse": "Cette session est détenue par une autre instance DSH en cours d'exécution (application de bureau ou autre dsh web) : le changement de modèle, le renommage et l'envoi sont refusés. Passez à une autre session dans VS Code, ou quittez l'autre instance DSH puis réessayez."
 }

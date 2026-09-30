@@ -53,5 +53,13 @@
   "config.agentDirs.dshUserSkills": "在可用技能清單中顯示 / 隱藏 DSH 使用者全域技能(~/.dsh/skills、~/.agents/skills)",
   "config.language.ru": "俄語",
   "cmd.openCordisPanel.title": "開啟 Cordis 外掛程式面板",
-  "cmd.updateServer.title": "升級 DSH 伺服器"
+  "cmd.updateServer.title": "升級 DSH 伺服器",
+  "config.sendKey": "傳送訊息的快速鍵。預設 Enter 傳送、Shift+Enter 換行;習慣用 Enter 換行時可改為 Ctrl+Enter 或 Shift+Enter 傳送。",
+  "config.sendKey.enter": "Enter 傳送,Shift+Enter 換行(預設)",
+  "config.sendKey.ctrlEnter": "Ctrl+Enter 傳送(Enter 換行)",
+  "config.sendKey.shiftEnter": "Shift+Enter 傳送(Enter 換行)",
+  "config.uiFontFamily": "聊天面板的字型(CSS font-family)。留空跟隨 VS Code 介面字型;Windows 使用者可填 \"Microsoft JhengHei UI\", \"Microsoft JhengHei\", sans-serif。",
+  "config.newSessionOnStartup": "開啟聊天面板時自動建立一個空工作階段(無需手動點「＋」);若有上次的工作階段則優先恢復。",
+  "config.rememberLastSession": "記住每個工作區最後使用的工作階段,重新開啟 VS Code 時自動恢復。",
+  "config.autoCollapseProducedFiles": "產物檔案清單預設折疊為一行摘要(點擊展開),避免多輪對話被大量產物卡片佔滿。"
 }

@@ -53,5 +53,13 @@
   "config.agentDirs.dshUserSkills": "Mostrar / ocultar habilidades globais de usuário DSH na lista (~/.dsh/skills, ~/.agents/skills)",
   "config.language.ru": "Russo",
   "cmd.openCordisPanel.title": "Abrir o painel de plugins Cordis",
-  "cmd.updateServer.title": "Atualizar servidor DSH"
+  "cmd.updateServer.title": "Atualizar servidor DSH",
+  "config.sendKey": "Atalho para enviar uma mensagem. Por padrão Enter envia e Shift+Enter quebra a linha; se preferir que Enter quebre a linha, use Ctrl+Enter ou Shift+Enter.",
+  "config.sendKey.enter": "Enter envia, Shift+Enter quebra a linha (padrão)",
+  "config.sendKey.ctrlEnter": "Ctrl+Enter envia (Enter quebra a linha)",
+  "config.sendKey.shiftEnter": "Shift+Enter envia (Enter quebra a linha)",
+  "config.uiFontFamily": "Fonte (CSS font-family) do painel de chat. Deixe vazio para seguir a fonte da interface do VS Code.",
+  "config.newSessionOnStartup": "Cria automaticamente uma sessão vazia ao abrir o painel (sem clicar em +); uma sessão lembrada é restaurada em vez disso.",
+  "config.rememberLastSession": "Lembra a última sessão usada em cada espaço de trabalho e a restaura ao reabrir o VS Code.",
+  "config.autoCollapseProducedFiles": "Recolhe a lista de arquivos produzidos em um resumo de uma linha (clique para expandir), para não encher conversas longas de cartões."
 }

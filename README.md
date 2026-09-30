@@ -6,7 +6,7 @@
 > npx @deepseek-ai/dsh web
 > ```
 
-[中文版](#chinese) | Publisher: Jager · Latest: 0.13.27
+[中文版](#chinese) | Publisher: Jager · Latest: 0.13.31
 
 Use [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) directly in VS Code, alongside ChatGPT / Copilot: the built-in `@dsh` chat participant, secondary sidebar / standalone chat windows, workspaces / jobs / trajectory / settings panels, turn-level Git rollback, and a **multi-language UI** (简体中文 / 繁體中文 / English / 日本語 / 한국어 / Deutsch / Français / Español / Português / ไทย / Bahasa Indonesia / Türkçe / Русский / العربية — follows the VS Code display language or switch manually).
 
@@ -70,7 +70,8 @@ Prerequisites: VS Code ≥ 1.90 (built-in chat ≥ 1.95; secondary sidebar conta
 
 ## Usage highlights
 
-- Enter to send, Shift+Enter for newline; while running the send button (paper-plane line icon) becomes stop (square line icon), typing turns it back into send (queued send).
+- The send shortcut is configurable (`dsh.sendKey`): Enter (default), Ctrl+Enter or Shift+Enter sends, the other combination inserts a newline. Previously: Enter to send, Shift+Enter for newline; while running the send button (paper-plane line icon) becomes stop (square line icon), typing turns it back into send (queued send).
+- **↑ / ↓ recall your previous inputs** (like a shell, feature request issue #20): press ↑ with the caret at the start of the first line (or in a one-line input) to walk back through everything you have sent, ↓ to walk forward, and ↓ past the newest entry restores whatever you were typing before you started browsing (Esc does the same). Editing a recalled entry keeps your edit instead of overwriting it, arrow keys still move the caret inside multi-line text, and the history survives hiding or reloading the view.
 - `/` button (bottom-left): command menu (plan / compact / goal / feedback / permission / skills / .claude). Most entries insert the command into the input (press Enter to run); **Compact context** runs `/compact` straight away and the conversation shows a live compaction row — a sweep while compacting, then "Compacted N history items (~T tokens)" with the summary expandable, and the compacted range collapses into that row (the same row appears for automatic compaction).
 - `+` button next to it: add file / add folder; the blue chip is the auto-attached active file.
 - Message actions: click the forked-line icon to open the branch/rewind menu — counter-clockwise arrow "Rewind here", forked icon "Branch from here", up-left fold "Branch and rewind earlier", plus "Undo this turn's file changes" / "View checkpoints" when the git-rollback plugin is active; branch sessions also show the up-left arrow "Back to main". The counter-clockwise arrow on each assistant turn (when the DSH server-side plugin is active) restores the workspace to the state before that turn.
@@ -101,6 +102,8 @@ Prerequisites: VS Code ≥ 1.90 (built-in chat ≥ 1.95; secondary sidebar conta
 - Requirements: a Git repository as the session workspace; snapshots are taken at every turn start (turn/start) and survive server restarts via `.dsh/rollback` records + hidden refs (`refs/dsh/checkpoints/<sessionId>`). Disable the auto-install with `dsh.installRollbackPlugin: false`.
 
 ## Troubleshooting
+
+- **"This session is already in use" / `session/writer-held`**: a DSH session can only be written by one instance at a time. Quit the other instance that has it attached (the desktop app, another `dsh web`, or a second VS Code window driving the same server), or simply switch to another session in VS Code — then the notice bar above the composer disappears and model switching, renaming and sending work again.
 
 - Nothing appears → reload the window; run `DSH: Show Diagnostics`; check the extension runtime state for validation errors.
 - "No registered data provider" → run `DSH: Repair Chat View (Reset View Locations)` or `Restart Extension Host`.
@@ -136,7 +139,7 @@ npm run package     # → Releases/
 > npx @deepseek-ai/dsh web
 > ```
 
-[English version](#) | 发布者:Jager · 最新版本:0.13.27
+[English version](#) | 发布者:Jager · 最新版本:0.13.31
 
 在 VS Code 中直接使用 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)(`dsh`),与 ChatGPT / Copilot 一样融入 VS Code 聊天体系:内置聊天参与者 `@dsh`、辅助侧栏 / 独立聊天窗口、工作区 / 后台任务 / 轨迹 / 设置面板、回合级 Git 回退,以及**多语言界面**(简体中文 / 繁體中文 / English / 日本語 / 한국어 / Deutsch / Français / Español / Português / ไทย / Bahasa Indonesia / Türkçe / Русский / العربية,跟随 VS Code 显示语言或手动切换)。
 
@@ -220,7 +223,8 @@ npm run watch
 | 独立窗口 | `DSH: 打开独立聊天窗口` |
 | SCM 提交按钮 | 源代码管理视图标题栏的 ✨ 按钮(`DSH: 生成提交信息`),多仓库时弹出选择 |
 
-- 输入框:`Enter` 发送,`Shift+Enter` 换行;运行中发送按钮(纸飞机线条图标)变为停止(方块线条图标),输入文字变回发送(消息排队)。
+- 发送快捷键可在设置里选择(`dsh.sendKey`):Enter(默认)/ Ctrl+Enter / Shift+Enter 发送,另一组合键换行。原行为:`Enter` 发送,`Shift+Enter` 换行;运行中发送按钮(纸飞机线条图标)变为停止(方块线条图标),输入文字变回发送(消息排队)。
+- **`↑` / `↓` 调回之前发送过的输入**(与终端一致,需求来自 issue #20):光标在首行行首(或单行输入)时按 `↑` 逐条回溯历史输入,`↓` 前进;越过最新一条会恢复进入历史前正在编辑的草稿(`Esc` 同效)。调回后手动编辑的内容不会被覆盖;多行文本中方向键仍只移动光标;历史在视图隐藏 / 重载后仍保留。
 - 左下角 `/` 按钮:命令菜单(计划模式 / 压缩上下文 / 设置目标 / 记录反馈 / 切换权限 / 技能 / .claude 命令与技能)。多数项插入命令到输入框(回车执行);**压缩上下文**点击即执行 `/compact`,对话内实时显示压缩行 —— 压缩中扫光,完成后显示「已压缩 N 条历史记录(约 T tokens)」且摘要可展开,被压缩的区间折叠进该行(自动压缩同样单列一行)。
 - 左上角 `+` 按钮:添加文件 / 添加文件夹(二选一);附件行蓝色芯片为自动附加的激活文件(× 移除)。
 - 消息操作条:点击分叉线条图标打开分支/回退菜单 —— 逆时针箭头"回退到此处"(去掉本条及之后)、分叉图标"从此处新建分支"(保留到此)、左上折线"分支并回退到更早位置",以及 git-rollback 插件激活时的"撤销本回合改动 / 查看检查点";分叉会话另有左上箭头"回到主线"。
@@ -251,6 +255,8 @@ npm run watch
 - 前提:会话工作区是 git 仓库;每个回合开始(turn/start)自动快照,重启服务器后检查点依然可用(记录在 `.dsh/rollback` + 隐藏引用 `refs/dsh/checkpoints/<会话ID>`)。可设置 `dsh.installRollbackPlugin: false` 关闭自动安装。
 
 ## 故障排查
+
+- **「当前会话已被占用」/ `session/writer-held`**:DSH 的会话同一时刻只允许一个实例写入。请退出已挂载该会话的另一端(桌面端、另一个 `dsh web`,或驱动同一服务器的另一个 VS Code 窗口),或在 VS Code 里直接换一个会话 —— 输入框上方的占用提示条会自动消失,切模型 / 重命名 / 发送即可恢复。
 
 - **扩展没出现**:确认已重载窗口;扩展面板查看运行时状态有无校验错误;命令面板执行 `DSH: 显示诊断信息`。
 - **视图占位"没有已注册数据提供程序"**:执行 `DSH: 修复聊天视图(重置视图位置)`,或命令面板 `Restart Extension Host`。

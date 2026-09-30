@@ -53,5 +53,13 @@
   "config.agentDirs.dshUserSkills": "Tampilkan / sembunyikan skill global pengguna DSH di daftar skill (~/.dsh/skills, ~/.agents/skills)",
   "config.language.ru": "Rusia",
   "cmd.openCordisPanel.title": "Buka panel plugin Cordis",
-  "cmd.updateServer.title": "Perbarui server DSH"
+  "cmd.updateServer.title": "Perbarui server DSH",
+  "config.sendKey": "Pintasan untuk mengirim pesan. Bawaan: Enter mengirim dan Shift+Enter membuat baris baru; jika ingin Enter membuat baris baru, pilih Ctrl+Enter atau Shift+Enter.",
+  "config.sendKey.enter": "Enter mengirim, Shift+Enter baris baru (bawaan)",
+  "config.sendKey.ctrlEnter": "Ctrl+Enter mengirim (Enter baris baru)",
+  "config.sendKey.shiftEnter": "Shift+Enter mengirim (Enter baris baru)",
+  "config.uiFontFamily": "Keluarga font (CSS font-family) panel obrolan. Kosongkan untuk mengikuti font UI VS Code.",
+  "config.newSessionOnStartup": "Buat sesi kosong otomatis saat panel obrolan dibuka (tanpa menekan +); sesi yang diingat akan dipulihkan.",
+  "config.rememberLastSession": "Ingat sesi terakhir per workspace dan pulihkan saat VS Code dibuka kembali.",
+  "config.autoCollapseProducedFiles": "Ringkas daftar berkas hasil menjadi satu baris (klik untuk membuka) agar percakapan panjang tidak penuh kartu berkas."
 }

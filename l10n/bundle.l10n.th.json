@@ -190,5 +190,6 @@
   "commit.diffStaged": "การเปลี่ยนแปลงที่ stage แล้ว (index vs HEAD)",
   "commit.diffUnstaged": "การเปลี่ยนแปลงที่ยังไม่ stage (working tree vs index)",
   "commit.onlyUntracked": "DSH: ไม่มีเนื้อหาให้สร้าง — ไฟล์ที่ยังไม่ถูกติดตาม {n} ไฟล์ไม่รวมอยู่ใน git diff กรุณา git add แล้วลองใหม่",
-  "commit.empty": "DSH: โมเดลไม่ได้ส่งข้อความ commit ที่ใช้ได้ (เหตุจบเทิร์น: {reason}, อีเวนต์ {events}, ข้อความผู้ช่วย {messages})"
+  "commit.empty": "DSH: โมเดลไม่ได้ส่งข้อความ commit ที่ใช้ได้ (เหตุจบเทิร์น: {reason}, อีเวนต์ {events}, ข้อความผู้ช่วย {messages})",
+  "notice.sessionInUse": "เซสชันนี้ถูกใช้งานโดย DSH อีกอินสแตนซ์ที่กำลังรันอยู่ (เช่น แอปเดสก์ท็อปหรือ dsh web อีกตัว) การสลับโมเดล เปลี่ยนชื่อ หรือส่งข้อความจะถูกปฏิเสธ โปรดสลับไปเซสชันอื่นใน VS Code หรือปิด DSH อีกอินสแตนซ์แล้วลองใหม่"
 }

@@ -190,5 +190,6 @@
   "commit.diffStaged": "hazırlanmış değişiklikler (index vs HEAD)",
   "commit.diffUnstaged": "hazırlanmamış değişiklikler (çalışma ağacı vs index)",
   "commit.onlyUntracked": "DSH: oluşturulacak içerik yok — {n} izlenmeyen dosya git diff'e dahil değil. Önce git add çalıştırıp yeniden deneyin.",
-  "commit.empty": "DSH: model geçerli bir commit mesajı döndürmedi (tur bitişi: {reason}, {events} olay, {messages} asistan mesajı)."
+  "commit.empty": "DSH: model geçerli bir commit mesajı döndürmedi (tur bitişi: {reason}, {events} olay, {messages} asistan mesajı).",
+  "notice.sessionInUse": "Bu oturum, çalışan başka bir DSH örneği (masaüstü uygulaması veya başka bir dsh web) tarafından tutuluyor; model değiştirme, yeniden adlandırma ve mesaj gönderme reddedilir. VS Code'da başka bir oturuma geçin veya diğer DSH örneğini kapatıp yeniden deneyin."
 }

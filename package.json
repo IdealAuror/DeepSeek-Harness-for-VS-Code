@@ -2,7 +2,7 @@
   "name": "dsh-vscode",
   "displayName": "DeepSeek Harness for VS Code",
   "description": "Use DeepSeek Harness directly in VS Code: secondary sidebar chat panel, @dsh built-in chat participant with @ file/session/agent mentions, multimodal image attachments, model/preset/permission/thinking controls, subagents, Cordis plugin approvals, and turn-level Git rollback (undo one turn, restore checkpoints).",
-  "version": "0.13.27",
+  "version": "0.13.31",
   "publisher": "Jager",
   "icon": "media/icon.png",
   "license": "MIT",
@@ -312,6 +312,41 @@
           "type": "boolean",
           "default": true,
           "description": "%config.installRollbackPlugin%"
+        },
+        "dsh.sendKey": {
+          "type": "string",
+          "enum": [
+            "enter",
+            "ctrl-enter",
+            "shift-enter"
+          ],
+          "default": "enter",
+          "enumDescriptions": [
+            "%config.sendKey.enter%",
+            "%config.sendKey.ctrlEnter%",
+            "%config.sendKey.shiftEnter%"
+          ],
+          "description": "%config.sendKey%"
+        },
+        "dsh.uiFontFamily": {
+          "type": "string",
+          "default": "",
+          "description": "%config.uiFontFamily%"
+        },
+        "dsh.newSessionOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.newSessionOnStartup%"
+        },
+        "dsh.rememberLastSession": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.rememberLastSession%"
+        },
+        "dsh.autoCollapseProducedFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.autoCollapseProducedFiles%"
         }
       }
     }
