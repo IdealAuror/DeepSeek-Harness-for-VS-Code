@@ -55,6 +55,7 @@
   "hub.startRestrictedHint": "Process creation appears to be blocked by the current environment (0xC0000142/EPERM). If VS Code was launched from a DSH session or a restricted terminal, start VS Code normally, or set the session permission to danger-full-access.",
   "hub.serverNoResponse": "DSH server at {url} is not responding",
   "hub.sendFailed": "Send failed: {message}",
+  "hub.agentError": "This turn failed: {message}",
   "hub.modelNoImages": "The current model \"{model}\" does not support image input: remove the image attachments, or switch to an image-capable model via the model button at the top-right of the composer.",
   "hub.approvalGone": "The approval is no longer pending",
   "hub.approvalFailed": "Respond to approval failed: {error}",
@@ -191,5 +192,9 @@
   "commit.diffUnstaged": "unstaged changes (working tree vs index)",
   "commit.onlyUntracked": "DSH: nothing to generate from — {n} untracked file(s) are not part of a git diff. Stage them (git add) and try again.",
   "commit.empty": "DSH: the model returned no commit message (turn end: {reason}, {events} events, {messages} assistant messages).",
-  "notice.sessionInUse": "This session is held by another running DSH instance (for example the desktop app or another dsh web), so switching the model, renaming, or sending a message is refused. Switch to another session in VS Code, or quit the other DSH instance and retry."
+  "notice.sessionInUse": "This session is held by another running DSH instance (for example the desktop app or another dsh web), so switching the model, renaming, or sending a message is refused. Switch to another session in VS Code, or quit the other DSH instance and retry.",
+  "perm.desc.readOnly": "Read-only access: no file changes or command execution; outside files and network access follow the approval policy.",
+  "perm.desc.workspaceWrite": "Can modify files inside the workspace; outside files and network access follow the approval policy.",
+  "perm.desc.dangerFullAccess": "Unrestricted access to the internet and any file on your computer.",
+  "perm.desc.custom": "Custom combination (edit it in Settings)."
 }

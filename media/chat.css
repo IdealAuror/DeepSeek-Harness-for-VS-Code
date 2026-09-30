@@ -1016,6 +1016,77 @@ button {
   letter-spacing: 0.4px;
 }
 
+/* ---------- 失败提示卡(issue #19:回合失败/上下文超限必须留在对话里) ---------- */
+.msg-alert {
+  align-self: stretch;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--dsh-border);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.15);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.msg-alert.alert-warn {
+  border-left-color: #d7a12c;
+}
+
+.msg-alert.alert-error {
+  border-left-color: #e5534b;
+}
+
+.msg-alert-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--dsh-fg);
+}
+
+.msg-alert-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.msg-alert.alert-warn .msg-alert-icon {
+  color: #d7a12c;
+}
+
+.msg-alert.alert-error .msg-alert-icon {
+  color: #e5534b;
+}
+
+.msg-alert-body {
+  margin-top: 4px;
+  color: var(--dsh-muted);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.msg-alert-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.msg-alert-action {
+  padding: 2px 10px;
+  border: 1px solid var(--dsh-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsh-fg);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.msg-alert-action:hover {
+  border-color: var(--dsh-accent);
+  color: var(--dsh-accent);
+}
+
 /* ---------- 附件上下文折叠块 ---------- */
 .attach-card {
   align-self: flex-end;
@@ -4291,6 +4362,23 @@ button {
   transition: stroke-dasharray 0.4s ease;
 }
 
+/* 占用分档(issue #19):≥75% 警告、≥90% 危险,环与读数一起变色 */
+.context-meter[data-tier="warn"] .context-meter-fill {
+  stroke: #d7a12c;
+}
+
+.context-meter[data-tier="critical"] .context-meter-fill {
+  stroke: #e5534b;
+}
+
+.context-meter[data-tier="warn"] .context-meter-trigger {
+  color: #d7a12c;
+}
+
+.context-meter[data-tier="critical"] .context-meter-trigger {
+  color: #e5534b;
+}
+
 .context-meter-panel {
   position: absolute;
   right: 0;
@@ -4388,6 +4476,33 @@ button {
   margin-right: 6px;
   border-radius: 2px;
   flex-shrink: 0;
+}
+
+/* 上下文面板里的建议行动(仅在越过警告/危险阈值时出现) */
+.cm-hint {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--dsh-border);
+  color: var(--dsh-muted);
+}
+
+.cm-hint-action {
+  padding: 2px 10px;
+  border: 1px solid var(--dsh-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsh-fg);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.cm-hint-action:hover {
+  border-color: var(--dsh-accent);
+  color: var(--dsh-accent);
 }
 
 /* ---------- 窄侧栏适配(辅助侧栏等) ---------- */

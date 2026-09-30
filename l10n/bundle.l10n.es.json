@@ -54,6 +54,7 @@
   "hub.startRestrictedHint": "Parece que el entorno actual bloquea la creación de procesos (0xC0000142/EPERM). Si VS Code se inició desde una sesión de DSH o una terminal restringida, inicia VS Code de forma normal o establece el permiso de la sesión en danger-full-access.",
   "hub.serverNoResponse": "El servidor de DSH en {url} no responde",
   "hub.sendFailed": "No se pudo enviar: {message}",
+  "hub.agentError": "Este turno falló: {message}",
   "hub.approvalGone": "La aprobación ya no está pendiente",
   "hub.approvalFailed": "No se pudo responder a la aprobación: {error}",
   "hub.questionGone": "La pregunta ya no está pendiente",
@@ -191,5 +192,9 @@
   "commit.diffUnstaged": "cambios sin preparar (árbol de trabajo vs index)",
   "commit.onlyUntracked": "DSH: no hay nada que generar — {n} archivo(s) sin seguimiento no forman parte de un git diff. Ejecuta git add y vuelve a intentarlo.",
   "commit.empty": "DSH: el modelo no devolvió un mensaje de commit válido (fin de turno: {reason}, {events} eventos, {messages} mensajes del asistente).",
-  "notice.sessionInUse": "Otra instancia de DSH en ejecución (la app de escritorio u otro dsh web) está usando esta sesión, por lo que cambiar el modelo, renombrar o enviar mensajes se rechaza. Cambia a otra sesión en VS Code o cierra la otra instancia de DSH y reinténtalo."
+  "notice.sessionInUse": "Otra instancia de DSH en ejecución (la app de escritorio u otro dsh web) está usando esta sesión, por lo que cambiar el modelo, renombrar o enviar mensajes se rechaza. Cambia a otra sesión en VS Code o cierra la otra instancia de DSH y reinténtalo.",
+  "perm.desc.readOnly": "Solo lectura: sin cambios en archivos ni ejecución de comandos; los archivos externos y la red siguen la política de aprobación.",
+  "perm.desc.workspaceWrite": "Puede modificar archivos dentro del espacio de trabajo; los archivos externos y la red siguen la política de aprobación.",
+  "perm.desc.dangerFullAccess": "Acceso sin restricciones a Internet y a cualquier archivo de tu equipo.",
+  "perm.desc.custom": "Combinación personalizada (edítala en Ajustes)."
 }

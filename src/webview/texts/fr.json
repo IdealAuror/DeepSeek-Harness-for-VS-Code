@@ -610,5 +610,22 @@
   "PTC 模式": "Mode PTC",
   "包含标准模式的所有能力,更适合批量调用工具,并对结果进行筛选、整理、去重、统计或汇总的任务。": "Inclut toutes les capacités du mode Standard ; mieux adapté aux tâches qui appellent des outils par lots puis filtrent, organisent, dédupliquent, comptent ou résument les résultats.",
   "Agent 仅使用终端工具完成任务,适合测试和对比其基础表现。": "L'agent accomplit les tâches avec le seul outil terminal ; utile pour tester et comparer ses performances de base.",
-  "用对话定制 DSH:让 Agent 编写插件,添加新功能或界面;也能组合工具和提示词,创建自己的模式。": "Personnalisez DSH par la conversation : l'agent écrit des plugins pour ajouter des fonctions ou une interface, et combine outils et prompts en modes personnalisés."
+  "用对话定制 DSH:让 Agent 编写插件,添加新功能或界面;也能组合工具和提示词,创建自己的模式。": "Personnalisez DSH par la conversation : l'agent écrit des plugins pour ajouter des fonctions ou une interface, et combine outils et prompts en modes personnalisés.",
+  "上下文接近上限": "Contexte proche de la limite",
+  "上下文接近模型上限,建议先压缩": "Le contexte approche la limite du modèle — compressez d'abord",
+  "上下文接近模型上限,建议压缩后再继续": "Le contexte approche la limite du modèle — compressez avant de continuer",
+  "接近模型上限,建议先压缩上下文": "Proche de la limite du modèle — compressez d'abord le contexte",
+  "上下文接近上限,可考虑压缩": "Le contexte approche la limite — envisagez de compresser",
+  "上下文已用 {p},可考虑压缩": "{p} du contexte utilisé — envisagez de compresser",
+  "切换模型": "Changer de modèle",
+  "打开模型列表,换用上下文窗口更大的模型": "Ouvrir la liste des modèles et choisir un modèle à fenêtre de contexte plus grande",
+  "回合失败": "Échec du tour",
+  "已达模型输出上限": "Limite de sortie du modèle atteinte",
+  "模型在本回合达到最大输出 token 数,回答可能被截断;可让它继续,或改用更小的任务重试。": "Le modèle a atteint son maximum de tokens de sortie sur ce tour ; la réponse peut être tronquée. Demandez-lui de continuer ou découpez la tâche.",
+  "上下文已超出模型窗口": "Le contexte dépasse la fenêtre du modèle",
+  "当前上下文约 {used} / {limit} tokens,已超出该模型的上下文窗口:{message}": "Le contexte actuel fait environ {used} / {limit} tokens, au-delà de la fenêtre de ce modèle : {message}",
+  "当前上下文已超出该模型的上下文窗口:{message}": "Le contexte actuel dépasse la fenêtre de contexte de ce modèle : {message}",
+  "本次输入预计使上下文达到约 {used} / {limit} tokens,已超出该模型窗口;宿主会自动压缩或重试,若失败请手动压缩或换用更大窗口的模型。": "Cette saisie porte le contexte à environ {used} / {limit} tokens, au-delà de la fenêtre du modèle. L'hôte compresse et réessaie automatiquement ; en cas d'échec, compressez manuellement ou changez de modèle.",
+  "本次输入预计使上下文达到约 {used} / {limit} tokens,接近该模型窗口上限;建议先压缩上下文再继续。": "Cette saisie porte le contexte à environ {used} / {limit} tokens, près de la limite de la fenêtre. Compressez le contexte avant de continuer.",
+  "宿主未提供失败详情(旧版宿主或运行中止)": "L'hôte n'a fourni aucun détail d'échec (hôte plus ancien ou exécution interrompue)"
 }

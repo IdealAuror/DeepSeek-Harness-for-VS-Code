@@ -54,6 +54,7 @@
   "hub.startRestrictedHint": "Die Prozesserstellung scheint durch die aktuelle Umgebung blockiert zu sein (0xC0000142/EPERM). Wenn VS Code aus einer DSH-Sitzung oder einem eingeschränkten Terminal gestartet wurde, starten Sie VS Code normal oder setzen Sie die Sitzungsberechtigung auf danger-full-access.",
   "hub.serverNoResponse": "Der DSH-Server unter {url} antwortet nicht",
   "hub.sendFailed": "Senden fehlgeschlagen: {message}",
+  "hub.agentError": "Dieser Turn ist fehlgeschlagen: {message}",
   "hub.approvalGone": "Die Genehmigungsanfrage ist nicht mehr ausstehend",
   "hub.approvalFailed": "Antwort auf die Genehmigungsanfrage fehlgeschlagen: {error}",
   "hub.questionGone": "Die Frage ist nicht mehr ausstehend",
@@ -191,5 +192,9 @@
   "commit.diffUnstaged": "nicht bereitgestellte Änderungen (Arbeitsbaum vs. Index)",
   "commit.onlyUntracked": "DSH: nichts zu generieren — {n} nicht verfolgte Datei(en) sind nicht Teil eines git diff. Bitte zuerst git add ausführen.",
   "commit.empty": "DSH: Das Modell hat keine gültige Commit-Meldung geliefert (Turn-Ende: {reason}, {events} Ereignisse, {messages} Assistenten-Nachrichten).",
-  "notice.sessionInUse": "Diese Sitzung wird von einer anderen laufenden DSH-Instanz gehalten (z. B. Desktop-App oder ein weiteres dsh web); Modellwechsel, Umbenennen und Senden werden abgelehnt. Wechseln Sie in VS Code zu einer anderen Sitzung oder beenden Sie die andere DSH-Instanz und versuchen Sie es erneut."
+  "notice.sessionInUse": "Diese Sitzung wird von einer anderen laufenden DSH-Instanz gehalten (z. B. Desktop-App oder ein weiteres dsh web); Modellwechsel, Umbenennen und Senden werden abgelehnt. Wechseln Sie in VS Code zu einer anderen Sitzung oder beenden Sie die andere DSH-Instanz und versuchen Sie es erneut.",
+  "perm.desc.readOnly": "Nur-Lesen: keine Dateiänderungen oder Befehlsausführung; externe Dateien und Netzwerk folgen der Genehmigungsrichtlinie.",
+  "perm.desc.workspaceWrite": "Darf Dateien im Arbeitsbereich ändern; externe Dateien und Netzwerk folgen der Genehmigungsrichtlinie.",
+  "perm.desc.dangerFullAccess": "Uneingeschränkter Zugriff auf das Internet und jede Datei auf Ihrem Computer.",
+  "perm.desc.custom": "Eigene Kombination (in den Einstellungen bearbeiten)."
 }

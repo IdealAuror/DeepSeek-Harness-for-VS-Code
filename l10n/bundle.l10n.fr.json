@@ -54,6 +54,7 @@
   "hub.startRestrictedHint": "La création de processus semble bloquée par l'environnement actuel (0xC0000142/EPERM). Si VS Code a été lancé depuis une session DSH ou un terminal restreint, démarrez VS Code normalement ou définissez la permission de la session sur danger-full-access.",
   "hub.serverNoResponse": "Le serveur DSH à {url} ne répond pas",
   "hub.sendFailed": "Échec de l'envoi : {message}",
+  "hub.agentError": "Ce tour a échoué : {message}",
   "hub.approvalGone": "L'approbation n'est plus en attente",
   "hub.approvalFailed": "Échec de la réponse à l'approbation : {error}",
   "hub.questionGone": "La question n'est plus en attente",
@@ -191,5 +192,9 @@
   "commit.diffUnstaged": "modifications non indexées (arbre de travail vs index)",
   "commit.onlyUntracked": "DSH : rien à générer — {n} fichier(s) non suivi(s) ne font pas partie d'un git diff. Faites git add puis réessayez.",
   "commit.empty": "DSH : le modèle n'a pas renvoyé de message de commit valide (fin de tour : {reason}, {events} événements, {messages} messages de l'assistant).",
-  "notice.sessionInUse": "Cette session est détenue par une autre instance DSH en cours d'exécution (application de bureau ou autre dsh web) : le changement de modèle, le renommage et l'envoi sont refusés. Passez à une autre session dans VS Code, ou quittez l'autre instance DSH puis réessayez."
+  "notice.sessionInUse": "Cette session est détenue par une autre instance DSH en cours d'exécution (application de bureau ou autre dsh web) : le changement de modèle, le renommage et l'envoi sont refusés. Passez à une autre session dans VS Code, ou quittez l'autre instance DSH puis réessayez.",
+  "perm.desc.readOnly": "Lecture seule : aucune modification de fichier ni exécution de commande ; les fichiers externes et le réseau suivent la politique d'approbation.",
+  "perm.desc.workspaceWrite": "Peut modifier les fichiers de l'espace de travail ; les fichiers externes et le réseau suivent la politique d'approbation.",
+  "perm.desc.dangerFullAccess": "Accès illimité à Internet et à n'importe quel fichier de votre ordinateur.",
+  "perm.desc.custom": "Combinaison personnalisée (à modifier dans les paramètres)."
 }

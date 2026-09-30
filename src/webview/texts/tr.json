@@ -610,5 +610,22 @@
   "PTC 模式": "PTC modu",
   "包含标准模式的所有能力,更适合批量调用工具,并对结果进行筛选、整理、去重、统计或汇总的任务。": "Standart modun tüm yeteneklerini içerir; araçları toplu çağırıp sonuçları filtreleyen, düzenleyen, tekilleştiren, sayan veya özetleyen görevlere daha uygundur.",
   "Agent 仅使用终端工具完成任务,适合测试和对比其基础表现。": "Ajan görevleri yalnızca terminal aracıyla tamamlar; temel performansını test etmek ve karşılaştırmak için uygundur.",
-  "用对话定制 DSH:让 Agent 编写插件,添加新功能或界面;也能组合工具和提示词,创建自己的模式。": "DSH'yi sohbetle özelleştirin: ajan eklenti yazarak özellik veya arayüz ekler, araçları ve istemleri birleştirip kendi modunuzu oluşturur."
+  "用对话定制 DSH:让 Agent 编写插件,添加新功能或界面;也能组合工具和提示词,创建自己的模式。": "DSH'yi sohbetle özelleştirin: ajan eklenti yazarak özellik veya arayüz ekler, araçları ve istemleri birleştirip kendi modunuzu oluşturur.",
+  "上下文接近上限": "Bağlam sınıra yaklaştı",
+  "上下文接近模型上限,建议先压缩": "Bağlam model sınırına yaklaşıyor — önce sıkıştırın",
+  "上下文接近模型上限,建议压缩后再继续": "Bağlam model sınırına yaklaşıyor — devam etmeden önce sıkıştırın",
+  "接近模型上限,建议先压缩上下文": "Model sınırına yakın — önce bağlamı sıkıştırın",
+  "上下文接近上限,可考虑压缩": "Bağlam sınıra yaklaşıyor — sıkıştırmayı düşünün",
+  "上下文已用 {p},可考虑压缩": "Bağlamın {p} kadarı kullanıldı — sıkıştırmayı düşünün",
+  "切换模型": "Modeli değiştir",
+  "打开模型列表,换用上下文窗口更大的模型": "Model listesini açıp daha büyük bağlam pencereli bir model seçin",
+  "回合失败": "Tur başarısız",
+  "已达模型输出上限": "Model çıktı sınırına ulaşıldı",
+  "模型在本回合达到最大输出 token 数,回答可能被截断;可让它继续,或改用更小的任务重试。": "Model bu turda en fazla çıktı tokenına ulaştı; yanıt kesilmiş olabilir. Devam etmesini isteyin veya görevi küçültün.",
+  "上下文已超出模型窗口": "Bağlam model penceresini aştı",
+  "当前上下文约 {used} / {limit} tokens,已超出该模型的上下文窗口:{message}": "Geçerli bağlam yaklaşık {used} / {limit} token ve bu modelin penceresini aşıyor: {message}",
+  "当前上下文已超出该模型的上下文窗口:{message}": "Geçerli bağlam bu modelin bağlam penceresini aşıyor: {message}",
+  "本次输入预计使上下文达到约 {used} / {limit} tokens,已超出该模型窗口;宿主会自动压缩或重试,若失败请手动压缩或换用更大窗口的模型。": "Bu giriş bağlamı yaklaşık {used} / {limit} tokena çıkararak model penceresini aşıyor. Ana süreç otomatik sıkıştırıp yeniden dener; başarısız olursa elle sıkıştırın veya daha büyük pencereli bir modele geçin.",
+  "本次输入预计使上下文达到约 {used} / {limit} tokens,接近该模型窗口上限;建议先压缩上下文再继续。": "Bu giriş bağlamı yaklaşık {used} / {limit} tokena çıkararak pencere sınırına yaklaştırıyor. Devam etmeden önce bağlamı sıkıştırın.",
+  "宿主未提供失败详情(旧版宿主或运行中止)": "Ana süreç hata ayrıntısı vermedi (eski sürüm veya kesilen çalışma)"
 }

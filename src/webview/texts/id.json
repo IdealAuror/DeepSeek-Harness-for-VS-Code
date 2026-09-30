@@ -610,5 +610,22 @@
   "PTC 模式": "Mode PTC",
   "包含标准模式的所有能力,更适合批量调用工具,并对结果进行筛选、整理、去重、统计或汇总的任务。": "Mencakup semua kemampuan mode Standar; lebih cocok untuk tugas yang memanggil alat secara berkelompok lalu menyaring, merapikan, menghapus duplikat, menghitung, atau merangkum hasil.",
   "Agent 仅使用终端工具完成任务,适合测试和对比其基础表现。": "Agen menyelesaikan tugas hanya dengan alat terminal; berguna untuk menguji dan membandingkan performa dasarnya.",
-  "用对话定制 DSH:让 Agent 编写插件,添加新功能或界面;也能组合工具和提示词,创建自己的模式。": "Sesuaikan DSH lewat percakapan: minta agen menulis plugin untuk menambah fitur atau UI, serta menggabungkan alat dan prompt menjadi mode Anda sendiri."
+  "用对话定制 DSH:让 Agent 编写插件,添加新功能或界面;也能组合工具和提示词,创建自己的模式。": "Sesuaikan DSH lewat percakapan: minta agen menulis plugin untuk menambah fitur atau UI, serta menggabungkan alat dan prompt menjadi mode Anda sendiri.",
+  "上下文接近上限": "Konteks mendekati batas",
+  "上下文接近模型上限,建议先压缩": "Konteks mendekati batas model — padatkan dulu",
+  "上下文接近模型上限,建议压缩后再继续": "Konteks mendekati batas model — padatkan sebelum melanjutkan",
+  "接近模型上限,建议先压缩上下文": "Mendekati batas model — padatkan konteks dulu",
+  "上下文接近上限,可考虑压缩": "Konteks mendekati batas — pertimbangkan memadatkan",
+  "上下文已用 {p},可考虑压缩": "{p} konteks terpakai — pertimbangkan memadatkan",
+  "切换模型": "Ganti model",
+  "打开模型列表,换用上下文窗口更大的模型": "Buka daftar model dan pilih model dengan jendela konteks lebih besar",
+  "回合失败": "Turn gagal",
+  "已达模型输出上限": "Batas keluaran model tercapai",
+  "模型在本回合达到最大输出 token 数,回答可能被截断;可让它继续,或改用更小的任务重试。": "Model mencapai token keluaran maksimum pada turn ini; jawaban mungkin terpotong. Minta lanjut atau pecah tugasnya.",
+  "上下文已超出模型窗口": "Konteks melampaui jendela model",
+  "当前上下文约 {used} / {limit} tokens,已超出该模型的上下文窗口:{message}": "Konteks saat ini sekitar {used} / {limit} token, melewati jendela model ini: {message}",
+  "当前上下文已超出该模型的上下文窗口:{message}": "Konteks saat ini melewati jendela konteks model ini: {message}",
+  "本次输入预计使上下文达到约 {used} / {limit} tokens,已超出该模型窗口;宿主会自动压缩或重试,若失败请手动压缩或换用更大窗口的模型。": "Input ini membawa konteks ke sekitar {used} / {limit} token, melewati jendela model. Host akan memadatkan dan mencoba ulang otomatis; jika gagal, padatkan manual atau ganti ke model berjendela lebih besar.",
+  "本次输入预计使上下文达到约 {used} / {limit} tokens,接近该模型窗口上限;建议先压缩上下文再继续。": "Input ini membawa konteks ke sekitar {used} / {limit} token, mendekati batas jendela model. Padatkan konteks sebelum melanjutkan.",
+  "宿主未提供失败详情(旧版宿主或运行中止)": "Host tidak memberikan detail kegagalan (host lama atau eksekusi terhenti)"
 }

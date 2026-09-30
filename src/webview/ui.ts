@@ -148,7 +148,7 @@ interface BlockState {
 }
 
 interface NodeState {
-  kind: "user" | "assistant" | "tool" | "queued" | "note" | "files" | "attach" | "turn-divider" | "command";
+  kind: "user" | "assistant" | "tool" | "queued" | "note" | "files" | "attach" | "turn-divider" | "command" | "alert";
   key: string;
   el: HTMLElement | null;
   blocks?: BlockState[];
@@ -225,6 +225,18 @@ interface NodeState {
   outcomeText?: string;
   /** 摘要展开状态(用户点击切换) */
   expanded?: boolean;
+  /** 失败/上下文卡片(alert):标题、正文、危险/警告配色 */
+  alertTitle?: string;
+  alertMessage?: string;
+  tone?: "warn" | "error";
+  /** 提供「压缩上下文」动作(上下文超限类失败) */
+  actionCompact?: boolean;
+  /** 提供「切换模型」动作(窗口不足时换更大窗口的模型) */
+  actionModel?: boolean;
+  /** 建立时刻:同一回合 live 重复上报失败时的去重窗口(重放不受影响) */
+  alertAt?: number;
+  /** 卡片属于当前会话的实时回合(为 false 时不提供动作,避免对历史回合执行命令) */
+  live?: boolean;
 }
 
 // ---------- 状态 ----------
@@ -527,6 +539,8 @@ const ICONS = {
   bolt: "M13 2 3 14h7l-1 8 10-12h-7z",
   // 右箭头(胶囊展开指示)
   chevronRight: "M9 18 15 12 9 6",
+  // 警告三角(回合失败 / 上下文超限卡片)
+  alert: "M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z|M12 9v4|M12 17h.01",
 };
 
 /** 创建简约线条 SVG 图标;paths 用 | 分隔多个 path d。 */
@@ -762,6 +776,24 @@ const EN_TEXT: Record<string, string> = {
   "上下文已压缩": "Context compacted",
   "已压缩 {items} 条历史记录(约 {tokens} tokens)": "Compacted {items} history items (~{tokens} tokens)",
   "正在压缩上下文…": "Compacting context…",
+  "上下文接近上限": "Context near its limit",
+  "上下文接近模型上限,建议先压缩": "The context is near the model's limit — compact it before continuing",
+  "上下文接近模型上限,建议压缩后再继续": "The context is near the model's limit; compact it before continuing",
+  "接近模型上限,建议先压缩上下文": "Near the model limit — compact the context first",
+  "上下文接近上限,可考虑压缩": "The context is near its limit — consider compacting",
+  "上下文已用 {p},可考虑压缩": "{p} of the context is used — consider compacting",
+  "切换模型": "Switch model",
+  "打开模型列表,换用上下文窗口更大的模型": "Open the model list and pick a model with a larger context window",
+  "回合失败": "Turn failed",
+  "已达模型输出上限": "Output token limit reached",
+  "模型在本回合达到最大输出 token 数,回答可能被截断;可让它继续,或改用更小的任务重试。": "The model hit its maximum output tokens this turn, so the answer may be truncated; ask it to continue, or retry with a smaller task.",
+  "上下文已超出模型窗口": "Context exceeded the model window",
+  "当前上下文约 {used} / {limit} tokens,已超出该模型的上下文窗口:{message}": "The context is about {used} / {limit} tokens, past this model's context window: {message}",
+  "当前上下文已超出该模型的上下文窗口:{message}": "The context is past this model's context window: {message}",
+  "本次输入预计使上下文达到约 {used} / {limit} tokens,已超出该模型窗口;宿主会自动压缩或重试,若失败请手动压缩或换用更大窗口的模型。": "This input brings the context to about {used} / {limit} tokens, past this model's window; the host compacts and retries automatically — if that fails, compact manually or switch to a model with a larger window.",
+  "本次输入预计使上下文达到约 {used} / {limit} tokens,接近该模型窗口上限;建议先压缩上下文再继续。": "This input brings the context to about {used} / {limit} tokens, near this model's window limit; compact the context before continuing.",
+  "宿主未提供失败详情(旧版宿主或运行中止)": "The host provided no failure detail (older host, or the run was interrupted)",
+  "{code}: {message}": "{code}: {message}",
   "设置目标": "Set goal",
   "记录反馈": "Record feedback",
   "切换权限(插入命令)": "Switch permission (inserts command)",
@@ -3230,6 +3262,47 @@ function buildImageRow(node: NodeState): HTMLElement {
   return imgRow;
 }
 
+// ---------- 失败提示卡(回合因上下文超限/模型报错结束时留在对话内) ----------
+
+/**
+ * 构建失败提示卡:图标 + 标题 + 正文 + 可选动作。
+ * 与网页端的错误条目同语义 —— 回合失败的原因必须留在对话里,不能只闪一条
+ * 浮动 toast(issue #19:超限时对话内没有任何提示)。
+ */
+function buildAlertCard(node: NodeState): HTMLElement {
+  const wrap = el("div", `msg msg-alert ${node.tone === "error" ? "alert-error" : "alert-warn"}`);
+  const head = el("div", "msg-alert-head");
+  const icon = el("span", "msg-alert-icon");
+  icon.append(lineIcon(ICONS.alert, 13));
+  head.append(icon, el("span", "msg-alert-title", node.alertTitle ?? t("回合失败")));
+  const body = el("div", "msg-alert-body", node.alertMessage ?? "");
+  wrap.append(head, body);
+  // 动作按钮只对实时回合开放:历史重放出来的卡片切换会话后不应再对着旧会话执行命令
+  const live = node.live !== false && state.current !== null;
+  if (live && node.actionCompact) {
+    const actions = el("div", "msg-alert-actions");
+    const compact = el("button", "msg-alert-action", t("压缩上下文"));
+    compact.type = "button";
+    compact.title = t("立即执行 /compact;压缩进度显示在对话中");
+    compact.addEventListener("click", () => vscode.postMessage({ kind: "command", line: "/compact" }));
+    actions.append(compact);
+    if (node.actionModel) {
+      const switchModel = el("button", "msg-alert-action", t("切换模型"));
+      switchModel.type = "button";
+      switchModel.title = t("打开模型列表,换用上下文窗口更大的模型");
+      // 必须吞掉冒泡:文档级「点击弹层外部即关闭」的监听会看到 target 在模型胶囊之外,
+      // 刚打开的模型列表会被立刻关掉
+      switchModel.addEventListener("click", (e) => {
+        e.stopPropagation();
+        modelPillHead.click();
+      });
+      actions.append(switchModel);
+    }
+    wrap.append(actions);
+  }
+  return wrap;
+}
+
 // ---------- 命令行(压缩上下文等长任务命令:网页端 command/compaction 行同款) ----------
 
 /**
@@ -3358,6 +3431,181 @@ function applySurfaceReplace(ev: { surfaceOp?: unknown }) {
   if (dropped.size > 0) state.turnStarts = state.turnStarts.filter((seq) => seq < start || seq > end);
 }
 
+// ---------- 回合失败:对话内提示(issue #19) ----------
+
+/**
+ * 最近一条 turn/end 的失败信息。
+ * 事件循环在处理 assistant/message 等事件时才知道「刚结束的回合有没有报错」,
+ * 而失败卡要在回合尾部落位,因此 turn/end 只记账,由 alertTurnFailure 出卡。
+ */
+let turnFailure:
+  | { sessionId: string; turn?: number; kind: string; code?: string; message: string; at: number }
+  | undefined;
+
+/**
+ * 当前正在折叠的事件所属会话。
+ * 线协议的事件帧不带会话 id(历史重放尤其如此),而失败卡要判断"是不是当前会话
+ * 的错误",所以在每个处理入口显式记账,缺省按当前选中会话判定。
+ */
+let eventsSessionId: string | undefined;
+
+/** 上下文超限类失败:结构化 code 优先,老宿主/第三方提供方只有文本时按关键词兜底。 */
+function isContextOverflowFailure(failure: { code?: string; message: string }): boolean {
+  if (failure.code === "CONTEXT_WINDOW_EXCEEDED") return true;
+  return /context[ _-]?(?:window|length|limit)|maximum context|too many tokens|prompt is too long|exceeds? the (?:maximum )?(?:context|token)|reduce the length/i.test(
+    failure.message,
+  );
+}
+
+/** 上下文类失败的可读文案:带上当前读数,便于判断该压缩还是换模型。 */
+function contextOverflowAlertText(failure: { message: string }): string {
+  const c = state.context;
+  const used = typeof c?.projectedTokens === "number" ? c.projectedTokens : c?.pressureTokens;
+  if (typeof used === "number" && typeof c?.contextWindow === "number" && c.contextWindow > 0) {
+    return t("当前上下文约 {used} / {limit} tokens,已超出该模型的上下文窗口:{message}", {
+      used: fmtCompactTokens(used),
+      limit: fmtCompactTokens(c.contextWindow),
+      message: failure.message,
+    });
+  }
+  return t("当前上下文已超出该模型的上下文窗口:{message}", { message: failure.message });
+}
+
+/**
+ * 追加一张上下文提示卡;同一回合内不重复叠卡(重复调用只刷新正文)。
+ * 返回是否新建(供发送前守卫决定要不要再弹 toast)。
+ */
+function pushContextAlert(
+  sessionId: string,
+  turn: number | undefined,
+  tone: "warn" | "error",
+  title: string,
+  message: string,
+  options: { model?: boolean; live?: boolean } = {},
+): boolean {
+  const actionModel = options.model !== false;
+  // 历史重放出来的卡片不给动作:它属于过去,点「压缩上下文」不该作用在当前会话上
+  const live = options.live !== false;
+  const key = `alert:turn:${turn ?? "?"}`;
+  const prev = state.nodes[state.nodes.length - 1];
+  if (prev && prev.kind === "alert" && prev.key === key) {
+    prev.alertTitle = title;
+    prev.alertMessage = message;
+    prev.tone = tone;
+    prev.actionCompact = true;
+    prev.actionModel = actionModel;
+    prev.live = live;
+    prev.alertAt = Date.now();
+    if (prev.el) {
+      const titleEl = prev.el.querySelector(".msg-alert-title");
+      const bodyEl = prev.el.querySelector(".msg-alert-body");
+      if (titleEl) titleEl.textContent = title;
+      if (bodyEl) bodyEl.textContent = message;
+      prev.el.classList.toggle("alert-error", tone === "error");
+      prev.el.classList.toggle("alert-warn", tone !== "error");
+    }
+    return false;
+  }
+  // 同一位置已有另一张提示卡(例如发送前的预警卡):被真实结果取代,不叠加
+  // (重放时同样先入预警卡再入失败卡,所以这里无条件替换,与直播一致)
+  if (prev && prev.kind === "alert") dropNode(prev);
+  appendNode({
+    kind: "alert",
+    key,
+    el: null,
+    anchorSeq: currentEventSeq,
+    alertAt: Date.now(),
+    turn,
+    tone,
+    alertTitle: title,
+    alertMessage: message,
+    actionCompact: true,
+    actionModel,
+    live,
+  });
+  return true;
+}
+
+/** 粗略的 token 估算:代码/中文约每 2 字符 1 token(略保守,用于发送前预警)。 */
+function estimateInputTokens(text: string): number {
+  return Math.ceil(text.length / 2);
+}
+
+/**
+ * 发送前上下文守卫(issue #19):按投影读数 + 本次输入估算下一个请求的规模,
+ * 越过窗口 90% 时给出「压缩上下文」动作并落一张对话内卡片。
+ * 不阻断发送 —— 宿主 compaction-basic 会在 80% 阈值自动压缩,拦下来反而挡住用户;
+ * 这里的目标是"超限之前先把话说明白"。
+ */
+function warnIfContextTight(sessionId: string, text: string): void {
+  const c = state.context;
+  const used = typeof c?.projectedTokens === "number" ? c.projectedTokens : c?.pressureTokens;
+  const limit = c?.contextWindow;
+  if (typeof used !== "number" || typeof limit !== "number" || limit <= 0) return;
+  const projected = used + estimateInputTokens(text);
+  if (projected < limit * 0.9) return;
+  const over = projected > limit;
+  const message = over
+    ? t("本次输入预计使上下文达到约 {used} / {limit} tokens,已超出该模型窗口;宿主会自动压缩或重试,若失败请手动压缩或换用更大窗口的模型。", {
+        used: fmtCompactTokens(projected),
+        limit: fmtCompactTokens(limit),
+      })
+    : t("本次输入预计使上下文达到约 {used} / {limit} tokens,接近该模型窗口上限;建议先压缩上下文再继续。", {
+        used: fmtCompactTokens(projected),
+        limit: fmtCompactTokens(limit),
+      });
+  const lastTurn = state.turnStarts.length > 0 ? Number(state.turnStarts[state.turnStarts.length - 1]) : undefined;
+  const created = pushContextAlert(sessionId, lastTurn, over ? "error" : "warn", t("上下文接近上限"), message);
+  // 卡片已存在时只刷新正文(同一回合反复发送不再刷 toast)
+  if (!created) return;
+  showToast(t("上下文接近模型上限,建议先压缩"), "warning", {
+    label: t("压缩上下文"),
+    onClick: () => vscode.postMessage({ kind: "command", line: "/compact" }),
+  });
+}
+
+/**
+ * 把刚结束的回合的失败落到对话里(上下文超限给「压缩上下文 / 切换模型」动作)。
+ * 成功回合只清账不出卡;上下文类失败与发送前守卫共用同一张卡,不重复叠加。
+ */
+function alertTurnFailure(sessionId: string) {
+  const failure = turnFailure;
+  if (!failure || failure.sessionId !== sessionId) return;
+  turnFailure = undefined;
+  if (failure.kind !== "error" && failure.kind !== "max-tokens") return;
+  if (isContextOverflowFailure(failure)) {
+    pushContextAlert(sessionId, failure.turn, "error", t("上下文已超出模型窗口"), contextOverflowAlertText(failure), {
+      live: !state.replaying,
+    });
+    return;
+  }
+  const maxTokens = failure.kind === "max-tokens";
+  const key = `alert:turn:${failure.turn ?? "?"}`;
+  const prev = state.nodes[state.nodes.length - 1];
+  if (prev && prev.kind === "alert" && prev.key === key) {
+    // 同一回合重复上报(api-session/error 与 turn/end 常常成对到达):短时间内不叠卡
+    if (prev.alertAt !== undefined && Date.now() - prev.alertAt < 15000) return;
+    dropNode(prev);
+  } else if (prev && prev.kind === "alert") {
+    // 发送前的预警卡被这次真实失败取代
+    dropNode(prev);
+  }
+  appendNode({
+    kind: "alert",
+    key,
+    el: null,
+    anchorSeq: currentEventSeq,
+    alertAt: Date.now(),
+    turn: failure.turn,
+    tone: "warn",
+    live: !state.replaying,
+    alertTitle: maxTokens ? t("已达模型输出上限") : t("回合失败"),
+    alertMessage: maxTokens
+      ? t("模型在本回合达到最大输出 token 数,回答可能被截断;可让它继续,或改用更小的任务重试。")
+      : t("{code}: {message}", { code: failure.code ?? "UNKNOWN", message: failure.message }),
+  });
+}
+
 /** 移除节点(含其内联工具行)并从渲染列表摘除。 */
 function dropNode(node: NodeState, dropped = new Set<NodeState>()) {
   if (dropped.has(node)) return;
@@ -3372,6 +3620,9 @@ function renderNode(node: NodeState): HTMLElement {
   switch (node.kind) {
     case "command": {
       return buildCommandRow(node);
+    }
+    case "alert": {
+      return buildAlertCard(node);
     }
     case "user": {
       const wrap = el("div", "msg msg-user");
@@ -4765,6 +5016,20 @@ function handleEvent(wire: WireEvent) {
       state.streamBlock = null;
       state.streamKey = null;
       stopTurnStatus();
+      // 回合结束原因:失败(0.1.2 起 data.reason = {kind:'error', error:{code,message}})记账,
+      // 由随后的事件/收尾把提示卡落到这个回合的尾部(issue #19:超限时对话里毫无提示)
+      turnFailure = undefined;
+      const reason = (data as { reason?: { kind?: string; error?: { code?: string; message?: string } } } | undefined)?.reason;
+      if (reason && typeof reason.kind === "string" && reason.kind !== "completed") {
+        turnFailure = {
+          sessionId: String(eventsSessionId ?? state.current ?? ""),
+          turn: typeof data.turn === "number" ? data.turn : undefined,
+          kind: reason.kind,
+          code: reason.error?.code,
+          message: reason.error?.message ?? t("宿主未提供失败详情(旧版宿主或运行中止)"),
+          at: ev.time,
+        };
+      }
       const finishedTurn = state.currentStreamTurn ?? (typeof data.turn === "number" ? data.turn : undefined);
       state.currentStreamTurn = undefined;
       if (typeof finishedTurn === "number") state.turnEndMs.set(finishedTurn, ev.time);
@@ -4819,6 +5084,8 @@ function handleEvent(wire: WireEvent) {
       // 回合结束即刷新底部统计栏(投影缺失时由本地事件推导,保证始终显示)
       if (!state.replaying) renderStatsLine();
       updateRunning();
+      // 失败回合:把原因留在对话尾部(上下文超限 → 压缩 / 换模型动作)
+      alertTurnFailure(String(eventsSessionId ?? state.current ?? ""));
       break;
     }
     default:
@@ -5561,16 +5828,22 @@ function presetLabel(id: string): string {
   return presetName(id);
 }
 
-/** 权限预设说明(服务器未提供时用本地文案;参考截图:名称 + 灰色说明行)。 */
-const PERMISSION_DESCRIPTIONS: Record<string, string> = {
-  "read-only": "只读访问:不能修改文件或执行命令;外部文件与网络访问按策略询问",
-  "workspace-write": "可修改工作区内的文件;外部文件与网络访问按策略询问",
-  "danger-full-access": "可不受限制地访问互联网和你电脑上的任何文件",
-  custom: "自定义组合(在设置中编辑)",
+/**
+ * 权限预设说明:优先用宿主 l10n(14 种语言都有),其次用目录下发的 description。
+ * 之前把中文写在这里再做英文映射,别的语言会退化成英文。
+ */
+const PERMISSION_DESCRIPTION_KEYS: Record<string, string> = {
+  "read-only": "perm.desc.readOnly",
+  "workspace-write": "perm.desc.workspaceWrite",
+  "danger-full-access": "perm.desc.dangerFullAccess",
+  custom: "perm.desc.custom",
 };
 
-function permissionDescription(value: string): string {
-  return t(PERMISSION_DESCRIPTIONS[value] ?? "");
+function permissionDescription(value: string, fromCatalog?: string): string {
+  // 目录给出的英文说明作为兜底;本地 l10n 文案优先(与网页端一致)
+  const localized = t(PERMISSION_DESCRIPTION_KEYS[value] ?? "");
+  if (localized) return localized;
+  return fromCatalog ?? "";
 }
 
 /** 权限胶囊 = 收起态(⚠ 图标 + 名称 + ▾)+ 弹层(标题/了解更多 + 选项列表:图标/名称/说明/✓)。 */
@@ -5591,7 +5864,7 @@ function renderPermissionPill() {
     row.append(el("span", "pp-opt-icon", permissionIcon(option.value)));
     const body = el("span", "pp-opt-body");
     body.append(el("span", "pp-opt-name", permissionLabel(option.value, option.name)));
-    const desc = option.description ?? permissionDescription(option.value);
+    const desc = permissionDescription(option.value, option.description);
     if (desc) body.append(el("span", "pp-opt-desc", desc));
     row.append(body);
     if (current === option.value) row.append(el("span", "pp-opt-check", "✓"));
@@ -5636,10 +5909,23 @@ const CONTEXT_SEGMENTS: { key: "systemTokens" | "toolsTokens" | "messageTokens";
 ];
 
 /**
+ * 上下文占用分档:≥90% 危险(大概率下一次请求就被拒绝或压缩),≥75% 警告。
+ * 宿主自动压缩(compaction-basic)默认阈值是窗口的 80%,所以 75% 起就有意义:
+ * 用户此时手动 /compact 或换模型,比等到被拒绝后再补救便宜得多。
+ */
+function contextUsageTier(percent: number): "warn" | "critical" | undefined {
+  if (percent >= 90) return "critical";
+  if (percent >= 75) return "warn";
+  return undefined;
+}
+
+/**
  * 渲染上下文进度环与分类面板(网页端 composer ContextMeter 同款):
  * 读数取 contextPressure 投影(projectedTokens 优先,退化到 pressureTokens),
  * 分类取 0.1.5 的 contextBreakdown 投影(系统提示词 / 工具定义 / 对话消息);
  * 两者缺一即隐藏整个控件(与网页端"没有容量就不显示"一致)。
+ * ≥75% / ≥90% 分别进入警告与危险配色,并在面板里给出可操作建议(issue #19:
+ * 此前占用涨到 100% 也没有任何提示,直到请求被拒绝)。
  */
 function renderContextMeter() {
   const c = state.context;
@@ -5652,6 +5938,8 @@ function renderContextMeter() {
   }
   contextMeter.hidden = false;
   const percent = Math.max(0, Math.min(100, Math.round((used / c.contextWindow) * 100)));
+  const tier = contextUsageTier(percent);
+  contextMeter.dataset.tier = tier ?? "ok";
   // 圆环填充:strokeDasharray = 周长 * 百分比
   contextMeterFill.setAttribute("stroke-dasharray", `${(CTX_RING_CIRCUMFERENCE * percent) / 100} ${CTX_RING_CIRCUMFERENCE}`);
   const reading = `${percent}%`;
@@ -5659,7 +5947,8 @@ function renderContextMeter() {
   // 百分比单独着色,词序仍由各语言词典决定
   const template = t("上下文已用 {p}");
   const [headBefore = "", headAfter = ""] = template.split("{p}").map((part) => part.trim());
-  contextMeterBtn.title = template.replace("{p}", reading);
+  const tierHint = tier === "critical" ? t("接近模型上限,建议先压缩上下文") : tier === "warn" ? t("上下文接近上限,可考虑压缩") : "";
+  contextMeterBtn.title = tierHint ? `${template.replace("{p}", reading)} · ${tierHint}` : template.replace("{p}", reading);
   contextMeterBtn.setAttribute("aria-label", contextMeterBtn.title);
   contextMeterPanel.setAttribute("aria-label", template.replace("{p}", "").trim());
 
@@ -5698,6 +5987,19 @@ function renderContextMeter() {
       rows.append(line);
     }
     contextMeterPanel.append(rows);
+  }
+  // 建议行动:只在越过分档阈值时出现(平时保持面板干净),点击直接执行 /compact
+  if (tier) {
+    const hint = el("div", "cm-hint", tier === "critical" ? t("上下文接近模型上限,建议压缩后再继续") : t("上下文已用 {p},可考虑压缩", { p: reading }));
+    const compact = el("button", "cm-hint-action", t("压缩上下文"));
+    compact.type = "button";
+    compact.addEventListener("click", () => {
+      contextMeterPanel.hidden = true;
+      contextMeter.classList.remove("open");
+      vscode.postMessage({ kind: "command", line: "/compact" });
+    });
+    hint.append(" ", compact);
+    contextMeterPanel.append(hint);
   }
 }
 
@@ -6906,6 +7208,7 @@ function applyLanguage() {
   turnCallViews.clear();
   messages.innerHTML = "";
   state.replaying = true;
+  eventsSessionId = state.current ?? undefined;
   for (const wire of events) handleEvent(wire);
   applyQueueItems(queue);
   state.replaying = false;
@@ -6988,6 +7291,7 @@ function handleMessage(msg: any) {
       state.turnToolGroup = null;
       messages.innerHTML = "";
       state.replaying = true;
+      eventsSessionId = state.current ?? undefined;
       for (const wire of msg.events ?? []) handleEvent(wire);
       applyQueueItems(msg.queue ?? []);
       state.replaying = false;
@@ -7123,6 +7427,7 @@ function handleMessage(msg: any) {
       break;
     }
     case "delta": {
+      eventsSessionId = typeof msg.sessionId === "string" ? msg.sessionId : (state.current ?? undefined);
       for (const wire of msg.events ?? []) handleEvent(wire);
       break;
     }
@@ -7364,6 +7669,7 @@ function handleMessage(msg: any) {
       turnCallViews.clear();
       messages.innerHTML = "";
       state.replaying = true;
+      eventsSessionId = state.current ?? undefined;
       for (const wire of events) handleEvent(wire);
       state.replaying = false;
       state.hasMore = !!msg.hasMore;
@@ -7499,6 +7805,8 @@ function sendCurrent() {
     appendNode({ kind: "note", key: `note:${Date.now()}`, el: null, text: t("⚠️ 尚未选择会话,点击 ＋ 新建一个会话") });
     return;
   }
+  // 上下文守卫:接近/超出窗口时先把风险说清楚,并给一键压缩(issue #19);不阻断发送
+  warnIfContextTight(state.current, text);
   vscode.postMessage({
     kind: "send",
     text,

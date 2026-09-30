@@ -610,5 +610,22 @@
   "PTC 模式": "PTC-Modus",
   "包含标准模式的所有能力,更适合批量调用工具,并对结果进行筛选、整理、去重、统计或汇总的任务。": "Enthält alle Funktionen des Standardmodus und eignet sich besser für Aufgaben, die Werkzeuge gebündelt aufrufen und Ergebnisse filtern, ordnen, entdoppeln, zählen oder zusammenfassen.",
   "Agent 仅使用终端工具完成任务,适合测试和对比其基础表现。": "Der Agent erledigt Aufgaben nur mit einem Terminal-Werkzeug; ideal zum Testen und Vergleichen der Grundleistung.",
-  "用对话定制 DSH:让 Agent 编写插件,添加新功能或界面;也能组合工具和提示词,创建自己的模式。": "DSH per Dialog anpassen: Der Agent schreibt Plugins für neue Funktionen oder UI und kombiniert Werkzeuge und Prompts zu eigenen Modi."
+  "用对话定制 DSH:让 Agent 编写插件,添加新功能或界面;也能组合工具和提示词,创建自己的模式。": "DSH per Dialog anpassen: Der Agent schreibt Plugins für neue Funktionen oder UI und kombiniert Werkzeuge und Prompts zu eigenen Modi.",
+  "上下文接近上限": "Kontext nahe am Limit",
+  "上下文接近模型上限,建议先压缩": "Der Kontext nähert sich dem Modelllimit – zuerst verdichten",
+  "上下文接近模型上限,建议压缩后再继续": "Der Kontext nähert sich dem Modelllimit – erst verdichten, dann fortfahren",
+  "接近模型上限,建议先压缩上下文": "Nahe am Modelllimit – zuerst den Kontext verdichten",
+  "上下文接近上限,可考虑压缩": "Der Kontext nähert sich dem Limit – Verdichten erwägen",
+  "上下文已用 {p},可考虑压缩": "{p} des Kontexts belegt – Verdichten erwägen",
+  "切换模型": "Modell wechseln",
+  "打开模型列表,换用上下文窗口更大的模型": "Modellliste öffnen und ein Modell mit größerem Kontextfenster wählen",
+  "回合失败": "Turn fehlgeschlagen",
+  "已达模型输出上限": "Ausgabelimit des Modells erreicht",
+  "模型在本回合达到最大输出 token 数,回答可能被截断;可让它继续,或改用更小的任务重试。": "Das Modell hat in diesem Turn die maximale Ausgabelänge erreicht; die Antwort kann abgeschnitten sein. Lassen Sie es fortfahren oder teilen Sie die Aufgabe kleiner auf.",
+  "上下文已超出模型窗口": "Kontext überschreitet das Modellfenster",
+  "当前上下文约 {used} / {limit} tokens,已超出该模型的上下文窗口:{message}": "Der aktuelle Kontext umfasst etwa {used} / {limit} Tokens und überschreitet das Kontextfenster dieses Modells: {message}",
+  "当前上下文已超出该模型的上下文窗口:{message}": "Der aktuelle Kontext überschreitet das Kontextfenster dieses Modells: {message}",
+  "本次输入预计使上下文达到约 {used} / {limit} tokens,已超出该模型窗口;宿主会自动压缩或重试,若失败请手动压缩或换用更大窗口的模型。": "Diese Eingabe bringt den Kontext auf etwa {used} / {limit} Tokens und überschreitet das Modellfenster. Der Host verdichtet und wiederholt automatisch; schlägt das fehl, verdichten Sie manuell oder wechseln Sie das Modell.",
+  "本次输入预计使上下文达到约 {used} / {limit} tokens,接近该模型窗口上限;建议先压缩上下文再继续。": "Diese Eingabe bringt den Kontext auf etwa {used} / {limit} Tokens und damit nahe an das Fensterlimit. Verdichten Sie den Kontext, bevor Sie fortfahren.",
+  "宿主未提供失败详情(旧版宿主或运行中止)": "Der Host hat keine Fehlerdetails geliefert (älterer Host oder abgebrochener Lauf)"
 }

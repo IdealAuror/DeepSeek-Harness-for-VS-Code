@@ -1,7 +1,7 @@
 import { DshApiClient, DshApiError, DshAuthError, type RemoteStreamHandle } from "./apiClient";
 import { ServerManager } from "./serverManager";
 import { SessionStore, type StoredSession } from "./sessionStore";
-import type { CommandExecutionView, MessageFeedbackRating, PromptContentPart, ScheduleHistoryRequest, SessionFollowFrame } from "./types";
+import type { CommandExecutionView, MessageFeedbackRating, PermissionCatalog, PromptContentPart, ScheduleHistoryRequest, SessionFollowFrame } from "./types";
 import type {
   CordisPluginRow,
   CordisRequestRun,
@@ -128,6 +128,17 @@ export class DshHub {
       },
       onWaterfall: (frame) => this.store.handleWaterfall(frame),
       onCancel: (eventId) => this.store.handleWaterfallCancel(eventId),
+    });
+    // 回合内的失败(api-session/error → agentError):以前只有 waitIdle 订阅,用户端毫无反馈。
+    // 当前会话直接给一条错误提示;其余会话的失败由会话列表未读点提示,避免刷屏。
+    this.store.on("agentError", (sessionId: string, message: string) => {
+      if (sessionId !== this.store.currentSessionId) return;
+      const text = message.trim().replace(/\s+/g, " ");
+      const trimmed = text.length > 400 ? `${text.slice(0, 400)}…` : text;
+      this.deps.onNotice?.(
+        this.deps.t?.("hub.agentError", { message: trimmed }) || `This turn failed: ${trimmed}`,
+        "error",
+      );
     });
   }
 
@@ -755,6 +766,19 @@ export class DshHub {
 
   selectModel(sessionId: string, provider: string, model: string, reasoningEffort?: string) {
     return this.client.selectModel(sessionId, provider, model, reasoningEffort);
+  }
+
+  /**
+   * 进程级权限预设目录(0.1.5+):可选权限列表的权威来源。
+   * 会话投影只带当前值,所以下拉的选项必须来自这里 —— 官方网页端也是
+   * selection=投影 / catalog=目录 的分工。旧宿主无该端点时返回 undefined。
+   */
+  async permissionCatalog(): Promise<PermissionCatalog | undefined> {
+    try {
+      return await this.client.permissionPresetsCatalog();
+    } catch {
+      return undefined;
+    }
   }
 
   listPresets() {

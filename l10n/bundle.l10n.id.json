@@ -54,6 +54,7 @@
   "hub.startRestrictedHint": "Pembuatan proses tampaknya diblokir oleh lingkungan saat ini (0xC0000142/EPERM). Jika VS Code diluncurkan dari sesi DSH atau terminal terbatas, mulai VS Code secara normal, atau atur izin sesi ke danger-full-access.",
   "hub.serverNoResponse": "Server DSH di {url} tidak merespons",
   "hub.sendFailed": "Gagal mengirim: {message}",
+  "hub.agentError": "Turn ini gagal: {message}",
   "hub.approvalGone": "Persetujuan tidak lagi tertunda",
   "hub.approvalFailed": "Gagal merespons persetujuan: {error}",
   "hub.questionGone": "Pertanyaan tidak lagi tertunda",
@@ -191,5 +192,9 @@
   "commit.diffUnstaged": "perubahan belum ter-staged (working tree vs index)",
   "commit.onlyUntracked": "DSH: tidak ada yang bisa dibuat — {n} berkas tak terlacak tidak termasuk dalam git diff. Jalankan git add lalu coba lagi.",
   "commit.empty": "DSH: model tidak mengembalikan pesan commit yang valid (akhir turn: {reason}, {events} peristiwa, {messages} pesan asisten).",
-  "notice.sessionInUse": "Sesi ini dipegang oleh instans DSH lain yang sedang berjalan (misalnya aplikasi desktop atau dsh web lain), sehingga mengganti model, menamai ulang, atau mengirim pesan ditolak. Beralihlah ke sesi lain di VS Code, atau tutup instans DSH yang lain lalu coba lagi."
+  "notice.sessionInUse": "Sesi ini dipegang oleh instans DSH lain yang sedang berjalan (misalnya aplikasi desktop atau dsh web lain), sehingga mengganti model, menamai ulang, atau mengirim pesan ditolak. Beralihlah ke sesi lain di VS Code, atau tutup instans DSH yang lain lalu coba lagi.",
+  "perm.desc.readOnly": "Hanya baca: tidak ada perubahan berkas atau eksekusi perintah; berkas luar dan jaringan mengikuti kebijakan persetujuan.",
+  "perm.desc.workspaceWrite": "Dapat mengubah berkas di dalam ruang kerja; berkas luar dan jaringan mengikuti kebijakan persetujuan.",
+  "perm.desc.dangerFullAccess": "Akses tanpa batas ke internet dan berkas apa pun di komputer Anda.",
+  "perm.desc.custom": "Kombinasi kustom (edit di Pengaturan)."
 }

@@ -1,10 +1,24 @@
 # Changelog
 
+## 0.13.33
+- **Fixed the read/write permission dropdown being unusable.** The picker took its option list from the session's `permissions` projection, but that projection only carries the **current value** — in 0.2.0-rc.2 it is literally `{"currentValue":"workspace-write"}` with no `options` at all (measured on a live server). With an empty option list the pill's expand button was disabled, so nothing could be chosen. The extension now reads the option list from the process-level `permissionPresets/catalog` endpoint — exactly the split the official web client uses (`selection = projection`, `catalog = options`) — caches it per connection, and re-pushes the merged value once it arrives, at startup and on every session follow. If a host has no catalog endpoint, it falls back to whatever options the projection carries, so older deployments keep working. Verified live: catalog returns `read-only / workspace-write / danger-full-access` while the projection returns only the current value, and the merged result is a 3-option list.
+- **修复「读写权限」下拉无法选择的问题。** 下拉的选项列表原本取自会话的 `permissions` 投影,但该投影只携带**当前值** —— 在 0.2.0-rc.2 上实测它形如 `{"currentValue":"workspace-write"}`,完全没有 `options`。选项为空时胶囊的展开按钮是 disabled 状态,于是什么都选不了。现在选项改为取自进程级的 `permissionPresets/catalog` 端点 —— 与官方网页端完全相同的分工(`selection = 投影`、`catalog = 目录`)—— 按连接缓存一次,并在启动时与每次会话 follow 后把「目录选项 + 投影当前值」合并重推;宿主没有该端点时回退到投影自带 options,旧部署不受影响。已实测:目录返回 `read-only / workspace-write / danger-full-access` 而投影只有当前值,合并结果为 3 个可选项。
+
+## 0.13.32
+- **A turn that runs out of context now says so, in the conversation** ([issue #19](https://github.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code/issues/19)): with a smaller-window model (MiniMax and other pi-ai routes) the context filled up and the conversation simply stopped, with nothing but a short-lived toast. Three separate signals were being dropped, all of them on the extension side: `turn/end`'s `reason` was ignored, the `api-session/error` event reached only `waitIdle` and no UI at all, and nothing warned before the window was full. Now:
+  - **Failure card in the transcript**: a turn that ends with `reason.kind = "error"` (or `max-tokens`) leaves a card at the end of that turn with the failure code and the provider's own message. Context-overflow failures are recognised from the structured `code = CONTEXT_WINDOW_EXCEEDED` **or** from the provider text (`context length` / `prompt is too long` / `too many tokens` …), and the card shows the current reading (`~210K / 200K tokens`) with **Compact context** (`/compact`) and **Switch model** buttons. Cards replayed from history carry no buttons — they describe a past turn, not the current one.
+  - **`api-session/error` reaches the user**: a failed turn in the session you are looking at now raises an error notice (truncated to 400 chars). Failures in other sessions stay quiet and are signalled by the session-list dot.
+  - **Warnings before it is too late**: the context ring turns amber at 75% and red at 90% (web-parity panel gains a **Compact context** action; the tooltip explains why), and sending while the next request is estimated to cross 90% of the window adds an in-conversation card with the projected reading plus the same two actions — the send itself is never blocked, because the host's `compaction-basic` compacts and retries on its own at its 80% threshold.
+- New regression tests: `tools/test-context-overflow-alert.mjs` (37 checks over the webview: card rendering and wording, code- and text-based overflow recognition, generic failures, `max-tokens`, replay idempotence, ring tiers, the pre-send guard) and `tools/test-agent-error-notice.mjs` (host side: current session notifies, other sessions stay quiet). UI copy added in all 14 languages.
+- **上下文用尽不再「悄无声息地失败」,原因直接写进对话**([issue #19](https://github.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code/issues/19)):使用窗口较小的模型(MiniMax 等 pi-ai 路由)时,上下文填满后对话就停在那里,只有一条转瞬即逝的浮动提示。根因是三条信号都被丢掉了,而且都在扩展侧:`turn/end` 的 `reason` 没人读、`api-session/error` 只喂给了 `waitIdle`(界面完全收不到)、以及窗口被填满之前没有任何预警。现在:
+  - **对话内的失败卡**:回合以 `reason.kind = "error"`(或 `max-tokens`)结束时,在该回合末尾留下一张卡片,写明失败码与提供方原文。上下文超限既按结构化 `code = CONTEXT_WINDOW_EXCEEDED` 识别,**也**按提供方文本(`context length` / `prompt is too long` / `too many tokens` 等)兜底;卡片给出当前读数(`~210K / 200K tokens`)以及**压缩上下文**(执行 `/compact`)与**切换模型**两个按钮。历史重放出来的卡片不带按钮 —— 它描述的是过去那个回合,不该对当前会话执行命令。
+  - **`api-session/error` 能到用户眼前**:当前正在查看的会话失败时会弹出错误提示(超长截断到 400 字);其他会话的失败保持安静,由会话列表的未读点提示。
+  - **来不及之前先提醒**:上下文进度环 75% 转琥珀、90% 转红(面板内新增「压缩上下文」动作,悬停提示说明原因);当本次输入预计让请求越过窗口 90% 时,发送前在对话内落一张卡片,给出预计读数与同样两个动作 —— 但从不阻断发送,因为宿主 `compaction-basic` 会在自己的 80% 阈值处自动压缩并重试。
+- 新增回归测试:`tools/test-context-overflow-alert.mjs`(webview 侧 37 项:卡片渲染与文案、结构化 code 与纯文本两种超限识别、普通失败、`max-tokens`、重放幂等、进度环分档、发送前守卫)与 `tools/test-agent-error-notice.mjs`(宿主侧:当前会话提示、其他会话不打扰)。新增文案已覆盖全部 14 种语言。
 
 ## 0.13.31
 - **Fixed the blank `ptc` entry in the Agent-preset dropdown.** DSH 0.2.0 renamed its built-in preset `code` → `ptc`, and `agentPresets/list` publishes only `id`/`order`/`isDefault` for shipped presets — the name and description come from the client's own dictionary. The extension's built-in table still listed `code`, so `ptc` fell through to the raw id with no description. `ptc` is now a first-class entry ("PTC 模式" / "PTC mode") with its description, the old `code` id is kept as an alias for older deployments, and the copy for all four shipped presets was refreshed to match DSH 0.2.0's own wording (standard / ptc / minimal / cordis) in all 14 languages.
 - Verified against a live 0.2.0-rc.2 roster (`{"presets":[{"id":"standard","isDefault":true},{"id":"ptc"},{"id":"minimal"},{"id":"cordis"}]}`): every row now renders a name **and** a description in zh-cn, en and ja.
-## 0.13.31
 - **修复 Agent 预设下拉里「ptc」只有名字、没有说明的问题。** DSH 0.2.0 把内置预设 `code` 改名为 `ptc`,而 `agentPresets/list` 对内置预设只下发 `id`/`order`/`isDefault` —— 名称与说明来自客户端词典。扩展的内置表里还是 `code`,于是 `ptc` 落到了「用原始 id 当名字、且没有说明」的回退分支。现在 `ptc` 已是正式条目(「PTC 模式」/「PTC mode」)并带上说明;旧 id `code` 保留为别名以兼容旧部署;四个内置预设(标准 / PTC / 极简 / 创造)的文案也同步到 DSH 0.2.0 官方措辞,覆盖全部 14 种语言。
 - 已用真实 0.2.0-rc.2 的 roster 实测(`{"presets":[{"id":"standard","isDefault":true},{"id":"ptc"},{"id":"minimal"},{"id":"cordis"}]}`):zh-cn、en、ja 三种语言下四行都能显示**名称 + 说明**。
 
@@ -18,7 +32,6 @@
   - **Popovers always close** (#9): the subagent catalog, goal menu, model menu and subagent preview now close on any outside click, Esc, scroll, or window blur, instead of relying on a single one-shot click handler that could be swallowed.
   - **Queued messages get a real editor** (#11): editing a queued message opens a 6-row, vertically resizable textarea (Enter for newlines, Shift/Ctrl+Enter to confirm, Esc to cancel) instead of a one-line input.
 - Already shipped earlier in this line, so nothing further was needed: ↑/↓ input history (#4, 0.13.28), cache-hit/token figures at the bottom instead of only at turn end (#6, 0.13.17). Item #3 (a message lost while the model rejects images) is now covered by the send-failure handling: the composer text is restored and a notice explains the cause, and #2/#8 remain upstream/host-side (image capability comes from the model catalog, not the extension).
-## 0.13.30
 - 采纳 [issue #21](https://github.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code/issues/21) 中可落地的建议:
   - **`dsh.sendKey`**(第 1 条):可选 Enter 发送(默认)/ Ctrl+Enter 发送 / Shift+Enter 发送,另一组合键即换行。输入框下方提示行会跟随该设置显示,`@` 提及与斜杠命令弹层仍以 Enter 选中当前项。
   - **`dsh.uiFontFamily`**(第 7 条):聊天面板支持任意 CSS 字体栈,Windows 用户可把 `"Microsoft YaHei UI", "Microsoft YaHei", sans-serif` 放在最前,中文字形更舒服;留空(默认)继续跟随 VS Code 界面字体,代码与 diff 区域仍用编辑器等宽字体。
@@ -32,7 +45,6 @@
 ## 0.13.29
 - **Diagnosed the `session/writer-held` failure** ("session … is already owned by an active write handle") that appears when the model is switched while another DSH instance is running. It is not a model bug and not specific to the desktop app: DSH sessions are owned by one writer at a time. Running two instances against the same DSH home (the desktop app plus `dsh web`, two `dsh web` processes, or the extension's auto-started server alongside either) means the instance that attached a session first keeps its write handle, and every write from the other one — switching the model, renaming, sending a message — is refused with that error. Reproduced deterministically with two independent servers over one isolated home: `selectModel`, `renameSession` and `sendPromptParts` all come back `code=session/writer-held`.
 - **The extension now explains it instead of showing the raw error**: a write refused with `session/writer-held` is reported as "this session is held by another running DSH instance (the desktop app or another dsh web) — switch to another session, or quit that instance and retry", in all 14 languages, and a persistent notice bar appears above the composer for as long as that session is locked. The bar clears by itself as soon as any write to the session succeeds (for example after quitting the other instance). The same handling covers model switching, renaming and sending.
-## 0.13.29
 - **定位了 `session/writer-held` 报错**("session … is already owned by an active write handle",切换模型时出现的那个)。它既不是模型的问题,也不专属于桌面端:**DSH 的会话同一时刻只允许一个写入方**。当同一 DSH 主目录下同时跑着两个实例(桌面端 + `dsh web`、两个 `dsh web`,或扩展自动启动的服务器与其中任一个并存)时,先挂上该会话的一方持有写句柄,另一方的所有写操作 —— 切换模型、重命名、发送消息 —— 都会收到这个错误。已用「同一隔离主目录 + 两个独立服务器进程」稳定复现:`selectModel`、`renameSession`、`sendPromptParts` 全部返回 `code=session/writer-held`。
 - **扩展改为解释清楚,而不是抛原始报错**:凡因 `session/writer-held` 被拒的写操作,都会提示「当前会话已被其他正在运行的 DSH 实例占用(桌面端或另一个 dsh web),请在 VS Code 里换一个会话,或退出该实例后重试」(14 种语言),同时在输入框上方显示常驻提示条;只要该会话任意一次写操作成功(例如退出另一端后),提示条会自动消失。切模型、重命名、发送消息三条路径都已覆盖。
 
@@ -117,6 +129,7 @@
 - **会话打开即读投影基线**(`session/projections`):统计、待办、权限、上下文进度环与子代理目录在会话打开后立刻从宿主读取,不再等下一个投影帧。
 - 已按已发布的 0.1.5-rc.1 与 0.1.7-rc.2 包逐一核对:请求信封、`remote.mux` 流派(`session/follow` / `session/control` / `workspace/follow` / `$events` + `$events/result`)、主机事件词表,以及本扩展调用的全部端点(上述三处移除除外)均未变化;唯一签名变化 `workspaceFiles/readBytes` 本扩展未使用。
 - 对真实 0.1.7-rc.2 服务器验证时修复两处:① `session/projections` 的单参数载荷必须包一层 `{request:{…}}`(此前被描述符校验拒绝并静默回退);② 端点被移除/未启用时的网关 404 现在转成带 `method-unavailable` 错误码的 `DshApiError`,而不是裸传输失败——自动化任务面板据此判断「宿主未启用定时任务」并给出说明,而不是报错。13/13 项实测通过(认证与 cookie 交换、`$events` ready 帧、会话列表/新建、投影基线、反馈列表、权限目录、定时任务不可用路径、预设作者探测、命令/模型目录/技能、归档)。
+
 ## 0.13.17
 - Bottom session totals now match the web StatsPills: two pills under the composer — `{turns} turns {steps} steps · {tps} tok/s` and `{total} tok · {hit}% cache hit` — each opening a stat dialog on click (session statistics: LLM time, tool time, average TTFT, output TPS; token usage: exact total, cache hit, uncached input, cache read/write, output); a partial cache hit is never rounded up to 100% (precision grows until the shown value stays honest), and the old single plain-text stats line is gone
 - 底部会话总量与网页端 StatsPills 对齐:输入框下方改为两枚胶囊 —— `{轮} 轮 {步} 步 · {tps} tok/s` 与 `{总量} tok · 缓存命中 {p}%`,点击分别展开「会话统计」(模型用时 / 工具调用用时 / 首 token 平均 TTFT / 输出速度 TPS)与「Token 用量」(精确总量 / 缓存命中 / 未缓存输入 / 缓存读取/写入 / 输出);部分命中不再被四舍五入成 100%(自动提高精度),原来那行纯文本统计已移除
@@ -224,10 +237,8 @@
 ## 0.12.91
 - Fix "授权数据缺失(服务器由外部启动)" on upgrades: ① the 0.1.2 browser-auth is now lazy — the client sends requests first and only exchanges the launch-token cookie when the server actually answers 401/403, so an old 0.1.1-rc.2 server (no auth) is no longer blocked before the request is sent; ② when the server was started by a previous extension instance or a terminal, the client re-reads the extension log files (%TEMP%\dsh-vscode-server.log / -install.log) for the auth URL and retries once; ③ a running legacy server (0.1.1-rc.2 and earlier, dotted endpoints) is detected via host.describe and reported with a clear "stop and restart" message instead of a vague offline state; ④ the offline watcher now calls ensureReady on every tick, so once you stop the old server the extension auto-starts the new one (honoring dsh.autoStart) and captures the token itself.
 - 修复升级后「授权数据缺失(服务器由外部启动)」:① 0.1.2 浏览器认证改为懒认证 —— 客户端先发请求,只有服务器真正返回 401/403 时才用启动 token 交换 cookie,旧版 0.1.1-rc.2 服务器(无需认证)不再被请求前误拦;② 服务器由上一个扩展实例或终端启动时,客户端会从扩展日志(%TEMP%\dsh-vscode-server.log / -install.log)重新读取授权 URL 并重试一次;③ 运行中的旧版服务器(0.1.1-rc.2 及更早,点号端点)通过 host.describe 识别,给出明确的「停止并重启」提示,而不是笼统的离线;④ 离线巡检改调 ensureReady:停掉旧服务器后,扩展会自动拉起新服务器(遵循 dsh.autoStart)并自行获取授权。
-
 - Adapt to DeepSeek Harness v0.1.2-alpha.4 (breaking wire-contract port): ① the web API moved to slash-style Typert Remote endpoints with an `{args}` envelope — session.list → session/list, session.history → session/page (address + throughSeq), session.models → session/modelCatalog, host.describe removed, goal.* → goals/*, agentPreset.* → agentPresets/*, skill.list → skills/list, subagent.* → subagents/*, settings/credentials/llm renamed, workspace.list removed (list now comes from the workspace/follow stream); ② events.mux / events.host / /api/respond are gone: session events, queue/jobs/projections, workspaces, approvals/questions and Cordis events now flow over one /api/remote.mux WebSocket (session/follow, session/control, workspace/follow, $events) and approvals/questions are answered with $events/result waterfall outcomes (approval/request, user-questions/request); ③ new browser authentication — every /api request needs the signed cookie exchanged from the launch token printed by `dsh web`; the extension parses the token out of the server log, swaps it for a cookie and refreshes on 401; ④ session.prompt now requires a client-minted requestId and session/rename/fork/updateQueue responses were audited; ⑤ the bundled dsh-git-rollback@0.1.10 is rebuilt from source: it adapts to the new CommandRuntime signature (commands.execute now takes the images argument) and fixes a latent ReferenceError in the savepoint path (saveCommit was never declared), and the index.lock hardening (GIT_INDEX_FILE temp indexes, GIT_OPTIONAL_LOCKS=0, retryLock) now lives in the plugin source — all 13 plugin tests pass.; ⑥ npx/npm/direct-install/update channels now install @deepseek-ai/dsh@alpha — the newest published release (0.1.2-alpha.4) lives on the `alpha` dist-tag while `latest` still points at 0.1.1-rc.2.
 - 适配 DeepSeek Harness v0.1.2-alpha.4(线协议破坏性变更,全量移植):① 网页 API 改为斜杠风格 Typert Remote 端点 + {args} 信封 —— session.list → session/list、session.history → session/page(address + throughSeq)、session.models → session/modelCatalog、host.describe 移除、goal.* → goals/*、agentPreset.* → agentPresets/*、skill.list → skills/list、subagent.* → subagents/*、settings/credentials/llm 端点改名、workspace.list 移除(列表改由 workspace/follow 流提供);② events.mux / events.host / /api/respond 全部移除:会话事件、队列/任务/投影、工作区、审批/提问与 Cordis 事件改为走单一 /api/remote.mux WebSocket(session/follow、session/control、workspace/follow、$events),审批与提问以 $events/result 的 waterfall outcome 应答(approval/request、user-questions/request);③ 新增浏览器认证 —— 所有 /api 请求需要由 `dsh web` 打印的启动 token 交换签名 cookie;扩展从服务器日志解析 token、换取 cookie 并在 401 时自动刷新;④ session.prompt 现在必需客户端预生成的 requestId,并逐项核对 session/rename/fork/updateQueue 响应;⑤ 内置 dsh-git-rollback@0.1.10 由源码重新构建:适配新 CommandRuntime 签名(commands.execute 新增 images 参数),并修复保存点路径中 saveCommit 未声明的潜在 ReferenceError;index.lock 加固(GIT_INDEX_FILE 临时索引、GIT_OPTIONAL_LOCKS=0、retryLock)现已内置到插件源码,13 项测试全部通过。;⑥ npx/npm/直接安装/升级通道改为 @deepseek-ai/dsh@alpha —— 最新公开版本(0.1.2-alpha.4)在 alpha dist-tag 上,`latest` 仍指向 0.1.1-rc.2。
-
 - i18n & description: ① the settings-panel "DSH 用户技能" toggle label now uses the UI translation table (was hardcoded Chinese), so it follows the VS Code display language like every other setting; ② README (the extension description page) now embeds two git-rollback screenshots at the feature descriptions — the "Undo turn's changes" review dialog and the message-action menu (Undo this turn's file changes / View checkpoints / Branch from here) — and the turn-level Git rollback feature bullet was expanded to cover the per-turn undo and checkpoint review; ③ the short plugin description (package.json + all 14 localized package.nls) was refreshed to mention @ file/session/agent mentions, multimodal images, subagents, Cordis plugin approvals, and turn-level Git rollback.
 - 多语言化与描述:① 设置面板的「DSH 用户技能」开关标签改为走界面翻译词典(原先硬编码中文),现在与其他设置一样跟随 VS Code 显示语言;② README(即插件描述页)在对应功能描述处嵌入两张 git 回退截图 —— 「撤销本回合改动」审核弹窗 与 消息操作菜单(撤销本回合改动 / 查看检查点 / 从此处新建分支),并扩充回合级 Git 回退条目,涵盖单回合撤销与检查点查看;③ 插件短描述(package.json + 14 份本地化 package.nls)更新,提及 @ 文件/会话/智能体提及、多模态图片、子代理、Cordis 插件审批与回合级 Git 回退。
 
@@ -242,6 +253,7 @@
 ## 0.12.86
 - Adapt to DeepSeek Harness v0.1.1-rc.1: ① ask_user_question answers now support multiline input in the extension (web parity): the custom answer field in question cards and the plan-review inline feedback are multiline textareas with auto-wrap and auto-grow — Enter submits (or moves to the next question), Shift+Enter inserts a newline; ② the new multimodal model DeepSeek-V4-Flash-Vision-Exp appears automatically (server-driven model list); ③ audited the wire contract against 0.1.1-rc.1: session.prompt, ask_user_question, commands/execute (incl. the images parameter), commands/list descriptors, fileReferences, sessionReferenceResolver, and dynamicCordisRunner are all unchanged and compatible — the remaining 0.1.1 changes (composer @-reference layout, Bubblewrap sandbox hardening, Markdown table rendering, cache precision) are web/server-side.
 - 适配 DeepSeek Harness v0.1.1-rc.1:① ask_user_question 回答支持多行输入(网页端同款):提问卡自定义回答与计划审批的内联修改意见改为多行输入框,自动换行、自适应高度 —— 回车提交(或进入下一题),Shift+Enter 换行;② 新增多模态模型 DeepSeek-V4-Flash-Vision-Exp 自动出现在模型下拉(服务器驱动);③ 线协议逐项核对 0.1.1-rc.1:session.prompt、ask_user_question、commands/execute(含 images 参数)、commands/list 描述符、fileReferences、sessionReferenceResolver、dynamicCordisRunner 全部兼容;其余 0.1.1 改动(输入框 @ 引用布局、Bubblewrap 沙箱加固、Markdown 表格、缓存精度)均为网页端/服务器侧,无需改动。
+
 ## 0.12.85
 - @ mention menu polish: ① removed the emoji icons (🤖/📄/💬) from every row for a clean, compact list; ② typing @ now shows a loading listbox right away (web parity) — the Agents group appears instantly from the local scan while "Loading files…" / "Loading sessions…" rows with a CSS spinner fill the Files & folders and Session conversations groups until the server candidates arrive, then the loading rows are replaced in place.
 - @ 提及菜单优化:① 移除每行的 emoji 图标(🤖/📄/💬),列表更简洁紧凑;② 输入 @ 立即显示加载列表框(与网页端一致)—— 智能体分组由本地扫描即时出现,「正在加载文件资源…」「正在加载会话列表…」加载行(纯 CSS 旋转圆点)占位,服务器候选到达后原位替换。
@@ -277,6 +289,8 @@
 ## 0.12.74
 - Review dialogs now color-code file rows by change type: added files (A) in green, deleted files (D) in red with strikethrough — applied to rollback preview, turn-undo preview and the checkpoints dialog (binary files use git --name-status to determine add/delete).
 - 审核窗口按改动类型着色文件行:新增文件(A)绿色,删除文件(D)红色 + 删除线——覆盖回退预览、回合精确撤销预览与检查点清单弹窗(二进制文件通过 git --name-status 判定增删)。
+- Review dialogs now color-code file rows by change type: added files (A) in green, deleted files (D) in red with strikethrough — applied to rollback preview, turn-undo preview and the checkpoints dialog (binary files use git --name-status to determine add/delete).
+- 审核窗口按改动类型着色文件行:新增文件(A)绿色,删除文件(D)红色 + 删除线——覆盖回退预览、回合精确撤销预览与检查点清单弹窗(二进制文件通过 git --name-status 判定增删)。
 
 ## 0.12.72
 - Fix: "Restore checkpoint" on a turn divider no longer falls back to the last checkpoint when that turn has no record — it now reports "no restorable checkpoint for this turn" instead of showing another turn's changes (e.g. clicking turn A/B no longer previews turn C's diff). Plus Russian (ru) language scaffolding.
@@ -297,6 +311,8 @@
 ## 0.12.68
 - Turn-level "Restore checkpoint" dividers (GitHub Copilot style): every turn boundary inside a conversation now shows a horizontal line with a centered 「还原检查点」 button — clicking it previews and restores the workspace to the checkpoint before that turn began. Also fixed forked sessions missing the `session/end-seed` boundary event after they had been active (always pull history on open).
 - 回合级「还原检查点」分隔线(GitHub Copilot 同款):同一对话内每个回合边界都显示水平线 + 居中「还原检查点」按钮——点击预览并回退到该回合开始前的检查点。同时修复分叉会话活动过后缺失 `session/end-seed` 边界事件的问题(打开会话时始终拉取历史)。
+- Filled all missing translations using Chinese as the source: +61 keys per language in the 11 UI dictionaries (permission presets / subagent catalog / deliverables / settings namespaces & fields / tool-dir compatibility) and +5 per language in the l10n bundles (command notices / plan review header) — 726 entries total; audit confirms 0 missing across all three dictionary sets.
+- 按中文为源语言补齐全部语言的缺失条目:11 种语言词典各补 61 个键(权限预设/子代理目录/产物/设置命名空间与字段/工具目录兼容等),l10n bundle 各补 5 个键(命令执行/计划审批头等),合计 726 条;审计确认三组词典全部 0 缺失。
 
 ## 0.12.67
 - Bundles dsh-git-rollback@0.1.5 (identical code, version reset for the npm release flow); refreshed "model config compatibility" wording in the settings panel (EN + 12 languages).
@@ -309,10 +325,14 @@
 ## 0.12.63
 - Scoped turn undo (`/undo`): the checkpoints dialog and message menus now offer "Undo this turn's changes" — only the files changed by that turn are reversed (reverse-applied turn diff), your own commits and HEAD stay untouched. Cross-session checkpoint browsing lets you undo changes made by another conversation. Includes plugin dsh-git-rollback@0.1.2 (turn-end snapshots) and i18n for 13 languages.
 - 回合级精确撤销(/undo):检查点清单与消息菜单新增「撤销该回合改动」——只反向应用该回合自身产生的文件改动,你自己提交的内容与 HEAD 保持不变;支持跨会话撤销别的对话产生的改动。内置插件升级至 dsh-git-rollback@0.1.2(回合结束快照),新增 13 语言界面翻译。
+- On workspace-folder switch or extension activation, no session is auto-selected: the dropdown stays at " — Select session —\
+- 切换工作区目录或扩展激活时不再主动选择/切换会话:下拉框保持「— 选择会话 —」占位,由用户主动选择;若当前会话不属于新目录仅取消选择(不再自动切到该目录最近会话)。
 
 ## 0.12.62
 - Scoped turn undo (`/undo`): the checkpoints dialog and message menus now offer "Undo this turn's changes" — only the files changed by that turn are reversed (reverse-applied turn diff), your own commits and HEAD stay untouched. Cross-session checkpoint browsing lets you undo changes made by another conversation. Includes plugin dsh-git-rollback@0.1.2 (turn-end snapshots) and i18n for 13 languages.
 - 回合级精确撤销(/undo):检查点清单与消息菜单新增「撤销该回合改动」——只反向应用该回合自身产生的文件改动,你自己提交的内容与 HEAD 保持不变;支持跨会话撤销别的对话产生的改动。内置插件升级至 dsh-git-rollback@0.1.2(回合结束快照),新增 13 语言界面翻译。
+- Typing / now immediately shows the main command list (plan on/off, goal, compact, feedback, permission, rollback, redo, checkpoints), with skills and .claude commands appended when a filter word is typed; switching workspace folders auto-isolates sessions — a current session outside the new folder is replaced by that folder's latest session (or none), preventing cross-folder confusion.
+- 输入 / 立即弹出主要命令列表(计划模式/退出、设置目标、压缩上下文、反馈、权限、回退、重做、检查点),输入过滤词后追加技能与 .claude 命令;切换工作区目录时自动对话隔离 —— 当前会话不属于新目录则切到该目录最近会话,无会话则取消选择,避免跨目录误显运行中对话。
 
 ## 0.12.61
 - Scoped turn undo (`/undo`): the checkpoints dialog and message menus now offer "Undo this turn's changes" — only the files changed by that turn are reversed (reverse-applied turn diff), your own commits and HEAD stay untouched. Cross-session checkpoint browsing lets you undo changes made by another conversation. Includes plugin dsh-git-rollback@0.1.2 (turn-end snapshots) and i18n for 13 languages.
@@ -321,68 +341,100 @@
 ## 0.12.56
 - Produced git-tracked files now open as HEAD → working-tree diffs by default; README intro mentions turn-level Git rollback; fixed the extension repository URL to github.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code.
 - 产物中的 git 已跟踪文件点击打开时,默认展示 HEAD → 工作树 diff 差异视图;插件介绍(README/简介)补充回合级 Git 回退说明;修正插件仓库地址为 github.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code。
+- Produced git-tracked files now open as HEAD → working-tree diffs by default; README intro mentions turn-level Git rollback; fixed the extension repository URL to github.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code.
+- 产物中的 git 已跟踪文件点击打开时,默认展示 HEAD → 工作树 diff 差异视图;插件介绍(README/简介)补充回合级 Git 回退说明;修正插件仓库地址为 github.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code。
 
 ## 0.12.55
+- New release script tools/release.mjs: automatically generates brief bilingual changelog entries on version bumps, syncing CHANGELOG.md and the extension-changelog agent.
+- 新增发布脚本 tools/release.mjs:发版时自动生成中英双语更新日志条目,并同步写入 CHANGELOG.md 与 .dsh/agent/extension-changelog.md 智能体。
 - New release script tools/release.mjs: automatically generates brief bilingual changelog entries on version bumps, syncing CHANGELOG.md and the extension-changelog agent.
 - 新增发布脚本 tools/release.mjs:发版时自动生成中英双语更新日志条目,并同步写入 CHANGELOG.md 与 .dsh/agent/extension-changelog.md 智能体。
 
 ## 0.12.53
 - 修复:回合进行中不再显示消息操作条(复制/分支/回退/点赞),避免对话被修改期间误操作。
 - Fix: message action bar (copy/branch/rewind/feedback) no longer shows while a turn is still running, preventing accidental actions during edits.
+- 修复:回合进行中不再显示消息操作条(复制/分支/回退/点赞),避免对话被修改期间误操作。
+- Fix: message action bar (copy/branch/rewind/feedback) no longer shows while a turn is still running.
 
 ## 0.12.52
 - 会话下拉默认只展示当前工作目录的对话(Claude Code 同款),可一键切换显示全部。
 - The session dropdown shows only conversations in the current workspace folder by default (like Claude Code), with a one-click toggle to show all.
+- 会话下拉默认只展示当前工作目录的对话(Claude Code 同款),可一键切换显示全部。
+- The session dropdown shows only conversations in the current workspace folder by default.
 
 ## 0.12.51
 - 智能体支持 `@` 手动调用:输入 `@` 自动弹出可用智能体列表(↑↓/Enter/Esc),发送时自动注入智能体定义;`.dsh/agent/*.md` 支持 front matter(name/description)行业约定。
 - Agents support `@` mention: typing `@` shows an agent picker (↑↓/Enter/Esc); the agent definition is injected automatically when sending. `.dsh/agent/*.md` follows the industry front-matter convention (name/description).
+- 智能体支持 `@` 手动调用:输入 `@` 自动弹出可用智能体列表,发送时自动注入智能体定义;`.dsh/agent/*.md` 支持 front matter 行业约定。
+- Agents support `@` mention: typing `@` shows an agent picker; the agent definition is injected when sending.
 
 ## 0.12.50
 - 优化审批弹窗样式与按钮(对齐网页端):色点条 + 工具徽标 + 原因 + 命令预览,「拒绝 / 允许一次」按钮风格升级。
 - Redesigned the approval card and buttons (aligned with the web): status dot strip + tool badge + reason + command preview, with upgraded "Refuse / Allow once" buttons.
+- 优化审批弹窗样式与按钮(对齐网页端):色点条 + 工具徽标 + 原因 + 命令预览,「拒绝 / 允许一次」按钮升级。
+- Redesigned the approval card/buttons (aligned with the web): status dot strip + tool badge + reason + command preview.
 
 ## 0.12.49
+- 系统提示词卡片样式重做:图标 + 标题 + 注入标签 + 折叠箭头,正文可滚动。
+- Redesigned the system-prompt card: icon + title + injection tag + chevron, scrollable body.
 - 系统提示词卡片样式重做:图标 + 标题 + 注入标签 + 折叠箭头,正文可滚动。
 - Redesigned the system-prompt card: icon + title + injection tag + chevron, scrollable body.
 
 ## 0.12.48
 - 中文预设名称「PTC 模式」更名为「编码模式」。
 - Renamed the Chinese preset "PTC 模式" to "编码模式" (matches English "Code mode").
+- 中文预设「PTC 模式」更名为「编码模式」。
+- Renamed the Chinese preset "PTC 模式" to "编码模式".
 
 ## 0.12.47
 - 移除重复的「回退到此处」菜单项(与「从此处新建分支」冲突)。
 - Removed the duplicate "Rewind to here" menu item (conflicted with "Branch from here").
+- 移除重复的「回退到此处」菜单项。
+- Removed the duplicate "Rewind to here" menu item.
 
 ## 0.12.46
 - 计划文件改为 Markdown 格式并优化命名(优先会话标题,如 `plan-xxx.md`),重启后可重新打开继续查看/修改。
 - Plan files are now Markdown with readable names (session title preferred, e.g. `plan-xxx.md`); they can be reopened after restart for review/editing.
+- 计划文件改为 Markdown 并优化命名(优先会话标题),重启后可重新打开。
+- Plan files are now Markdown with readable names; reopenable after restart.
 
 ## 0.12.45
 - 计划审批文本以纯文本等宽样式生成,并纳入产物列表;`.dsh/plans/` 持久化。
 - Plan review text is generated in plain monospace style and included in the deliverables list; persisted under `.dsh/plans/`.
+- 计划审批文本以纯文本等宽样式生成并纳入产物列表;`.dsh/plans/` 持久化。
+- Plan review text is plain monospace, included in deliverables, persisted under `.dsh/plans/`.
 
 ## 0.12.44
 - 计划审批弹窗按钮与网页端对齐(去聊天里说 / 拒绝 / 确认执行),支持审批内直接输入修改意见。
 - Plan review buttons match the web (Chat about it / Refuse / Approve), with inline feedback input.
+- 计划审批按钮与网页端对齐(去聊天里说 / 拒绝 / 确认执行),支持审批内输入修改意见。
+- Plan review buttons match the web; inline feedback input supported.
 
 ## 0.12.43
 - 提问卡片重构为网页端分页流:单选序号圆点 / 多选复选框、自定义回答输入、跳过与提交同排。
 - Question cards rebuilt as the web's paged flow: numbered radio dots / checkboxes, custom answer input, skip and submit in one row.
+- 提问卡片重构为网页端分页流:单选序号圆点 / 多选复选框、自定义回答、跳过与提交同排。
+- Question cards rebuilt as the web's paged flow with checkboxes, custom answers, skip/submit in one row.
 
 ## 0.12.42
 - 计划模式修复:`/plan` 为进入、`/plan off` 为退出;切换/新建会话时清空旧会话状态,避免计划模式误继承。
 - Plan mode fix: `/plan` enters and `/plan off` exits; stale plan/goal state is cleared on session switch/new session.
+- 计划模式修复:`/plan` 进入、`/plan off` 退出;切换会话清空旧状态。
+- Plan mode fix: `/plan` enters, `/plan off` exits; stale state cleared on switch.
 
 ## 0.12.41
 - 会话下拉升级为富文本列表:未读绿点、待审批 / 等待回答 / 运行中徽标,点击会话消除未读。
 - Session dropdown upgraded to a rich list: unread dots, pending-approval / awaiting-answer / running badges; selecting a session clears its unread mark.
+- 会话下拉升级为富文本列表:未读绿点、待审批 / 等待回答 / 运行中徽标。
+- Session dropdown upgraded: unread dots, pending/running badges.
 
 ## 0.12.40
 - 新增 `.dsh` 项目目录约定:`.dsh/agent`(智能体)、`.dsh/skills`(技能)、`.dsh/memory`(记忆)扫描与 `/` 菜单展示。
 - Added `.dsh` project conventions: scanning of `.dsh/agent` (agents), `.dsh/skills` (skills), `.dsh/memory` (memory) surfaced in the `/` menu.
+- 新增 `.dsh` 项目目录约定:`.dsh/agent`(智能体)、`.dsh/skills`(技能)、`.dsh/memory`(记忆)扫描与 `/` 菜单展示。
+- Added `.dsh` project conventions: agents/skills/memory scanned and shown in the `/` menu.
 
-## 0.12.17 – 0.12.39(major improvements)
+## 0.12.17
 - 对话渲染对齐网页端:思考进行中自动展开、结束后收起;工具调用内联在所属思考块之后。
 - Conversation rendering matches the web: reasoning auto-expands while thinking and collapses after; tool calls render inline after their thinking block.
 - 产物卡与网页端 ProducedFiles 一致(工具视图推导,≤6 条 + 折叠,点击在 VS Code 打开)。
@@ -397,10 +449,10 @@
 - Spinning ⏳ animation for running indicators.
 - 全量多语言支持(14 种语言,界面 + 设置 + 预设)。
 - Full multilingual support (14 languages: UI + settings + presets).
-
-## 0.12.74
-- Review dialogs now color-code file rows by change type: added files (A) in green, deleted files (D) in red with strikethrough — applied to rollback preview, turn-undo preview and the checkpoints dialog (binary files use git --name-status to determine add/delete).
-- 审核窗口按改动类型着色文件行:新增文件(A)绿色,删除文件(D)红色 + 删除线——覆盖回退预览、回合精确撤销预览与检查点清单弹窗(二进制文件通过 git --name-status 判定增删)。
+- 对话渲染对齐网页端:思考自动展开/收起;工具调用内联在思考块之后;产物卡 ProducedFiles 同款。
+- Conversation rendering matches the web: reasoning expand/collapse, inline tool calls, ProducedFiles-style deliverables.
+- 内置 Agent 预设多语言化;统计行固定输入框底部;思考选择器移至右上角;⏳ 旋转运行指示;14 种语言。
+- Localized presets, pinned stats bar, top-right thinking selector, spinning ⏳ running indicator, 14 languages.
 
 ## 0.12.75
 - Fix 'Steer now' on queued messages: ① the steer button is now only enabled while the agent is running (web parity; disabled with an explanatory tooltip after the turn ends/cancel/error); ② clear feedback on accepted steers (handled right after the current response) and actionable notice when the turn no longer accepts steering; silent convergence when the item was already claimed; ③ fix the running indicator wrongly clearing when queued messages remain after a turn; ④ add the missing Arabic package.nls key and remove its BOM.
@@ -410,10 +462,6 @@
 - Added Russian (ru) support: 446 UI dictionary entries + 160 host l10n strings + 53 contribution-point strings fully translated; the settings language picker, dsh.language enum, and README language list now include Русский.
 - 新增俄语(ru)支持:446 条界面词典 + 160 条宿主 l10n + 53 条贡献点文案全部译毕;设置面板语言选择器、dsh.language 枚举、README 语言清单同步加入 Русский。
 
-## 0.12.68
-- Filled all missing translations using Chinese as the source: +61 keys per language in the 11 UI dictionaries (permission presets / subagent catalog / deliverables / settings namespaces & fields / tool-dir compatibility) and +5 per language in the l10n bundles (command notices / plan review header) — 726 entries total; audit confirms 0 missing across all three dictionary sets.
-- 按中文为源语言补齐全部语言的缺失条目:11 种语言词典各补 61 个键(权限预设/子代理目录/产物/设置命名空间与字段/工具目录兼容等),l10n bundle 各补 5 个键(命令执行/计划审批头等),合计 726 条;审计确认三组词典全部 0 缺失。
-
 ## 0.12.65
 - Archiving a session no longer activates sessions from other workspace folders: the next session is picked only within the current folder (or the dropdown returns to " — Select session —\);
 - 归档会话后不再激活其他工作目录的会话:仅从当前工作目录内选择下一个会话,目录内无会话则回到「— 选择会话 —」;目录过滤开启时下拉列表严格只显示当前目录的会话(不再特殊保留其他目录的当前会话)。
@@ -421,14 +469,6 @@
 ## 0.12.64
 - Commit-message generation no longer activates a session in the conversation list: the one-shot session is archived immediately and the user's previous current session is restored — generation runs fully in the background (progress in a notification), never disturbing the session dropdown.
 - 生成 git 提交信息时不再激活到对话列表:一次性会话创建后立即归档,并恢复用户原当前会话 —— 生成全程在后台进行(进度走通知气泡),不打断、不污染会话下拉列表。
-
-## 0.12.63
-- On workspace-folder switch or extension activation, no session is auto-selected: the dropdown stays at " — Select session —\
-- 切换工作区目录或扩展激活时不再主动选择/切换会话:下拉框保持「— 选择会话 —」占位,由用户主动选择;若当前会话不属于新目录仅取消选择(不再自动切到该目录最近会话)。
-
-## 0.12.62
-- Typing / now immediately shows the main command list (plan on/off, goal, compact, feedback, permission, rollback, redo, checkpoints), with skills and .claude commands appended when a filter word is typed; switching workspace folders auto-isolates sessions — a current session outside the new folder is replaced by that folder's latest session (or none), preventing cross-folder confusion.
-- 输入 / 立即弹出主要命令列表(计划模式/退出、设置目标、压缩上下文、反馈、权限、回退、重做、检查点),输入过滤词后追加技能与 .claude 命令;切换工作区目录时自动对话隔离 —— 当前会话不属于新目录则切到该目录最近会话,无会话则取消选择,避免跨目录误显运行中对话。
 
 ## 0.12.60
 - Local skills (.claude/.codex) now behave like all skills: picking inserts a /name token (expanded on send, no full-text dump into the input); typing / auto-completes commands and skills (plan mode, skills, .claude commands; ↑↓/Enter/Esc).
@@ -441,73 +481,3 @@
 ## 0.12.58
 - Rollback-review diffs now render git-style with line numbers (added=green, removed=red, header/hunk highlights); the agent-config-dirs toggles now govern both project and user-global config dirs (e.g. disabling codex skips ~/.codex and the project .codex).
 - 回退审核的「查看差异」改为 git 风格:带行号,新增行标绿、删除行标红,文件头/hunk 头高亮;智能体配置目录开关现在同时控制项目目录与用户全局目录(如禁用 codex 后 ~/.codex 与项目 .codex 都不再读取展示)。
-
-## 0.12.56
-- Produced git-tracked files now open as HEAD → working-tree diffs by default; README intro mentions turn-level Git rollback; fixed the extension repository URL to github.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code.
-- 产物中的 git 已跟踪文件点击打开时,默认展示 HEAD → 工作树 diff 差异视图;插件介绍(README/简介)补充回合级 Git 回退说明;修正插件仓库地址为 github.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code。
-
-## 0.12.55
-- New release script tools/release.mjs: automatically generates brief bilingual changelog entries on version bumps, syncing CHANGELOG.md and the extension-changelog agent.
-- 新增发布脚本 tools/release.mjs:发版时自动生成中英双语更新日志条目,并同步写入 CHANGELOG.md 与 .dsh/agent/extension-changelog.md 智能体。
-
-## 0.12.53
-- 修复:回合进行中不再显示消息操作条(复制/分支/回退/点赞),避免对话被修改期间误操作。
-- Fix: message action bar (copy/branch/rewind/feedback) no longer shows while a turn is still running.
-
-## 0.12.52
-- 会话下拉默认只展示当前工作目录的对话(Claude Code 同款),可一键切换显示全部。
-- The session dropdown shows only conversations in the current workspace folder by default.
-
-## 0.12.51
-- 智能体支持 `@` 手动调用:输入 `@` 自动弹出可用智能体列表,发送时自动注入智能体定义;`.dsh/agent/*.md` 支持 front matter 行业约定。
-- Agents support `@` mention: typing `@` shows an agent picker; the agent definition is injected when sending.
-
-## 0.12.50
-- 优化审批弹窗样式与按钮(对齐网页端):色点条 + 工具徽标 + 原因 + 命令预览,「拒绝 / 允许一次」按钮升级。
-- Redesigned the approval card/buttons (aligned with the web): status dot strip + tool badge + reason + command preview.
-
-## 0.12.49
-- 系统提示词卡片样式重做:图标 + 标题 + 注入标签 + 折叠箭头,正文可滚动。
-- Redesigned the system-prompt card: icon + title + injection tag + chevron, scrollable body.
-
-## 0.12.48
-- 中文预设「PTC 模式」更名为「编码模式」。
-- Renamed the Chinese preset "PTC 模式" to "编码模式".
-
-## 0.12.47
-- 移除重复的「回退到此处」菜单项。
-- Removed the duplicate "Rewind to here" menu item.
-
-## 0.12.46
-- 计划文件改为 Markdown 并优化命名(优先会话标题),重启后可重新打开。
-- Plan files are now Markdown with readable names; reopenable after restart.
-
-## 0.12.45
-- 计划审批文本以纯文本等宽样式生成并纳入产物列表;`.dsh/plans/` 持久化。
-- Plan review text is plain monospace, included in deliverables, persisted under `.dsh/plans/`.
-
-## 0.12.44
-- 计划审批按钮与网页端对齐(去聊天里说 / 拒绝 / 确认执行),支持审批内输入修改意见。
-- Plan review buttons match the web; inline feedback input supported.
-
-## 0.12.43
-- 提问卡片重构为网页端分页流:单选序号圆点 / 多选复选框、自定义回答、跳过与提交同排。
-- Question cards rebuilt as the web's paged flow with checkboxes, custom answers, skip/submit in one row.
-
-## 0.12.42
-- 计划模式修复:`/plan` 进入、`/plan off` 退出;切换会话清空旧状态。
-- Plan mode fix: `/plan` enters, `/plan off` exits; stale state cleared on switch.
-
-## 0.12.41
-- 会话下拉升级为富文本列表:未读绿点、待审批 / 等待回答 / 运行中徽标。
-- Session dropdown upgraded: unread dots, pending/running badges.
-
-## 0.12.40
-- 新增 `.dsh` 项目目录约定:`.dsh/agent`(智能体)、`.dsh/skills`(技能)、`.dsh/memory`(记忆)扫描与 `/` 菜单展示。
-- Added `.dsh` project conventions: agents/skills/memory scanned and shown in the `/` menu.
-
-## 0.12.17 – 0.12.39(major improvements)
-- 对话渲染对齐网页端:思考自动展开/收起;工具调用内联在思考块之后;产物卡 ProducedFiles 同款。
-- Conversation rendering matches the web: reasoning expand/collapse, inline tool calls, ProducedFiles-style deliverables.
-- 内置 Agent 预设多语言化;统计行固定输入框底部;思考选择器移至右上角;⏳ 旋转运行指示;14 种语言。
-- Localized presets, pinned stats bar, top-right thinking selector, spinning ⏳ running indicator, 14 languages.

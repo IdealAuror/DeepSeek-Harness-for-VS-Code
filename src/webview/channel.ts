@@ -316,7 +316,9 @@ export class ChatChannel {
       },
       {
         dispose: store.on("permissions", (sid: string, value: unknown) => {
-          if (sid === store.currentSessionId) this.post({ kind: "permissions", sessionId: sid, value });
+          if (sid !== store.currentSessionId) return;
+          // 投影只带当前值;选项始终以进程级目录为准(见 mergePermissions)
+          this.post({ kind: "permissions", sessionId: sid, value: this.mergePermissions(sid, value) });
         }),
       },
       {
@@ -395,6 +397,8 @@ export class ChatChannel {
       {
         // 0.1.7 逐消息反馈:会话就绪后拉一次 messageFeedback/list(老宿主无此端点时静默跳过)
         dispose: this.hub.onFollowReady((sid: string) => {
+          // 权限目录(进程级)+ 投影基线:下拉选项来自目录,当前值来自投影
+          void this.ensurePermissionCatalog().then(() => this.pushPermissions(sid));
           // 投影基线:follow 快照不带投影时补齐统计 / 待办 / 权限 / 上下文 / 子代理目录
           void this.hub.loadSessionProjections(sid).then((loaded) => {
             if (loaded && sid === store.currentSessionId) void this.pushFullState();
@@ -437,6 +441,11 @@ export class ChatChannel {
 
   private async ensureAndPush() {
     await this.hub.ensureReady();
+    // 权限目录是进程级的:启动时拉一次,拉回后重推当前会话 → 权限下拉一开始就有可选项
+    void this.ensurePermissionCatalog().then(() => {
+      const sid = this.hub.store.currentSessionId;
+      if (sid) void this.pushPermissions(sid);
+    });
     // 启动/激活时:不主动选中任何会话(下拉保持「— 选择会话 —」),仅清理跨目录残留选择
     await this.clearCrossFolderSession(this.workspaceFolder());
     if (await this.restoreOrCreateSession()) {
@@ -625,6 +634,45 @@ export class ChatChannel {
   private readonly questionWaits = new Map<string, { cancel(): void }>();
   /** 被其他 DSH 实例占用的会话(写操作被拒 → session/writer-held)。 */
   private readonly lockedSessions = new Set<string>();
+  /** 进程级权限预设目录缓存(permissionPresets/catalog);undefined = 尚未拉取,空数组 = 旧宿主无该端点。 */
+  private permissionCatalogCache: { value: string; name: string; description?: string }[] | undefined;
+
+  /**
+   * 拉取进程级权限目录(一次即可,进程级不随会话变化)。
+   * 旧宿主(无该端点)返回空数组,此时退回投影里可能带上的 options。
+   */
+  private async ensurePermissionCatalog(): Promise<{ value: string; name: string; description?: string }[]> {
+    if (this.permissionCatalogCache !== undefined) return this.permissionCatalogCache;
+    const catalog = await this.hub.permissionCatalog();
+    this.permissionCatalogCache = catalog?.options ?? [];
+    return this.permissionCatalogCache;
+  }
+
+  /**
+   * 权限下拉的数据 = 目录选项 + 会话当前值。
+   * 会话 permissions 投影只保证「当前值」;可选项在进程级目录里(官方网页端同款分工)。
+   * 目录为空(旧宿主)时退回投影自带 options,保证不会把一个能用的下拉清空。
+   */
+  private mergePermissions(
+    sessionId: string,
+    projection: unknown,
+  ): { options: { value: string; name: string; description?: string }[]; currentValue: string } {
+    const incoming = (projection ?? {}) as { options?: { value: string; name: string; description?: string }[]; currentValue?: string };
+    const catalogOptions = this.permissionCatalogCache ?? [];
+    const options = catalogOptions.length > 0 ? catalogOptions : incoming.options ?? [];
+    return { options, currentValue: incoming.currentValue ?? "" };
+  }
+
+  /** 拉取目录后重推当前会话的权限数据(启动时目录可能比投影晚到)。 */
+  private async pushPermissions(sessionId: string) {
+    await this.ensurePermissionCatalog();
+    if (this.hub.store.currentSessionId !== sessionId) return;
+    this.post({
+      kind: "permissions",
+      sessionId,
+      value: this.mergePermissions(sessionId, this.hub.store.permissions.get(sessionId)),
+    });
+  }
 
   /**
    * 会话被其他 DSH 实例占用(session/writer-held)时的处理。
@@ -773,7 +821,7 @@ export class ChatChannel {
       goal: current ? store.goals.get(current) : undefined,
       context: current ? store.context.get(current) : undefined,
       breakdown: current ? store.breakdown.get(current) : undefined,
-      permissions: current ? store.permissions.get(current) : undefined,
+      permissions: current ? this.mergePermissions(current, store.permissions.get(current)) : undefined,
       stats: current ? store.stats.get(current) : undefined,
       todos: current ? store.todos.get(current) : undefined,
       feedback: current ? [...(store.feedback.get(current)?.values() ?? [])] : undefined,
@@ -1442,7 +1490,7 @@ export class ChatChannel {
           const result = await this.runCommandAndNotify(current, `/permission ${msg.preset}`);
           if (result.outcome !== "executed") {
             // 回退乐观更新:把存储中的真实权限投影重新推给界面
-            this.post({ kind: "permissions", sessionId: current, value: store.permissions.get(current) });
+            this.post({ kind: "permissions", sessionId: current, value: this.mergePermissions(current, store.permissions.get(current)) });
           }
         }
         break;

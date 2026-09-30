@@ -556,8 +556,16 @@ export class SessionStore {
       return;
     }
     if (key === "permissions") {
-      this.permissions.set(sessionId, value as { options: { value: string; name: string }[]; currentValue: string });
-      this.emit("permissions", sessionId, value);
+      // 会话投影只负责「当前值」;可选项来自进程级目录(permissionPresets/catalog)——
+      // 官方网页端同样是 selection=投影 + catalog=目录,这里按同一分工存储,
+      // 避免投影缺 options 时把权限下拉清空(见 0.13.32)。
+      const incoming = value as { options?: { value: string; name: string }[]; currentValue?: string } | null;
+      const merged = {
+        options: incoming?.options ?? [],
+        currentValue: incoming?.currentValue ?? "",
+      };
+      this.permissions.set(sessionId, merged);
+      this.emit("permissions", sessionId, merged);
       return;
     }
     if (key === "sessionStats" || key === "tokenUsage") {

@@ -55,6 +55,7 @@
   "hub.startRestrictedHint": "进程创建疑似被当前环境拦截(0xC0000142/EPERM)。若 VS Code 是从 DSH 会话或受限终端启动的,请改用普通方式启动 VS Code,或将该会话权限调整为 danger-full-access。",
   "hub.serverNoResponse": "DSH 服务器在 {url} 无响应",
   "hub.sendFailed": "发送失败: {message}",
+  "hub.agentError": "本回合失败: {message}",
   "hub.modelNoImages": "当前模型「{model}」不支持图片输入:请先移除图片附件,或点击输入框右上角的模型按钮,切换支持图片的模型。",
   "hub.approvalGone": "审批已不在待处理状态",
   "hub.approvalFailed": "回应审批失败: {error}",
@@ -191,5 +192,9 @@
   "commit.diffUnstaged": "未暂存改动(工作区 vs index)",
   "commit.onlyUntracked": "DSH:没有可生成的内容——有 {n} 个未跟踪文件不属于 git diff,请先 git add 后重试。",
   "commit.empty": "DSH: 模型未返回有效提交信息(回合结束原因:{reason},事件 {events} 条,助手消息 {messages} 条)。",
-  "notice.sessionInUse": "当前会话已被其他正在运行的 DSH 实例占用(例如桌面端或另一个 dsh web),模型切换 / 重命名 / 发送消息都会被拒绝。请在 VS Code 里换一个会话,或退出另一个 DSH 实例后重试。"
+  "notice.sessionInUse": "当前会话已被其他正在运行的 DSH 实例占用(例如桌面端或另一个 dsh web),模型切换 / 重命名 / 发送消息都会被拒绝。请在 VS Code 里换一个会话,或退出另一个 DSH 实例后重试。",
+  "perm.desc.readOnly": "只读访问:不能修改文件或执行命令;外部文件与网络访问按策略询问",
+  "perm.desc.workspaceWrite": "可修改工作区内的文件;外部文件与网络访问按策略询问",
+  "perm.desc.dangerFullAccess": "可不受限制地访问互联网和你电脑上的任何文件",
+  "perm.desc.custom": "自定义组合(在设置中编辑)"
 }

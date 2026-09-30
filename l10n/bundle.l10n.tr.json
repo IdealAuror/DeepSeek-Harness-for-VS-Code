@@ -54,6 +54,7 @@
   "hub.startRestrictedHint": "İşlem oluşturma, geçerli ortam tarafından engellenmiş gibi görünüyor (0xC0000142/EPERM). VS Code bir DSH oturumundan ya da kısıtlı bir terminalden başlatıldıysa VS Code'u normal şekilde başlatın veya oturum iznini danger-full-access olarak ayarlayın.",
   "hub.serverNoResponse": "{url} adresindeki DSH sunucusu yanıt vermiyor",
   "hub.sendFailed": "Gönderme başarısız oldu: {message}",
+  "hub.agentError": "Bu tur başarısız oldu: {message}",
   "hub.approvalGone": "Onay artık beklemede değil",
   "hub.approvalFailed": "Onaya yanıt verme başarısız oldu: {error}",
   "hub.questionGone": "Soru artık beklemede değil",
@@ -191,5 +192,9 @@
   "commit.diffUnstaged": "hazırlanmamış değişiklikler (çalışma ağacı vs index)",
   "commit.onlyUntracked": "DSH: oluşturulacak içerik yok — {n} izlenmeyen dosya git diff'e dahil değil. Önce git add çalıştırıp yeniden deneyin.",
   "commit.empty": "DSH: model geçerli bir commit mesajı döndürmedi (tur bitişi: {reason}, {events} olay, {messages} asistan mesajı).",
-  "notice.sessionInUse": "Bu oturum, çalışan başka bir DSH örneği (masaüstü uygulaması veya başka bir dsh web) tarafından tutuluyor; model değiştirme, yeniden adlandırma ve mesaj gönderme reddedilir. VS Code'da başka bir oturuma geçin veya diğer DSH örneğini kapatıp yeniden deneyin."
+  "notice.sessionInUse": "Bu oturum, çalışan başka bir DSH örneği (masaüstü uygulaması veya başka bir dsh web) tarafından tutuluyor; model değiştirme, yeniden adlandırma ve mesaj gönderme reddedilir. VS Code'da başka bir oturuma geçin veya diğer DSH örneğini kapatıp yeniden deneyin.",
+  "perm.desc.readOnly": "Salt okunur: dosya değişikliği veya komut çalıştırma yok; dış dosyalar ve ağ, onay ilkesine tabidir.",
+  "perm.desc.workspaceWrite": "Çalışma alanı içindeki dosyaları değiştirebilir; dış dosyalar ve ağ, onay ilkesine tabidir.",
+  "perm.desc.dangerFullAccess": "İnternete ve bilgisayarınızdaki her dosyaya sınırsız erişim.",
+  "perm.desc.custom": "Özel bileşim (Ayarlar'dan düzenleyin)."
 }
