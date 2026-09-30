@@ -639,5 +639,10 @@
   "产物文件列表默认折叠": "Üretilen dosya listesini varsayılan olarak daralt",
   "默认把每轮的产物文件折叠为一行摘要,避免长对话被文件卡占满": "Her turun üretilen dosyalarını varsayılan olarak tek satıra indirir; böylece uzun sohbetler kartlarla dolmaz",
   "按 Enter 是发送还是换行由此决定;输入框左下角的胶囊也能一键切换,设置会全局保存(dsh.sendKey)。": "Enter'ın gönderip göndermeyeceği burada belirlenir; giriş kutusunun sol alt köşesindeki çip de değiştirir. Ayar genel olarak kaydedilir (dsh.sendKey).",
-  "当前:{current}。点击切换为「{next}」。": "Geçerli: {current}. «{next}» için tıklayın."
+  "当前:{current}。点击切换为「{next}」。": "Geçerli: {current}. «{next}» için tıklayın.",
+  "点击查看文件": "Görüntülemek için tıklayın",
+  "点击在资源管理器中显示": "Dosya gezgininde göstermek için tıklayın",
+  "点击查看图片": "Görseli görmek için tıklayın",
+  "查看文件": "Dosyayı görüntüle",
+  "先把图片保存为临时文件,再交给系统默认应用": "Görseli geçici bir dosyaya kaydedip varsayılan uygulamayla açar"
 }

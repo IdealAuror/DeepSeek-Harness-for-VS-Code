@@ -197,5 +197,6 @@
   "perm.desc.workspaceWrite": "Can modify files inside the workspace; outside files and network access follow the approval policy.",
   "perm.desc.dangerFullAccess": "Unrestricted access to the internet and any file on your computer.",
   "perm.desc.custom": "Custom combination (edit it in Settings).",
-  "commit.modelRestoreFailed": "The commit message was generated, but the default model could not be restored to {model}. Please pick it again in the model dropdown (the host's background save may have failed)."
+  "commit.modelRestoreFailed": "The commit message was generated, but the default model could not be restored to {model}. Please pick it again in the model dropdown (the host's background save may have failed).",
+  "notice.openImageFailed": "Could not open the image: {error}"
 }

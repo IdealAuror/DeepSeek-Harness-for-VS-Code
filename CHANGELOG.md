@@ -1,6 +1,33 @@
 # Changelog
 
 
+## 0.13.39
+- Attachments in the composer are now clickable: clicking a **file** chip opens it (text-like files in the editor with the usual HEAD→worktree diff for tracked files, images/PDF/archives/executables through the VS Code viewer instead of the old "open a PNG as text" path), clicking a **folder** chip reveals it in the file explorer, and clicking an **image** chip opens a full-size preview (Escape or clicking the backdrop closes it, with "open with the default app" saving it to a temp file first). Right-clicking a file/folder chip offers View file / Open with default app / Reveal in File Explorer / Remove attachment; the × still removes only and never opens anything. The chips show a pointer cursor and underline their label on hover so they read as clickable.
+- Root cause of the old behaviour: `openFile` always went through `openTextDocument`, so a binary attachment either errored or was shown as text; the host now classifies by extension (`isTextLikePath`) and routes non-text files to `vscode.open`.
+- Tests kept in the repo: `tools/test-open-routing.mjs` (20 extension→route assertions) and a jsdom interaction harness covering file/folder/image clicks, the right-click menu, remove-only behaviour and the preview overlay. All new strings are localized in 14 languages.
+- 输入区的附件现在可点击查看:点**文件**芯片即打开(文本类走编辑器、已跟踪文件仍是 HEAD→工作区 diff;图片/PDF/压缩包/可执行文件改走 VS Code 默认查看器,不再出现「把 PNG 当文本打开」的老问题),点**文件夹**芯片在资源管理器中定位,点**图片**芯片打开原尺寸预览(Esc 或点遮罩关闭,弹层内「用默认应用打开」会先把图片写成临时文件)。文件/文件夹芯片右键给出 查看文件 / 用默认应用打开 / 在资源管理器中显示 / 移除附件;× 依旧只移除、绝不触发打开。芯片加了指针光标,悬停时文件名会加下划线,一眼看出可点。
+- 旧行为的原因:`openFile` 一律走 `openTextDocument`,二进制附件要么报错、要么被当文本显示;宿主现在按扩展名判定(`isTextLikePath`),非文本文件交给 `vscode.open`。
+- 测试留在仓库:`tools/test-open-routing.mjs`(20 条扩展名→路由断言)+ 一份 jsdom 交互夹具(文件/文件夹/图片点击、右键菜单、只移除不打开、预览弹层开关)。所有新文案已补齐 14 种语言。
+
+
+## 0.13.38
+- **Fixed the bottom stat pills collapsing to one, and only showing up after switching sessions.** The host pushes `sessionStats` and `tokenUsage` as two separate `stats` messages, each carrying exactly one key; the webview assigned the whole object (`state.stats = msg.value`), so whichever arrived last erased the other — the familiar symptom is a lone `2 turns 101 steps` pill with no token pill until a session switch re-sent the merged snapshot. The handler now merges per field, so both projections survive in either arrival order.
+- The pills no longer depend on the projection arriving at all: the derived path (from session events) now also accumulates token usage from each `assistant/message`'s `usage`, and the row refreshes when an assistant message or tool result lands — so the row becomes visible **during** a turn instead of only at `turn/end`.
+- Regression test kept in the repo: `tools/test-stats-merge.mjs` (7 checks — both arrival orders, init snapshot, each projection alone, foreign-session ignore, and the derived-only path with no projection), driven through the real webview bundle in jsdom.
+- **修复底部统计胶囊只剩一枚、且只有切换会话后才出现**。宿主把 `sessionStats` 与 `tokenUsage` 分成两条 `stats` 消息推送,每条只带一个键;webview 却是整对象赋值(`state.stats = msg.value`),于是后到的那条把先到的抹掉 —— 典型表现就是只剩一枚「2 轮 101 步」,看不到 token 胶囊,直到切换会话重推合并快照才恢复。现在改为按字段合并,两种到达顺序下两条投影都保留。
+- 胶囊不再依赖投影到达:派生路径(由会话事件推导)现在也会累加每条 `assistant/message` 自带的 `usage`,并在助手消息或工具结果落地时刷新统计行 —— 因此**回合进行中**就能看到,而不必等 `turn/end`。
+- 回归测试留在仓库里:`tools/test-stats-merge.mjs`(7 项 —— 两种到达顺序、init 快照、各自单独出现、忽略其它会话、完全无投影的派生路径),全部用真实 webview 包在 jsdom 中驱动。
+
+
+## 0.13.37
+- **Fixed the conversation ending with a permanent "Compacting context…" row** (the running compaction line that survived an already-finished turn). Root cause, measured on a live 0.2.0-rc.2 server: the host changed the compaction checkpoint marker — a finished compaction now writes its checkpoint as `user/message` with `source = {kind:"compact-checkpoint", compactionId, sourceCommandId?}`, while the extension still recognized the old `{kind:"plugin", plugin:"compact"}` shape. `MessageSourceMap` explicitly documents that there is no shared catch-all `plugin` kind any more, so the check matched nothing, the row was never marked done, and it kept its running sweep at the tail of the transcript.
+- The checkpoint check now accepts both markers, and two independent fallbacks make the row impossible to strand: `compaction/end` closes a successfully compacted row (previously it only handled the error case), and a turn boundary closes any auto-compaction row still marked running.
+- Verified two ways. ① Live capture: a real `/compact` run produced `compaction/start` → `compaction/summary` → `user/message` checkpoint with exactly `{"kind":"compact-checkpoint",…}` → `compaction/end`, and a failed compaction produced `compaction/end` with `error`. ② Replay through the real webview bundle: the pre-fix code renders `data-state=running` with `正在压缩上下文…` for that exact sequence (bug reproduced), the fixed code lands on `data-state=done`; both checkpoint markers pass, a missing checkpoint is recovered by `compaction/end`, a failed compaction still lands on `error`, and auto-compaction (no `sourceCommandId`) plus a turn-boundary fallback both converge to done.
+- **修复对话结束后仍在最底部留一条「正在压缩上下文…」**。根因(在真实 0.2.0-rc.2 服务器上实测):宿主改了压缩检查点的来源标记 —— 压缩完成时写入的 `user/message` 现在带 `source = {kind:"compact-checkpoint", compactionId, sourceCommandId?}`,而扩展仍在按旧的 `{kind:"plugin", plugin:"compact"}` 匹配。`MessageSourceMap` 已明确不再有共享的 `plugin` 兜底类型,于是判定全部落空:压缩行永远不会被标成完成,尾部就一直挂着运行中的扫光。
+- 检查点判定现在同时接受新旧两种标记,并加了两道独立兜底,使这一行不可能再卡住:① `compaction/end` 在**成功**时也收尾(此前只处理失败分支);② 回合边界会把任何仍标着「运行中」的自动压缩行收敛为完成。
+- 两路验证:① 实拍 —— 真实 `/compact` 产生 `compaction/start` → `compaction/summary` → 带 `{"kind":"compact-checkpoint",…}` 的 `user/message` 检查点 → `compaction/end`;压缩失败时 `compaction/end` 带 `error`。② 用真实 webview 包回放:修复前的代码对该序列渲染出 `data-state=running` +「正在压缩上下文…」(缺陷复现),修复后落到 `data-state=done`;新旧两种标记都通过、缺检查点时由 `compaction/end` 收尾、失败仍落到 `error`、自动压缩(无 `sourceCommandId`)与回合边界兜底都收敛为完成。
+
+
 ## 0.13.36
 - The send shortcut no longer occupies a header button: the ⌨️ entry was removed from the toolbar and the setting now lives only in **Settings → ⌨️ Sending & input** (General tab), alongside the composer font and the produced-file collapse toggle. The status pill on the composer hint line stays — it shows the active mode (`Enter 发送` / `Ctrl+Enter 发送` / `Shift+Enter 发送`) and still switches on click, so the current binding stays visible without adding another toolbar icon.
 - Verified: the header row renders six buttons again (workspaces, jobs, automation tasks, trajectory, settings, subagents), the pill and hint still follow `dsh.sendKey`, and all three modes were re-asserted through the jsdom harness.

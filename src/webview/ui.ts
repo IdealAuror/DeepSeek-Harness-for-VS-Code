@@ -1234,6 +1234,12 @@ const EN_TEXT: Record<string, string> = {
   "文件夹": "Folder",
   "文件": "File",
   "移除附件": "Remove attachment",
+  // ---- 附件芯片:点击查看(文件/文件夹/图片) ----
+  "点击查看文件": "Click to view the file",
+  "点击在资源管理器中显示": "Click to reveal in the file explorer",
+  "点击查看图片": "Click to view the image",
+  "查看文件": "View file",
+  "先把图片保存为临时文件,再交给系统默认应用": "Saves the image to a temporary file, then opens it with the system default app",
   "加载失败": "Load failed",
   "子代理 {name}({status}) · 点击打开对话(可追问 / 打断)": "Subagent {name} ({status}) · click to open its conversation (prompt / interrupt)",
   "已连接 · {model}": "Connected · {model}",
@@ -3469,17 +3475,49 @@ function findCompactionNode(compactionId: string): NodeState | undefined {
 const COMPACT_COMMAND = "compact";
 
 /**
- * 识别压缩检查点(user/message 且来源为 compact 插件)。
+ * 识别压缩检查点(user/message,来源标记由 compact 事务提供)。
  * 该事件的正文是压缩摘要,渲染由命令行节点负责(网页端 compactSource 同款判定)。
+ *
+ * 来源标记随宿主版本变化,两种都要认:
+ * - 当前:`{kind:"compact-checkpoint", compactionId, sourceCommandId?}`
+ *   (dsh-compaction 的 COMPACT_CHECKPOINT_MARKER;MessageSourceMap 明确「没有共享的 plugin
+ *   兜底类型」,因此旧写法匹配不到,压缩行会永远停在「正在压缩上下文…」);
+ * - 旧版:`{kind:"plugin", plugin:"compact", compactionId, sourceCommandId?}`。
  */
 function compactCheckpointSource(data: any): { compactionId?: string; sourceCommandId?: string } | undefined {
   const source = data?.source;
   if (!source || typeof source !== "object") return undefined;
-  if (source.kind !== "plugin" || source.plugin !== COMPACT_COMMAND) return undefined;
+  const isCheckpoint = source.kind === "compact-checkpoint" || (source.kind === "plugin" && source.plugin === COMPACT_COMMAND);
+  if (!isCheckpoint) return undefined;
   return {
     ...(typeof source.compactionId === "string" ? { compactionId: source.compactionId } : {}),
     ...(typeof source.sourceCommandId === "string" ? { sourceCommandId: source.sourceCommandId } : {}),
   };
+}
+
+/**
+ * 结束一条仍在「运行中」的压缩行(幂等)。
+ * 正常路径由检查点事件收尾;该兜底用于宿主未送检查点(或检查点先于
+ * compaction/start 到达)时,避免对话尾部永久留一条「正在压缩上下文…」。
+ */
+function finishCompactionRow(compactionId?: string, sourceCommandId?: string): boolean {
+  const node =
+    (sourceCommandId !== undefined ? findCommandNode(sourceCommandId) : undefined) ??
+    (compactionId !== undefined && compactionId !== "" ? findCompactionNode(compactionId) : undefined);
+  if (!node || node.cmdStatus !== "running") return false;
+  node.cmdStatus = "done";
+  updateCommandRow(node);
+  return true;
+}
+
+/** 结束所有仍在运行中的压缩行(回合边界兜底)。 */
+function finishRunningCompactionRows(): void {
+  for (const node of state.nodes) {
+    if (node.kind !== "command" || !node.autoCompaction) continue;
+    if (node.cmdStatus !== "running") continue;
+    node.cmdStatus = "done";
+    updateCommandRow(node);
+  }
 }
 
 /**
@@ -4622,13 +4660,7 @@ function handleEvent(wire: WireEvent) {
       // 不再落成「系统提示词」卡片(网页端同款:检查点只更新压缩行)
       const checkpoint = compactCheckpointSource(data);
       if (checkpoint) {
-        const node =
-          (checkpoint.sourceCommandId !== undefined ? findCommandNode(checkpoint.sourceCommandId) : undefined) ??
-          (checkpoint.compactionId !== undefined ? findCompactionNode(checkpoint.compactionId) : undefined);
-        if (node) {
-          node.cmdStatus = "done";
-          updateCommandRow(node);
-        }
+        finishCompactionRow(checkpoint.compactionId, checkpoint.sourceCommandId);
         break;
       }
       const text = extractText(data?.content);
@@ -4748,16 +4780,20 @@ function handleEvent(wire: WireEvent) {
       break;
     }
     case "compaction/end": {
-      // 失败关闭(无检查点):命令行落到 error,摘要文本回退到错误原因
-      if (data?.error === undefined) break;
+      // 失败关闭(无检查点):命令行落到 error,摘要文本回退到错误原因;
+      // 成功时该事件同样到达(检查点之后),这里作为幂等收尾,避免行停在「正在压缩上下文…」。
       const compactionId = typeof data?.compactionId === "string" ? data.compactionId : "";
       const sourceCommandId = typeof data?.sourceCommandId === "string" ? data.sourceCommandId : undefined;
       const node =
         (sourceCommandId !== undefined ? findCommandNode(sourceCommandId) : undefined) ??
         (compactionId !== "" ? findCompactionNode(compactionId) : undefined);
-      if (!node || node.cmdStatus === "done") break;
-      node.cmdStatus = "error";
-      if (!node.outcomeText) node.outcomeText = String(data.error?.message ?? data.error);
+      if (!node || node.cmdStatus !== "running") break;
+      if (data?.error !== undefined) {
+        node.cmdStatus = "error";
+        if (!node.outcomeText) node.outcomeText = String(data.error?.message ?? data.error);
+      } else {
+        node.cmdStatus = "done";
+      }
       updateCommandRow(node);
       break;
     }
@@ -4849,6 +4885,8 @@ function handleEvent(wire: WireEvent) {
       // 0.1.7 逐消息反馈的目标:本回合最终助手消息的 message.id(操作条点赞/点踩据此落库)
       const assistantMessageId = typeof data?.message?.id === "string" ? data.message.id : undefined;
       if (assistantMessageId) assistant.messageId = assistantMessageId;
+      // 底部统计胶囊:本步已结算,用它自带的 usage 立刻刷新(不必等回合结束或投影推送)
+      if (!state.replaying) renderStatsLine();
       // 结算权威文本(message content)按块 index 归并:
       // - 本步已流出的块:原位覆盖文本(不新增块,避免重复渲染,也不打乱工具行的块位);
       // - 旧历史(rc.1)的压缩行:仅在 content 未覆盖的 index 上补齐;
@@ -5042,6 +5080,8 @@ function handleEvent(wire: WireEvent) {
           updateToolSummary(existing);
           // 段尾汇总行实时更新:一眼看到这段已经执行了哪些动作
           refreshGroupSummaries(findAssistantTail());
+          // 工具用时进入统计:工具结果到达即刷新底部胶囊(不必等回合结束)
+          if (!state.replaying) renderStatsLine();
         }
         // 网页端 ProducedFiles 同款推导:成功 mutation 的跟随 locations 计入本轮产物(首见顺序去重)
         if (!isError) {
@@ -5089,6 +5129,9 @@ function handleEvent(wire: WireEvent) {
       state.streamBlock = null;
       state.streamKey = null;
       stopTurnStatus();
+      // 兜底:回合已结束,任何仍标着「运行中」的自动压缩行都不可能还在压缩
+      // (宿主未送检查点/compaction-end 时,尾部会永久留一条「正在压缩上下文…」)
+      finishRunningCompactionRows();
       // 回合结束原因:失败(0.1.2 起 data.reason = {kind:'error', error:{code,message}})记账,
       // 由随后的事件/收尾把提示卡落到这个回合的尾部(issue #19:超限时对话里毫无提示)
       turnFailure = undefined;
@@ -6225,6 +6268,7 @@ function deriveStatsFromEvents(events: WireEvent[]) {
   const lastDelta = new Map<string, number>();
   const callTime = new Map<string, number>();
   const llmByStep = new Map<string, number>();
+  const derivedUsage = { uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0, seen: false };
   let toolMs = 0;
   let decodeTokens = 0;
   for (const wire of events) {
@@ -6262,8 +6306,19 @@ function deriveStatsFromEvents(events: WireEvent[]) {
         if (key) {
           const t0 = stepStart.get(key);
           if (t0 !== undefined) llmByStep.set(key, Math.max(0, ev.time - t0));
-          const out = data?.usage?.outputTokens;
-          if (typeof out === "number") decodeTokens += out;
+        }
+        // 用量兜底:投影(tokenUsage)只在宿主动作后异步到达,回合进行中先按
+        // assistant/message 自带的 usage 累加,这样底部胶囊全程可见而不是切换会话后才有。
+        {
+          const usage = data?.usage as
+            | { uncachedInputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number; outputTokens?: number }
+            | undefined;
+          const out = usage?.outputTokens;
+          if (typeof out === "number") derivedUsage.outputTokens += out;
+          if (typeof usage?.uncachedInputTokens === "number") derivedUsage.uncachedInputTokens += usage.uncachedInputTokens;
+          if (typeof usage?.cacheReadTokens === "number") derivedUsage.cacheReadTokens += usage.cacheReadTokens;
+          if (typeof usage?.cacheWriteTokens === "number") derivedUsage.cacheWriteTokens += usage.cacheWriteTokens;
+          if (usage !== undefined) derivedUsage.seen = true;
         }
         break;
     }
@@ -6281,7 +6336,7 @@ function deriveStatsFromEvents(events: WireEvent[]) {
       decodeMs += Math.max(0, (lastDelta.get(key) ?? first) - first);
     }
   }
-  return { turns: turns.size, steps: stepStart.size, llmMs, toolMs, ttftMs, ttftSteps, decodeMs, decodeTokens };
+  return { turns: turns.size, steps: stepStart.size, llmMs, toolMs, ttftMs, ttftSteps, decodeMs, decodeTokens, usage: derivedUsage };
 }
 
 function renderStatsLine() {
@@ -6290,19 +6345,23 @@ function renderStatsLine() {
     ttftMs?: number; ttftSteps?: number; decodeMs?: number; decodeTokens?: number;
   } | undefined;
   const tu = state.stats?.tokenUsage;
-  // 与网页端一致:优先投影;投影缺失时从事件推导 —— 保证统计栏始终显示(有回合时)
-  const st = (projected?.steps ?? 0) > 0 ? projected : (() => {
-    const derived = deriveStatsFromEvents(state.rawEvents);
-    return derived.steps > 0 ? derived : undefined;
+  // 派生值同时用于两块:轮/步统计与 token 用量。
+  // 宿主的 tokenUsage 投影只在回合动作后异步到达,派生值保证回合进行中胶囊也在。
+  const derived = deriveStatsFromEvents(state.rawEvents);
+  const st = (projected?.steps ?? 0) > 0 ? projected : derived.steps > 0 ? derived : undefined;
+  const usage = (() => {
+    if (tu !== undefined && (billedInputTokens(tu) > 0 || Number(tu.outputTokens ?? 0) > 0)) return tu;
+    const d = derived.usage;
+    return d.seen && (billedInputTokens(d) > 0 || d.outputTokens > 0) ? d : undefined;
   })();
   const hasStats = st !== undefined && (st.steps ?? 0) > 0;
-  const hasTokens = tu !== undefined && (billedInputTokens(tu) > 0 || Number(tu.outputTokens ?? 0) > 0);
+  const hasTokens = usage !== undefined;
   statsLine.innerHTML = "";
   statsLine.hidden = hasStats === false && hasTokens === false;
   if (!hasStats && !hasTokens) return;
   // 网页端 StatsPills 同款:两枚胶囊(会话统计 / Token 用量),点击展开明细弹层
   if (hasStats) statsLine.append(buildSessionStatsPill(st!));
-  if (hasTokens) statsLine.append(buildSessionUsagePill(tu!));
+  if (hasTokens) statsLine.append(buildSessionUsagePill(usage!));
 }
 
 /** 提示词侧计费输入 = 未缓存输入 + 缓存读取 + 缓存写入(网页端 billedInputTokens 同款)。 */
@@ -6448,13 +6507,23 @@ function renderAttachments() {
   attachmentsRow.append(btnAddAttach);
   const list = state.attachments;
   for (const a of list) {
-    const chip = el("span", "attachment-chip" + (a.auto ? " auto" : ""));
-    chip.title = `${a.kind === "folder" ? t("文件夹") : t("文件")}: ${a.path}`;
+    const chip = el("span", "attachment-chip clickable" + (a.auto ? " auto" : ""));
+    chip.title = `${t(a.kind === "folder" ? "点击在资源管理器中显示" : "点击查看文件")} · ${a.path}`;
     chip.append(lineIcon(a.kind === "folder" ? ICONS.box : ICONS.copy, 12));
     chip.append(el("span", "attachment-label", (a.auto ? t("激活文件 · ") : "") + a.label));
     const close = el("button", "chip-close", "×");
     close.title = t("移除附件");
     chip.append(close);
+    // 点击芯片正文即可查看:文件在编辑器中打开(二进制/图片走默认查看器),文件夹在资源管理器中定位;
+    // 右键菜单另给「用默认应用打开」。× 只负责移除,不触发打开。
+    chip.addEventListener("click", () => {
+      if (a.kind === "folder") vscode.postMessage({ kind: "revealInExplorer", path: a.path });
+      else vscode.postMessage({ kind: "openFile", path: a.path });
+    });
+    chip.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      openAttachmentMenu(chip, a);
+    });
     close.addEventListener("click", (e) => {
       e.stopPropagation();
       if (a.auto) {
@@ -6468,6 +6537,30 @@ function renderAttachments() {
   }
   // 图片附件与文件/文件夹附件同行(+ 号右侧):统一渲染,避免图片单独出现在输入区顶部
   renderImageChips();
+}
+
+/** 附件芯片的右键菜单:查看 / 用默认应用打开 / 在资源管理器中显示 / 移除。 */
+function openAttachmentMenu(chip: HTMLElement, a: { kind: "file" | "folder"; path: string; label: string }) {
+  openAnchoredMenu(chip, (menu) => {
+    const add = (icon: string, label: string, action: () => void) => {
+      const row = el("button", "plus-menu-item");
+      row.append(lineIcon(icon), el("span", "menu-item-label", label));
+      row.addEventListener("click", () => {
+        closeActivePopover();
+        action();
+      });
+      menu.append(row);
+    };
+    if (a.kind === "file") {
+      add(ICONS.eye, t("查看文件"), () => vscode.postMessage({ kind: "openFile", path: a.path }));
+      add(ICONS.rightUp, t("用默认应用打开"), () => vscode.postMessage({ kind: "openInDefaultApp", path: a.path }));
+    }
+    add(ICONS.folder, t("在资源管理器中显示"), () => vscode.postMessage({ kind: "revealInExplorer", path: a.path }));
+    add(ICONS.x, t("移除附件"), () => {
+      state.attachments = state.attachments.filter((x) => x.path !== a.path);
+      renderAttachments();
+    });
+  });
 }
 
 /** 同步自动附加的激活文件。 */
@@ -6491,19 +6584,53 @@ function syncActiveFileAttachment() {
 
 function renderImageChips() {
   for (const img of state.images) {
-    const chip = el("span", "attachment-chip image-chip");
-    chip.title = img.name;
+    const chip = el("span", "attachment-chip image-chip clickable");
+    chip.title = `${t("点击查看图片")} · ${img.name}`;
     chip.append(lineIcon(ICONS.image, 12));
     chip.append(el("span", "attachment-label", img.name));
     const close = el("button", "chip-close", "×");
+    close.title = t("移除附件");
     close.addEventListener("click", (e) => {
       e.stopPropagation();
       state.images = state.images.filter((x) => x !== img);
       renderAttachments();
     });
     chip.append(close);
+    // 点击查看大图:宿主用 vscode.open 打开内存里的图片(不落盘、不改工作区)
+    chip.addEventListener("click", () => openImagePreview(img));
     attachmentsRow.append(chip);
   }
+}
+
+/** 图片附件预览弹层:输入区已持有 dataURL,直接显示即可(与消息内联图片同源数据)。 */
+function openImagePreview(img: { data: string; mediaType: string; name: string }) {
+  const overlay = el("div", "image-preview-overlay");
+  const box = el("div", "image-preview-box");
+  const head = el("div", "image-preview-head");
+  head.append(el("span", "image-preview-name", img.name));
+  const actions = el("span", "image-preview-actions");
+  const openBtn = el("button", "mini-btn", t("用默认应用打开"));
+  openBtn.title = t("先把图片保存为临时文件,再交给系统默认应用");
+  openBtn.addEventListener("click", () => vscode.postMessage({ kind: "openImageExternally", data: img.data, mediaType: img.mediaType, name: img.name }));
+  const closeBtn = el("button", "mini-btn", t("关闭"));
+  actions.append(openBtn, closeBtn);
+  head.append(actions);
+  const image = el("img", "image-preview-img") as HTMLImageElement;
+  image.src = `data:${img.mediaType};base64,${img.data}`;
+  image.alt = img.name;
+  box.append(head, image);
+  overlay.append(box);
+  const close = () => overlay.remove();
+  closeBtn.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) close();
+  });
+  document.addEventListener("keydown", function onKey(e) {
+    if (e.key !== "Escape") return;
+    document.removeEventListener("keydown", onKey);
+    close();
+  });
+  document.body.append(overlay);
 }
 
 function applyAttachmentData(msg: { attachmentId: string; data?: string; mediaType?: string; error?: string }) {
@@ -7563,7 +7690,15 @@ function handleMessage(msg: any) {
     }
     case "stats": {
       if (msg.sessionId && msg.sessionId !== state.current) break;
-      state.stats = msg.value;
+      // 宿主对 sessionStats 与 tokenUsage 各发一条消息(每条只带一个键):
+      // 整对象赋值会让后到的那条抹掉先到的,于是只剩一枚胶囊(常见现象:
+      // 只有「{轮}轮 {步}步」而看不到 token 胶囊),直到切换会话重推完整快照才恢复。
+      // 因此这里按字段合并,两者互不覆盖。
+      const incoming = (msg.value ?? {}) as { sessionStats?: unknown; tokenUsage?: unknown };
+      const merged = { ...(state.stats ?? {}) };
+      if (incoming.sessionStats !== undefined) merged.sessionStats = incoming.sessionStats;
+      if (incoming.tokenUsage !== undefined) merged.tokenUsage = incoming.tokenUsage;
+      state.stats = merged;
       renderStatsLine();
       break;
     }

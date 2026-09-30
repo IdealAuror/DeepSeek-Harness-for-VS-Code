@@ -197,5 +197,6 @@
   "perm.desc.workspaceWrite": "Peut modifier les fichiers de l'espace de travail ; les fichiers externes et le réseau suivent la politique d'approbation.",
   "perm.desc.dangerFullAccess": "Accès illimité à Internet et à n'importe quel fichier de votre ordinateur.",
   "perm.desc.custom": "Combinaison personnalisée (à modifier dans les paramètres).",
-  "commit.modelRestoreFailed": "Le message de commit a été généré, mais le modèle par défaut n'a pas pu être rétabli sur {model}. Veuillez le resélectionner dans la liste des modèles (l'enregistrement en arrière-plan a peut-être échoué)."
+  "commit.modelRestoreFailed": "Le message de commit a été généré, mais le modèle par défaut n'a pas pu être rétabli sur {model}. Veuillez le resélectionner dans la liste des modèles (l'enregistrement en arrière-plan a peut-être échoué).",
+  "notice.openImageFailed": "Impossible d'ouvrir l'image : {error}"
 }

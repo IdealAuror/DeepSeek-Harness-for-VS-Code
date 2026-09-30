@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { createTranslator, effectiveLanguage, SUPPORTED_LANGUAGES } from "../dsh/i18n";
 import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
 import type { DshHub } from "../dsh/hub";
 import { DshApiError } from "../dsh/apiClient";
@@ -41,8 +41,29 @@ function detectImageMediaType(bytes: Uint8Array): string | undefined {
   return undefined;
 }
 
-/** 回退对比:自定义 URI scheme,由内容提供器按需执行 git show <commit>:<path> 供给 diff 左栏。 */
-const COMPARE_SCHEME = "dsh-git-old";
+/**
+ * 二进制/媒体扩展名:这些路径必须交给 VS Code 默认查看器(vscode.open),
+ * 不能用 openTextDocument(会把二进制当文本打开:报错或满屏乱码)。
+ * 判据只用扩展名,认不出来的一律按文本处理(与原行为一致,失败方向安全)。
+ */
+const BINARY_EXTENSIONS = new Set([
+  // 图片
+  "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "icns", "tif", "tiff", "avif", "heic", "psd",
+  // 音视频
+  "mp3", "wav", "flac", "ogg", "m4a", "aac", "mp4", "mov", "avi", "mkv", "webm",
+  // 文档 / 压缩包 / 可执行文件 / 字体 / 数据库
+  "pdf", "zip", "gz", "tgz", "bz2", "xz", "7z", "rar", "jar", "war", "exe", "dll", "so", "dylib", "bin", "wasm",
+  "class", "obj", "lib", "pdb", "node", "sqlite", "db", "woff", "woff2", "ttf", "otf", "eot",
+]);
+
+/** 该路径是否可按文本打开(未知扩展名视为文本)。 */
+function isTextLikePath(path: string): boolean {
+  const match = /\.([A-Za-z0-9]+)$/.exec(path.trim());
+  if (!match) return true;
+  return !BINARY_EXTENSIONS.has(match[1].toLowerCase());
+}
+
+/** 回退对比:自定义 URI scheme,由内容提供器按需执行 git show <commit>:<path> 供给 diff 左栏。 */const COMPARE_SCHEME = "dsh-git-old";
 let compareProviderRegistered = false;
 function ensureCompareProvider() {
   if (compareProviderRegistered) return;
@@ -1611,6 +1632,12 @@ export class ChatChannel {
             if (cwd) target = join(cwd, target);
           }
           try {
+            // 图片/PDF 等二进制文件:交给 VS Code 的默认查看器(vscode.open),
+            // 绝不用 openTextDocument(会把二进制当文本打开而报错或乱码)
+            if (!isTextLikePath(target)) {
+              await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(target));
+              break;
+            }
             // 产物是 git 已跟踪文件时:默认打开 HEAD → 工作树 diff,改动一眼可见
             if (await this.tryOpenGitDiff(target)) break;
             const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(target));
@@ -1622,6 +1649,25 @@ export class ChatChannel {
             } catch {
               // 无原生揭示能力则忽略
             }
+          }
+        }
+        break;
+      }
+      case "openImageExternally": {
+        // 粘贴/选择的图片只存在于 webview 内存里:先写成临时文件再用系统默认应用打开
+        if (typeof msg.data === "string" && msg.data) {
+          try {
+            const mediaType = typeof msg.mediaType === "string" && msg.mediaType ? msg.mediaType : "image/png";
+            const ext = mediaType === "image/jpeg" ? "jpg" : mediaType === "image/webp" ? "webp" : mediaType === "image/gif" ? "gif" : "png";
+            const raw = typeof msg.name === "string" && msg.name ? msg.name.replace(/[\\/:*?"<>|]/g, "_") : `image.${ext}`;
+            const name = /\.[a-z0-9]+$/i.test(raw) ? raw : `${raw}.${ext}`;
+            const dir = join(tmpdir(), "dsh-vscode-images");
+            await vscode.workspace.fs.createDirectory(vscode.Uri.file(dir));
+            const file = join(dir, name);
+            await vscode.workspace.fs.writeFile(vscode.Uri.file(file), Buffer.from(msg.data, "base64"));
+            await vscode.env.openExternal(vscode.Uri.file(file));
+          } catch (error) {
+            this.post({ kind: "notice", message: t("notice.openImageFailed", { error: String(error) }), level: "error" });
           }
         }
         break;
