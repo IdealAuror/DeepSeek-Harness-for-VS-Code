@@ -253,6 +253,32 @@ export class ChatChannel {
           }
         }),
       },
+      {
+        // 0.2.0 异步问答:限时提问挂上等待流,剩余等待时间推给卡片(等待到期后卡片保留可稍后作答)
+        dispose: store.on("question", (question: PendingQuestion) => {
+          if (!question.callId || question.timed !== true) return;
+          const handle = this.hub.attachQuestionWait(question.frameRpcId);
+          if (handle) this.questionWaits.set(question.frameRpcId, handle);
+        }),
+      },
+      {
+        dispose: store.on("questionCountdown", (frameRpcId: string, remainingMs: number) => {
+          this.post({ kind: "questionCountdown", frameRpcId, remainingMs });
+        }),
+      },
+      {
+        dispose: store.on("questionCountdownExpired", (frameRpcId: string) => {
+          this.questionWaits.delete(frameRpcId);
+          this.post({ kind: "questionCountdown", frameRpcId, remainingMs: null });
+        }),
+      },
+      {
+        dispose: store.on("questionResolved", (frameRpcId: string) => {
+          // 已作答/取消:关闭等待流,避免悬挂的倒计时
+          this.questionWaits.get(frameRpcId)?.cancel();
+          this.questionWaits.delete(frameRpcId);
+        }),
+      },
       { dispose: store.on("questionResolved", (frameRpcId: string) => this.post({ kind: "questionResolved", frameRpcId })) },
       {
         // Cordis 动态插件审批(网页端 Cordis 浮窗面板同款):
@@ -516,6 +542,8 @@ export class ChatChannel {
 
   /** 定时任务面板是否打开(打开时 schedule/changed 失效通知会主动重推目录)。 */
   private schedulePanelOpen = false;
+  /** 限时提问的等待流句柄(frameRpcId → 句柄),作答/取消/到期后释放。 */
+  private readonly questionWaits = new Map<string, { cancel(): void }>();
 
   /**
    * 由 subagentCatalog 投影构造子代理目录条目(0.1.7 起取代 subagents/list 端点)。

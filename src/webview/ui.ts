@@ -87,6 +87,10 @@ interface QuestionInfo {
   sessionId: string;
   frameRpcId: string;
   questions: { id: string; question: string; detail?: string; options?: { label: string; description?: string }[]; multiSelect?: boolean }[];
+  /** 0.2.0 异步问答:限时提问的剩余等待毫秒;null = 等待已到期(仍可作答)。 */
+  remainingMs?: number | null;
+  /** 限时提问对应的工具调用 id(作答走 userQuestions/answer)。 */
+  callId?: string;
 }
 
 /** Cordis 动态插件审批请求(网页端 Cordis 浮窗面板同款)。 */
@@ -944,6 +948,13 @@ const EN_TEXT: Record<string, string> = {
     "This host declares presets through Cordis composition and no longer provides local preset authoring (copy / open folder / delete); only the composition text can be viewed here.",
   "展开 / 收起这一段过程": "Expand / collapse this run of steps",
   "暂无工具调用": "No tool calls yet",
+  // ---- 0.2.0 异步问答(限时提问) ----
+  "{seconds}s 后继续": "Continues in {seconds}s",
+  "等待已结束 · 可稍后回答": "Wait ended · you can still answer later",
+  "等待已到期,Agent 已继续工作;你的回答会作为后续消息送达":
+    "The wait expired and the agent carried on; your answer is delivered as a follow-up message.",
+  "限时提问:等待到期后 Agent 会先继续工作,你仍可稍后回答":
+    "Timed question: when the wait expires the agent carries on, and you can still answer later.",
   "执行了 {n} 条命令": "{n} command(s)",
   "读取了 {n} 个文件": "{n} file(s) read",
   "修改了 {n} 个文件": "{n} file(s) changed",
@@ -6118,6 +6129,21 @@ function renderPending() {
     const card = el("div", "pending-card pending-question question-card" + (flow.minimized ? " question-minimized" : ""));
     const head = el("div", "question-head");
     head.append(lineIcon(ICONS.help, 14), el("span", "question-head-title", t("提问")));
+    // 0.2.0 异步问答:限时提问显示剩余等待时间;到期后提示 Agent 会继续,用户仍可作答
+    if (question.remainingMs !== undefined) {
+      const countdown = el(
+        "span",
+        "question-countdown" + (question.remainingMs === null ? " question-countdown-expired" : ""),
+        question.remainingMs === null
+          ? t("等待已结束 · 可稍后回答")
+          : t("{seconds}s 后继续", { seconds: String(Math.ceil(question.remainingMs / 1000)) }),
+      );
+      countdown.title =
+        question.remainingMs === null
+          ? t("等待已到期,Agent 已继续工作;你的回答会作为后续消息送达")
+          : t("限时提问:等待到期后 Agent 会先继续工作,你仍可稍后回答");
+      head.append(countdown);
+    }
     const count = el("span", "question-count");
     // 折叠 / 展开(网页端 nav.minimize/maximize 同款):折叠仅收起卡片主体,草稿与页码保留
     const minBtn = el("button", "question-min", "");
@@ -6901,6 +6927,15 @@ function handleMessage(msg: any) {
     case "question": {
       state.questions.set(msg.frameRpcId, msg);
       renderPending();
+      break;
+    }
+    case "questionCountdown": {
+      // 0.2.0 异步问答:限时提问的剩余等待时间(remainingMs=null 表示等待已到期,卡片保留)
+      const question = state.questions.get(msg.frameRpcId);
+      if (question) {
+        question.remainingMs = typeof msg.remainingMs === "number" ? msg.remainingMs : null;
+        renderPending();
+      }
       break;
     }
     case "questionResolved": {

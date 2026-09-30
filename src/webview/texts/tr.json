@@ -601,5 +601,9 @@
   "搜索了 {n} 次": "{n} arama",
   "访问了 {n} 个网页": "{n} web sayfası açıldı",
   "调用了 {n} 个工具": "{n} araç çağrıldı",
-  "展开 / 收起这一段过程": "Bu bölümü aç / kapat"
+  "展开 / 收起这一段过程": "Bu bölümü aç / kapat",
+  "{seconds}s 后继续": "{seconds} sn sonra devam",
+  "等待已结束 · 可稍后回答": "Bekleme bitti · sonra yanıtlanabilir",
+  "等待已到期,Agent 已继续工作;你的回答会作为后续消息送达": "Bekleme süresi doldu ve ajan çalışmaya devam etti; yanıtınız sonraki ileti olarak iletilir.",
+  "限时提问:等待到期后 Agent 会先继续工作,你仍可稍后回答": "Süreli soru: süre dolduğunda ajan devam eder, sonra da yanıtlayabilirsiniz."
 }

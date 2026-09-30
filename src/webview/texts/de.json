@@ -601,5 +601,9 @@
   "搜索了 {n} 次": "{n} Suche(n)",
   "访问了 {n} 个网页": "{n} Webseite(n) abgerufen",
   "调用了 {n} 个工具": "{n} Werkzeug(e) aufgerufen",
-  "展开 / 收起这一段过程": "Diesen Abschnitt ein-/ausklappen"
+  "展开 / 收起这一段过程": "Diesen Abschnitt ein-/ausklappen",
+  "{seconds}s 后继续": "Weiter in {seconds}s",
+  "等待已结束 · 可稍后回答": "Wartezeit beendet · später beantwortbar",
+  "等待已到期,Agent 已继续工作;你的回答会作为后续消息送达": "Die Wartezeit ist abgelaufen, der Agent arbeitet weiter; Ihre Antwort wird als Folgenachricht zugestellt.",
+  "限时提问:等待到期后 Agent 会先继续工作,你仍可稍后回答": "Zeitlich begrenzte Frage: Nach Ablauf arbeitet der Agent weiter, Sie können später antworten."
 }

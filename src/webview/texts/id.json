@@ -601,5 +601,9 @@
   "搜索了 {n} 次": "Mencari {n} kali",
   "访问了 {n} 个网页": "Mengakses {n} halaman web",
   "调用了 {n} 个工具": "Memanggil {n} alat",
-  "展开 / 收起这一段过程": "Bentangkan / ciutkan rentetan ini"
+  "展开 / 收起这一段过程": "Bentangkan / ciutkan rentetan ini",
+  "{seconds}s 后继续": "Lanjut dalam {seconds}d",
+  "等待已结束 · 可稍后回答": "Waktu tunggu berakhir · bisa dijawab nanti",
+  "等待已到期,Agent 已继续工作;你的回答会作为后续消息送达": "Waktu tunggu habis dan agen melanjutkan pekerjaan; jawaban Anda dikirim sebagai pesan lanjutan.",
+  "限时提问:等待到期后 Agent 会先继续工作,你仍可稍后回答": "Pertanyaan berbatas waktu: setelah habis, agen melanjutkan dan Anda tetap bisa menjawab nanti."
 }

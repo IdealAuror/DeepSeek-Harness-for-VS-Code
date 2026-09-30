@@ -454,6 +454,33 @@ export class DshApiClient {
     });
   }
 
+  // ---------- 限时提问 / 异步问答(user-questions;0.2.0 新增端点) ----------
+
+  /**
+   * 认领并等待一个限时提问(0.2.0 的异步问答模式):流上持续下发剩余等待时间,
+   * 等待到期后流结束,Agent 可继续独立工作,用户之后仍可作答。
+   */
+  attachUserQuestionWait(sessionId: string, callId: string, handlers: { onItem: (value: { remainingMs: number }) => void; onEnd?: () => void; onError?: (error: { code: string; message: string }) => void }): RemoteStreamHandle {
+    return this.openStream(
+      "userQuestions/attachWait",
+      { agentId: sessionId, callId },
+      {
+        onItem: (value) => handlers.onItem(value as { remainingMs: number }),
+        onEnd: () => handlers.onEnd?.(),
+        onError: (error) => handlers.onError?.(error),
+      },
+    );
+  }
+
+  /**
+   * 提交限时提问的作答(0.2.0 新端点;限时提问走这里,而不是 $events/result)。
+   * 未提供 sessionId 时走 agent 作用域形式。
+   */
+  answerUserQuestion(sessionId: string | undefined, callId: string, answer: AskUserQuestionAnswer) {
+    if (sessionId) return this.request<boolean>("userQuestions/answer", { agentId: sessionId, callId, answer });
+    return this.request<boolean>("agent:userQuestions/answer", { callId, answer });
+  }
+
   // ---------- 会话域 ----------
 
   setServerVersion(version: string | undefined) {

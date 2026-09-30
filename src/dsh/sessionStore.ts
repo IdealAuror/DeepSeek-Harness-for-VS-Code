@@ -42,6 +42,14 @@ export interface PendingQuestion {
   sessionId: string;
   frameRpcId: string;
   questions: AskUserQuestionItem[];
+  /** 0.2.0 异步问答:限时提问对应的工具调用 id(作答走 userQuestions/answer)。 */
+  callId?: string;
+  /** 该提问是否为限时等待(等待到期后 Agent 可继续独立工作)。 */
+  timed?: boolean;
+  /** 剩余等待毫秒(等待流下发;到期后清空)。 */
+  remainingMs?: number;
+  /** 等待已到期(卡片保留,用户仍可稍后作答)。 */
+  waited?: boolean;
 }
 
 export interface StoredEvent {
@@ -115,6 +123,8 @@ export class SessionStore {
   on(name: "approvalResolved", fn: (approvalId: string, outcome: string) => void): () => void;
   on(name: "question", fn: (question: PendingQuestion) => void): () => void;
   on(name: "questionResolved", fn: (frameRpcId: string) => void): () => void;
+  on(name: "questionCountdown", fn: (frameRpcId: string, remainingMs: number) => void): () => void;
+  on(name: "questionCountdownExpired", fn: (frameRpcId: string) => void): () => void;
   on(name: "queue", fn: (sessionId: string, items: QueueItem[]) => void): () => void;
   on(name: "running", fn: (sessionId: string, running: boolean) => void): () => void;
   on(name: "turnEnd", fn: (sessionId: string, turn: number) => void): () => void;
@@ -367,16 +377,36 @@ export class SessionStore {
       return;
     }
     if (frame.event === "user-questions/request") {
-      const req = (frame.request ?? {}) as { questions?: AskUserQuestionItem[] };
+      const req = (frame.request ?? {}) as { questions?: AskUserQuestionItem[]; wait?: { callId?: string; timed?: boolean } };
       const question: PendingQuestion = {
         sessionId: frame.agentId,
         frameRpcId: frame.eventId,
         questions: req.questions ?? [],
+        // 0.2.0 异步问答:限时提问带 wait 描述符,作答走 userQuestions/answer 而不是 $events/result
+        callId: typeof req.wait?.callId === "string" ? req.wait.callId : undefined,
+        timed: req.wait?.timed === true,
       };
       this.pendingQuestions.set(frame.eventId, question);
       this.emit("question", question);
       this.emit("sessionsChanged", this.listSessions());
     }
+  }
+
+  /** 限时提问的剩余等待时间(毫秒)下发;到期后宿主结束等待流。 */
+  updateQuestionCountdown(frameRpcId: string, remainingMs: number) {
+    const question = this.pendingQuestions.get(frameRpcId);
+    if (!question) return;
+    question.remainingMs = Math.max(0, Math.floor(remainingMs));
+    this.emit("questionCountdown", frameRpcId, question.remainingMs);
+  }
+
+  /** 等待到期(宿主结束等待流):卡片保留,用户之后仍可作答(0.2.0 异步问答语义)。 */
+  expireQuestionWait(frameRpcId: string) {
+    const question = this.pendingQuestions.get(frameRpcId);
+    if (!question) return;
+    question.remainingMs = undefined;
+    question.waited = true;
+    this.emit("questionCountdownExpired", frameRpcId);
   }
 
   /** $events 的 cancel 帧(宿主撤回 waterfall:审批/提问被取消)。 */

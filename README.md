@@ -6,7 +6,7 @@
 > npx @deepseek-ai/dsh web
 > ```
 
-[中文版](#chinese) | Publisher: Jager · Latest: 0.13.26
+[中文版](#chinese) | Publisher: Jager · Latest: 0.13.27
 
 Use [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) directly in VS Code, alongside ChatGPT / Copilot: the built-in `@dsh` chat participant, secondary sidebar / standalone chat windows, workspaces / jobs / trajectory / settings panels, turn-level Git rollback, and a **multi-language UI** (简体中文 / 繁體中文 / English / 日本語 / 한국어 / Deutsch / Français / Español / Português / ไทย / Bahasa Indonesia / Türkçe / Русский / العربية — follows the VS Code display language or switch manually).
 
@@ -31,6 +31,7 @@ Use [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) 
 - **Deliverables box**: files produced each turn listed at the end of the conversation, click to open.
 - **Session management**: ⋯ menu with fork / rename (pre-filled title) / archive.
 - **Goals**: progress card + 🎯 chip with edit / complete / clear.
+- **Timed (asynchronous) questions** (DSH 0.2.0+): a question that carries a wait budget shows a live countdown pill on its card; when the wait expires the agent carries on and the card stays answerable ("wait ended · you can still answer later"), with the late reply delivered as a follow-up message in the same session.
 - **To-do panel** (web TodoPanel parity, docked above the composer): checklist icon + "To-dos" + a per-status summary that only lists non-zero counts ("2 completed · 1 in progress · 1 pending"), collapsible list with the web's three status glyphs (green check ring / spinning gradient ring / dashed ring).
 - **Plan mode**: 📝 chip appears after `/plan`, click to exit.
 - **Attachments**: auto-attach the active editor file (follows editor switches) + add file/folder (separate pickers); context is injected into the model but displayed collapsed.
@@ -135,7 +136,7 @@ npm run package     # → Releases/
 > npx @deepseek-ai/dsh web
 > ```
 
-[English version](#) | 发布者:Jager · 最新版本:0.13.26
+[English version](#) | 发布者:Jager · 最新版本:0.13.27
 
 在 VS Code 中直接使用 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)(`dsh`),与 ChatGPT / Copilot 一样融入 VS Code 聊天体系:内置聊天参与者 `@dsh`、辅助侧栏 / 独立聊天窗口、工作区 / 后台任务 / 轨迹 / 设置面板、回合级 Git 回退,以及**多语言界面**(简体中文 / 繁體中文 / English / 日本語 / 한국어 / Deutsch / Français / Español / Português / ไทย / Bahasa Indonesia / Türkçe / Русский / العربية,跟随 VS Code 显示语言或手动切换)。
 
@@ -158,6 +159,7 @@ npm run package     # → Releases/
 - **产物文件框**:每轮结束在对话末尾显示生成的文件列表,点击在编辑器中打开。
 - **会话管理**:会话下拉旁的 ⋯ 菜单支持 分叉 / 重命名(预填当前标题)/ 归档(仍保留在服务器)。
 - **目标(goal)**:goal 进度卡(目标 · 阶段 · 轮次 · 进度条)+ 🎯 目标模式芯片,点击可 修改 / 完成 / 清除目标。
+- **限时(异步)提问**(DSH 0.2.0+):带等待时限的提问会在卡片上显示实时倒计时胶囊;等待到期后 Agent 先继续工作,卡片保留为「等待已结束 · 可稍后回答」,你的迟到回答会作为同一会话的后续消息送达。
 - **任务清单**(与网页端 TodoPanel 同款,停靠在输入框上方):清单图标 + 「任务」+ 只列非零状态的进度摘要(如「2 已完成 · 1 进行中 · 1 待处理」),点击折叠/展开清单;三种状态图标与网页端一致(绿勾圆环 / 旋转渐变圆环 / 虚线圆环)。
 - **计划模式**:/ 命令菜单选"计划模式"后出现 📝 芯片,点击退出;`plan/mode` 状态实时同步。
 - **附件**:自动附加当前激活文件(跟随编辑器切换,蓝色芯片)+ 手动添加文件/文件夹(二选一菜单);发送时上下文注入模型,界面默认折叠为"📎 附件上下文"卡片,不展开文件内容。

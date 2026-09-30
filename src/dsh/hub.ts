@@ -691,10 +691,36 @@ export class DshHub {
       return;
     }
     try {
-      await this.client.respondQuestion(pending.sessionId ?? sessionId, { answers }, frameRpcId);
+      // 0.2.0 异步问答:限时提问用 callId 走 userQuestions/answer(等待到期后仍可作答);
+      // 其余提问沿用 0.1.x 的 $events waterfall 结果通道。
+      if (pending.callId) {
+        await this.client.answerUserQuestion(pending.sessionId ?? sessionId, pending.callId, { answers });
+      } else {
+        await this.client.respondQuestion(pending.sessionId ?? sessionId, { answers }, frameRpcId);
+      }
       this.store.resolveWaterfall(frameRpcId, "answered");
     } catch (error) {
       this.deps.onNotice?.(this.deps.t?.("hub.questionFailed", { error: String(error) }) ?? `Answer question failed: ${String(error)}`, "error");
+    }
+  }
+
+  /**
+   * 限时提问(0.2.0 异步问答)的等待流:把剩余等待时间转成倒计时事件。
+   * 宿主结束等待即表示等待到期 —— 卡片保留,用户之后仍可作答。
+   * 旧宿主没有该端点:静默失败,卡片仍走常规 waterfall 语义。
+   */
+  attachQuestionWait(frameRpcId: string): RemoteStreamHandle | undefined {
+    const pending = this.store.pendingQuestions.get(frameRpcId);
+    if (!pending?.callId) return undefined;
+    try {
+      return this.client.attachUserQuestionWait(pending.sessionId, pending.callId, {
+        onItem: (value) => this.store.updateQuestionCountdown(frameRpcId, value?.remainingMs ?? 0),
+        onEnd: () => this.store.expireQuestionWait(frameRpcId),
+        onError: () => this.store.expireQuestionWait(frameRpcId),
+      });
+    } catch (error) {
+      console.error("[dsh] attach user-question wait failed:", error);
+      return undefined;
     }
   }
 

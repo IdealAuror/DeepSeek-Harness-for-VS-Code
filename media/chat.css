@@ -2524,6 +2524,22 @@ body {
   color: var(--dsh-fg);
 }
 
+/* 限时提问倒计时(0.2.0 异步问答):到期后降为普通提示,卡片保留可稍后作答 */
+.question-countdown {
+  flex: none;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--dsh-accent);
+  color: var(--dsh-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.question-countdown-expired {
+  border-color: var(--dsh-border);
+  color: var(--dsh-muted);
+}
+
 .question-count {
   font-size: 11px;
   color: var(--dsh-muted);

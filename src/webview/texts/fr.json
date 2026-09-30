@@ -601,5 +601,9 @@
   "搜索了 {n} 次": "{n} recherche(s)",
   "访问了 {n} 个网页": "{n} page(s) consultée(s)",
   "调用了 {n} 个工具": "{n} outil(s) appelé(s)",
-  "展开 / 收起这一段过程": "Déplier / replier cette étape"
+  "展开 / 收起这一段过程": "Déplier / replier cette étape",
+  "{seconds}s 后继续": "Reprise dans {seconds} s",
+  "等待已结束 · 可稍后回答": "Attente terminée · réponse possible plus tard",
+  "等待已到期,Agent 已继续工作;你的回答会作为后续消息送达": "L'attente a expiré, l'agent a poursuivi son travail ; votre réponse sera transmise comme message ultérieur.",
+  "限时提问:等待到期后 Agent 会先继续工作,你仍可稍后回答": "Question à durée limitée : à l'expiration, l'agent continue et vous pouvez répondre plus tard."
 }
