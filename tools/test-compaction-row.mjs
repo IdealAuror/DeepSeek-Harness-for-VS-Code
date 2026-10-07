@@ -3,7 +3,8 @@
  * 用 jsdom 加载构建产物 dist/webview/ui.js,喂入真实的 0.1.5-rc.1 事件序列
  * (command/run → compaction/start → compaction/summary → 检查点 user/message → compaction/end → command/done),
  * 断言:运行中行 → 完成行的状态与文案、检查点不再渲染成「系统提示词」卡片、
- * surface replace 折叠历史条目、点击展开摘要正文、旧服务器(无 compaction 事件)回退到命令结果文本。
+ * surface replace 保留历史条目(surface 只重写模型上下文,不删对话记录)、点击展开摘要正文、
+ * 旧服务器(无 compaction 事件)回退到命令结果文本。
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -123,7 +124,8 @@ const wire = (event) => ({ event });
   check("compaction/* 不新增行(与命令 id 合并)", rows.length === 1, `rows=${rows.length}`);
   check("摘要到达后仍为 running(等待检查点)", rows[0]?.dataset.state === "running", rows[0]?.dataset.state);
 
-  // 检查点:surfaceOp replace 覆盖 [10, 11](应折叠掉此前的消息节点)
+  // 检查点:surfaceOp replace 覆盖 [10, 11] —— 只是把这段从**模型上下文**里换成摘要,
+  // 对话记录必须原样保留(网页端同款:被压缩的消息仍能往上翻到)
   post({ kind: "delta", events: [
       {
         ...seq(23),
@@ -146,8 +148,9 @@ const wire = (event) => ({ event });
     rows[0]?.querySelector(".cmd-summary")?.textContent,
   );
   check("检查点不再渲染为系统提示词卡片", document.querySelectorAll(".system-note").length === 0, `notes=${document.querySelectorAll(".system-note").length}`);
-  check("被折叠的历史条目已移除(用户消息)", document.querySelectorAll(".msg-user").length === 0, `users=${document.querySelectorAll(".msg-user").length}`);
-  check("被折叠的助手消息已移除", document.querySelectorAll(".msg-assistant").length === 0, `assistant=${document.querySelectorAll(".msg-assistant").length}`);
+  check("压缩前的问题仍在对话里(不被删除)", document.querySelectorAll(".msg-user").length === 1, `users=${document.querySelectorAll(".msg-user").length}`);
+  check("压缩前的回答仍在对话里(不被删除)", document.querySelectorAll(".msg-assistant").length === 1, `assistant=${document.querySelectorAll(".msg-assistant").length}`);
+  check("被压缩区间的消息文本仍可读", document.body.textContent.includes("第一条消息"), "文本缺失");
   check("压缩行本身保留(锚点在区间之外)", rows.length === 1, `rows=${rows.length}`);
   check("摘要可展开", rows[0]?.dataset.expandable === "true", rows[0]?.dataset.expandable);
 
@@ -242,7 +245,7 @@ const wire = (event) => ({ event });
   const row = document.querySelector(".cmd-row");
   check("重放后压缩行重建且为 done", row?.dataset.state === "done", row?.dataset.state);
   check("重放后摘要为条数文案", row?.querySelector(".cmd-summary")?.textContent === "已压缩 3 条历史记录(约 999 tokens)", row?.querySelector(".cmd-summary")?.textContent);
-  check("重放后旧消息被折叠", document.querySelectorAll(".msg-user").length === 0, `users=${document.querySelectorAll(".msg-user").length}`);
+  check("重放后旧消息仍在(surface 不清历史)", document.querySelectorAll(".msg-user").length === 1, `users=${document.querySelectorAll(".msg-user").length}`);
   check("重放后压缩行仍可展开", row?.dataset.expandable === "true", row?.dataset.expandable);
 }
 
@@ -320,7 +323,7 @@ const wire = (event) => ({ event });
     { ...seq(83), type: "tool/call", data: { turn: 1, step: 1, callId: "call-1", name: "read", arguments: '{"path":"README.md"}' } },
     { ...seq(84), type: "tool/result", data: { turn: 1, step: 1, message: { source: { callId: "call-1" }, content: [{ type: "text", text: "文件内容" }] } } },
     { ...seq(85), type: "turn/end", data: { turn: 1, reason: { kind: "stop" } } },
-    // 压缩区间内的回合:锚点落在 replace 区间内,应与工具行一并折叠
+    // 压缩区间内的回合:replace 只改动模型上下文,整个回合在对话里照旧显示
     {
       ...seq(90),
       type: "user/message",
@@ -329,8 +332,8 @@ const wire = (event) => ({ event });
     },
   ];
   for (const e of events) post({ kind: "delta", events: [e] });
-  check("常规回合的用户消息渲染正常", document.querySelectorAll(".msg-user").length === 0, `users=${document.querySelectorAll(".msg-user").length}(已被删除区间折叠)`);
-  check("工具行随所属回合一并折叠", document.querySelectorAll(".step-tool").length === 0, `tools=${document.querySelectorAll(".step-tool").length}`);
+  check("replace 区间内的用户消息照常渲染", document.querySelectorAll(".msg-user").length === 1, `users=${document.querySelectorAll(".msg-user").length}`);
+  check("replace 区间内的工具行照常渲染", document.querySelectorAll(".step-tool").length >= 1, `tools=${document.querySelectorAll(".step-tool").length}`);
   check("无孤儿压缩行", document.querySelectorAll(".cmd-row").length === 0, `rows=${document.querySelectorAll(".cmd-row").length}`);
   check("无孤立系统提示词卡片", document.querySelectorAll(".system-note").length === 0, `notes=${document.querySelectorAll(".system-note").length}`);
 }

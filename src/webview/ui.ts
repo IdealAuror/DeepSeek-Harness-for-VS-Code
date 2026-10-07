@@ -202,8 +202,9 @@ interface NodeState {
   /** 收尾答案的事件时间(回合尾本地时钟) */
   time?: number;
   /**
-   * 节点锚定的会话事件 seq:压缩检查点以 surfaceOp=replace 覆盖历史区间时,
-   * 按范围移除已折叠的条目(网页端 surface 语义)。
+   * 节点锚定的会话事件 seq(回合分组、表面替换区间的判定基准)。
+   * 注意:压缩检查点的 surfaceOp=replace **不**用来删除节点 —— 它替换的是模型
+   * 上下文,不是对话记录(见 handleEvent 顶部说明)。
    */
   anchorSeq?: number;
   /** 命令行的命令 id(command/run ↔ command/done 关联) */
@@ -3520,28 +3521,6 @@ function finishRunningCompactionRows(): void {
   }
 }
 
-/**
- * 应用 surface 替换(压缩检查点):移除已被折叠进摘要的历史条目,
- * 让对话里只剩一条压缩行 —— 与网页端 surface 语义一致。
- * 正在流式输出的助手节点永不移除(压缩只覆盖空闲/已结算区间)。
- */
-function applySurfaceReplace(ev: { surfaceOp?: unknown }) {
-  const op = ev.surfaceOp as { op?: string; startSeq?: number; endSeq?: number } | undefined;
-  if (op?.op !== "replace") return;
-  const start = op.startSeq;
-  const end = op.endSeq;
-  if (typeof start !== "number" || typeof end !== "number" || end < start) return;
-  const live = state.streamBlock?.owner;
-  const dropped = new Set<NodeState>();
-  for (const node of [...state.nodes]) {
-    if (node === live || dropped.has(node)) continue;
-    const anchor = node.anchorSeq;
-    if (typeof anchor !== "number" || anchor < start || anchor > end) continue;
-    dropNode(node, dropped);
-  }
-  if (dropped.size > 0) state.turnStarts = state.turnStarts.filter((seq) => seq < start || seq > end);
-}
-
 // ---------- 回合失败:对话内提示(issue #19) ----------
 
 /**
@@ -4652,8 +4631,17 @@ function handleEvent(wire: WireEvent) {
   state.rawEvents.push(wire);
   const data = ev.data ?? {};
   currentEventSeq = ev.seq;
-  // 压缩检查点以 surfaceOp=replace 覆盖被压缩区间:先摘掉已折叠的历史条目
-  if (ev.surfaceOp !== undefined) applySurfaceReplace(ev);
+  // surfaceOp=replace 出现时**不删任何节点**。它替换的是宿主的「消息面」——
+  // 也就是送去模型的那串消息(system/user/assistant/tool/result),压缩后模型
+  // 看到的是摘要而不是被压缩的原文;对话记录本身并没有被改写。
+  // 官方网页端同理:位置替换只推进「有效提示」,历史卡片一律保留
+  // (dsh-client-ui-chat systemMessageDefinition:"Positional replacements advance
+  // the effective prompt without changing historical cards")。
+  // 旧实现按 [startSeq,endSeq] 把这段节点全部 drop,结果是压缩后整个对话只剩
+  // 一条压缩行 —— 用户往上翻什么都看不到(issue:压缩后历史不可见)。
+  // 另一个 replace 来源是 tool/result 剪枝(dsh-compaction-tool-result-pruner,
+  // 单节点替换):替换事件本身就是带裁剪后正文的 tool/result,下面的
+  // tool/result 分支会按 callId 就地更新那一行,不需要删旧节点。
 
   switch (ev.type) {    case "user/message": {
       // 压缩检查点(compaction checkpoint):正文即压缩摘要,已由命令行节点呈现,
