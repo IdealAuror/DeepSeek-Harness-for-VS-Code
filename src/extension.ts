@@ -299,7 +299,20 @@ export function activate(ctx: vscode.ExtensionContext) {
       );
     }),
     vscode.commands.registerCommand("dsh.openInBrowser", async () => {
-      await vscode.env.openExternal(vscode.Uri.parse(dshUrl()));
+      // 0.1.2 起 GET / 必须带启动 token 才能换取签名 cookie:裸地址只会拿到
+      // 401「dsh web authentication required; reopen the URL printed by dsh web」文本页。
+      // 服务器自己启动时会开一次带 token 的浏览器,但那个窗口常被吞掉(或开进已有窗口),
+      // 所以手动打开这条路径也必须带 token,否则「在浏览器打开」只会看到 401。
+      const base = dshUrl();
+      const token = hub.server.launchToken;
+      if (token === undefined || token === "") {
+        output.appendLine(`[openInBrowser] 无启动 token(服务器非本扩展启动),按原地址打开: ${base}`);
+        await vscode.env.openExternal(vscode.Uri.parse(base));
+        return;
+      }
+      const url = `${base}${base.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
+      output.appendLine(`[openInBrowser] 带授权 token 打开: ${base}`);
+      await vscode.env.openExternal(vscode.Uri.parse(url));
     }),
     vscode.commands.registerCommand("dsh.showOutput", () => {
       output.show(true);

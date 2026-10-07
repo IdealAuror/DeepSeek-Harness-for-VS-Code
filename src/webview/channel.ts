@@ -386,7 +386,11 @@ export class ChatChannel {
         // (服务器升级重启后思考强度下拉、@ 提及等随之恢复,无需手动切换会话)
         dispose: this.hub.onStatus((status) => {
           const up = status.serverUp;
-          if (up && !this.lastServerUp) void this.pushFullState();
+          if (up && !this.lastServerUp) {
+            void this.pushFullState();
+            // 服务器(重)上线:补齐会话跟随流(恢复态的旧会话可能从来没被 follow 过)
+            void this.hub.ensureFollowing();
+          }
           this.lastServerUp = up;
           this.post({ kind: "status", status });
         }),
@@ -474,7 +478,12 @@ export class ChatChannel {
       return;
     }
     const current = this.hub.store.currentSessionId;
-    if (current) void this.hub.updateCurrentModel(current);
+    if (current) {
+      // 上面那条分支在「已有选择」(用户刚选过 / 恢复态)时不会走 openSession,
+      // 这里补一次幂等跟随,避免「面板有内容但永远不更新」。
+      void this.hub.ensureFollowing();
+      void this.hub.updateCurrentModel(current);
+    }
     await this.pushFullState();
   }
 

@@ -1,16 +1,17 @@
 # dsh-vscode (local fork)
 
 [`NEXTINDIE/DeepSeek-Harness-for-VS-Code`](https://github.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code)
-的本地 fork，目前承载两处修复。
+的本地 fork，目前承载修复 1–5（详见 `CHANGELOG.md` 与下文）。
 
 - 上游 issue：[#22 缓存命中恒显示 100%](https://github.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code/issues/22)
-- 第二个修复（服务器生命周期）尚未提 issue
+- 其余修复（服务器生命周期、压缩行、插队消息分段、跟随流重挂）尚未提 issue
 
 | | 上游 | 本 fork |
 |---|---|---|
 | 扩展 ID | `Jager.dsh-vscode` | `IdealAuror.dsh-vscode` |
-| 版本 | 0.13.39 | 0.13.41 |
+| 版本 | 0.13.43 | 0.13.44 |
 | 显示名 | DeepSeek Harness for VS Code | … (local fix) |
+| 适配的内核 | 0.1.x | 0.2.0-rc.2（`@deepseek-ai/dsh@latest`） |
 
 publisher 决定扩展 ID，改了才能与上游并存、互不覆盖；版本号高于上游，避免 VS Code 当成回退。
 
@@ -218,6 +219,71 @@ undefined**，调用方随即在消息**下方**新建一段。三个挂载点�
 
 ---
 
+## 修复 5：恢复态的会话能发消息、却永远收不到回程内容
+
+### 症状
+
+重开窗口后接着聊：消息发得出去，服务器也照常把回合跑完（配额、日志、胶囊都在动），
+但面板里的对话**定格不动**。开一个新会话则一切正常。
+
+### 机制
+
+`session/follow` 是挂在 remote.mux **socket** 上的逻辑流。socket 一旦被替换
+（服务器重启、断线重连、webview 重载），流就死了；而 `store.currentSessionId` 还在，
+界面看不出任何异常。旧的 `onError` 只清 `followedSession`、**不清句柄**，
+于是幂等判断 `followedSession === sessionId && followHandle` 会命中那个残留的死句柄，
+把重开挡掉；`onEnd` 则根本没接。
+
+### 修复
+
+- 连接(重)建立时重挂跟随（`hub.ts`，socket 重建后强制重开）；
+- 新增幂等的 `ensureFollowing()`，在服务器(重)上线、webview ready 时各补挂一次；
+- `onEnd` / `onError` 统一走 `drop()` 清句柄，并留一行 `[follow] 会话跟随断开/已打开` 日志便于取证。
+
+### 验证
+
+既有全部测试套件通过（70/70、41/41、16/16、6/6、open-routing、stats-merge、checkpoint-lock）。
+真实场景待验证：本次改动装的 0.13.44 需要 **reload 窗口** 才生效。
+
+---
+
+## 附带修复：0.2.0 内核下的两处适配
+
+### 「DSH: 在浏览器打开」必然 401
+
+0.1.2 起 `GET /` 只认 `dsh web` 打印的启动 token（换签名 cookie），
+而该命令开的是配置里的裸地址 → 浏览器只拿到
+`dsh web authentication required; reopen the URL printed by dsh web` 文本页。
+现在把扩展**已经从启动日志解析到的** token 拼上；服务器非本扩展启动时回退原地址，
+并在输出通道留一行说明。
+
+### `dsh-git-rollback` 被 0.2.0 内核停用
+
+内核 0.2.0 新增运行期 peer 校验，启动时把随包插件关掉：
+
+```
+dsh: disabling profile plugin row "git-rollback": Plugin dsh-git-rollback@0.1.10
+     is incompatible with dsh 0.2.0-rc.2: peerDependencies {"@deepseek-ai/dsh-session":"^0.1.0-rc.6", …}
+```
+
+后果是 `/rollback`、`/redo`、`/undo`、`/checkpoints` 静默消失。
+插件只用到 `ctx.on("session/event")`、`ctx.effect`、`ctx.commands.register`（三者未变），
+纯粹是 peer 范围过时 → 已在 `resources/dsh-git-rollback/package.json` 补上 `|| ^0.2.0-rc.1`。
+
+注意：`^0.2.0-rc.1` 这种写法是必须的 —— `>=0.1.0-rc.6 <0.3.0` 之类的范围
+在 semver 里**不匹配** `0.2.0-rc.2`（带预发布号的版本只被同 `major.minor.patch`
+且自身含预发布号的比较器接受）。npm 上 `dsh-git-rollback` 最新只到 0.1.8 且 peer 同样陈旧，
+所以只能改随包这份。
+
+**更新扩展后必须重装随包插件**（profile 里是 pnpm 的 `file:` 真实副本，不是符号链接）：
+
+```powershell
+node <anchor>\node_modules\@deepseek-ai\dsh\lib\bin.js plugin --profile web add `
+  file:c:/Users/lenovo/.vscode/extensions/idealauror.dsh-vscode-0.13.44/resources/dsh-git-rollback
+```
+
+---
+
 ## 构建
 
 ```powershell
@@ -244,8 +310,39 @@ node tools/test-compaction-row.mjs
 基线：**70 项全部通过，0 失败**（0.13.42 起；此前 69 项——修复 1 删掉那条 100% 快捷分支后
 该套件从 69 变 70，修复 3 又把 2 条断言翻面并新增 4 条，合计 70）。
 
+全套（0.13.44 实测，全部绿）：
+
+| 套件 | 结果 | 备注 |
+|---|---|---|
+| `test-compaction-row.mjs` | 70/70 | |
+| `test-steer-segment.mjs` | 16/16 | |
+| `test-context-overflow-alert.mjs` | 41/41 | |
+| `test-stats-merge.mjs` | 全部符合预期 | 需要先构建 `tmp/ui-harness.js` |
+| `test-agent-error-notice.mjs` | 6/6 | |
+| `test-open-routing.mjs` | 全部符合预期 | |
+| `test-checkpoint-lock.mjs` | DONE | 会 spawn `git` |
+
+`test-stats-merge.mjs` 依赖的夹具要先生成一次（否则报「缺少 tmp/ui-harness.js」）：
+
+```powershell
+node node_modules/esbuild/bin/esbuild src/webview/ui.ts --bundle --platform=browser --format=iife --outfile=tmp/ui-harness.js
+```
+
 本 fork 已把该测试里两处作者本机硬编码路径改为相对路径（`D:/Workspace/vscode/...`），
 否则在别的机器上跑不起来。**不应把这两处改动推回上游。**
+
+## 内核升级后的适配检查
+
+改扩展与内核的对接时，先跑一遍只读探针（会读启动日志里的 token，自动换取 cookie）：
+
+```powershell
+node c:\Users\lenovo\Desktop\deep-reading\.dsh\probe-live-api.mjs
+```
+
+它打的是扩展依赖的那一层 API（`session/list`、`session/page`、`session/projections`、
+`skills/list`、`settings/describe`、`dynamicCordisRunner/inventory` …）。
+已知结论：`subagents/list` 在 0.2.0 **已移除**（扩展已改读 `subagentCatalog` 投影，
+端点只作旧宿主回退，404 属预期）；`schedule/*` 在本 profile 从未注册（无宿主插件，非升级所致）。
 
 ## 安装
 

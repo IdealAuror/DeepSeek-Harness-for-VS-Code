@@ -182,6 +182,15 @@ export class DshHub {
       },
       onError: () => undefined,
     });
+    // 会话跟随同样随 socket 失效,连接(重)建立后必须重新挂上。
+    // 否则「恢复态」的旧会话永远收不到增量:界面能发消息、服务器也照常完成回合,
+    // 但回程没有任何流 —— 表现就是「发消息没反应」(新会话走 openSession 才正常)。
+    const followed = this.followedSession ?? this.store.currentSessionId;
+    if (followed) {
+      this.followedSession = undefined; // 旧句柄已随 socket 失效,强制重开
+      this.followHandle = undefined;
+      void this.startFollow(followed);
+    }
   }
 
   /** 确保服务器 + 客户端 + 初始数据就绪(可并发调用,共享同一 Promise)。 */
@@ -350,6 +359,13 @@ export class DshHub {
     await this.startFollow(sessionId);
   }
 
+  /** 确保当前会话的跟随流存在(幂等):服务器上线 / webview ready 时补挂一次。 */
+  async ensureFollowing(): Promise<void> {
+    const sid = this.store.currentSessionId;
+    if (!sid) return;
+    await this.startFollow(sid);
+  }
+
   /**
    * 额外订阅一个会话的事件流,不改动当前 UI 跟随(remote.mux 支持多路逻辑流)。
    * 0.1.2 起会话事件按地址分路(session/follow),一次性/后台会话(如提交信息生成的
@@ -398,7 +414,17 @@ export class DshHub {
     if (this.followedSession === sessionId && this.followHandle) return;
     this.followHandle?.cancel();
     this.followedSession = sessionId;
-    this.followHandle = this.client.openStream("session/follow", { request: { address: { kind: "session", sessionId }, maxMessages: HISTORY_PAGE_MESSAGES, assistantStream: true } }, {
+    /**
+     * 跟随流失效(end / error 都要清句柄):否则幂等判断
+     * `followedSession === sessionId && followHandle` 会命中残留的死句柄,把重开挡掉。
+     */
+    let handle: RemoteStreamHandle | undefined;
+    const drop = () => {
+      if (this.followedSession === sessionId) this.followedSession = undefined;
+      if (handle !== undefined && this.followHandle === handle) this.followHandle = undefined;
+      this.deps.onLog?.(`[follow] 会话跟随断开: ${sessionId}`);
+    };
+    handle = this.client.openStream("session/follow", { request: { address: { kind: "session", sessionId }, maxMessages: HISTORY_PAGE_MESSAGES, assistantStream: true } }, {
       onItem: (value) => {
         const frame = value as SessionFollowFrame;
         if (frame.type === "snapshot") {
@@ -412,11 +438,12 @@ export class DshHub {
           this.store.handleFollowEvent(sessionId, frame);
         }
       },
-      onError: () => {
-        // 跟随断开:保留现有内容,后续重新打开时再补
-        if (this.followedSession === sessionId) this.followedSession = undefined;
-      },
+      // 跟随断开:保留已渲染内容,由连接重建 / ensureFollowing 负责重开
+      onError: () => drop(),
+      onEnd: () => drop(),
     });
+    this.followHandle = handle;
+    this.deps.onLog?.(`[follow] 会话跟随已打开: ${sessionId}`);
   }
 
   /** 子代理历史:0.1.2 无 subagent.history,改为按子代理地址短暂 follow 取快照。 */
