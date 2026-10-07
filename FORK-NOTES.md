@@ -115,6 +115,60 @@ const ratio = cacheReadTokens / Math.max(promptTokens, cacheReadTokens);
 
 ---
 
+## 修复 3：压缩（/compact）之后，对话里压缩点以上的内容整段消失
+
+### 症状
+
+执行 `/compact` 后，VS Code 面板里只剩一条 `compact · 已压缩 N 条历史记录`，
+上面的历史**全部不见**；刷新网页端（`http://127.0.0.1:3080`）却仍在。
+
+### 证据（实测，不是推测）
+
+持久日志 `~/.dsh/sessions/<ws>/session-*/session.v3.jsonl.zstd` 里 1651 条记录一条没少，
+压缩事务在 seq 1577–1580，检查点记录长这样：
+
+```
+user/message seq=1579
+  source    = {kind:"plugin", plugin:"compact", compactionId:"53316c66-…", sourceCommandId:"cmd-1b3c16b6-3"}
+  surfaceOp = {"op":"replace","startSeq":9,"endSeq":1564}
+```
+
+`surfaceOp=replace` 的语义是**替换宿主的「消息面」**：`dsh-session` 的
+`applySurfacePlan()` 把这个区间的节点从"送给模型的消息序列"里换成本次事件
+（压缩后模型看到的是摘要，不是被压缩的原文）。它**不改写对话记录**。
+官方网页端的行为与之一致 —— `dsh-client-ui-chat` 的 `systemMessageDefinition`：
+
+> Positional replacements advance the effective prompt **without changing historical cards**.
+
+旧实现（`ui.ts` 的 `applySurfaceReplace`）把它当成了"删除锚点落在区间内的所有节点"，
+于是压缩后屏幕上只剩一条压缩行。**数据从未丢失，只是没画出来。**
+
+### 修复
+
+删掉 `applySurfaceReplace` 及调用点：replace 事件不再删除任何节点，
+压缩行作为新增的一条标记出现在对话里，历史原样保留。
+另一个 replace 来源（`dsh-compaction-tool-result-pruner` 的工具结果剪枝）是单节点替换，
+替换事件本身就是带裁剪正文的 `tool/result`，`tool/result` 分支按 `callId` 就地更新那一行，
+不需要（也不应该）删旧节点。
+
+### 验证
+
+- `node tools/test-compaction-row.mjs`：修复前 **64/70**（红的 6 条正是"压缩后历史不可见"），
+  修复后 **70/70**。测试头部与 6 条断言已按「replace 不清历史」改写。
+- 真实数据端到端：把本机这条会话的**全部 1982 条真实记录**重放进修复后的
+  `dist/webview/ui.js`（jsdom），结果是 `压缩前用户消息 12 条 / 采样正文命中 11/11`、
+  `.msg-user=14`、压缩行 `.cmd-row=1` —— 包括最早那句「帮我安装 mattpoc…」都可见。
+- 其余套件：`test-context-overflow-alert` 41/41、`test-open-routing` 全部符合预期。
+  `test-agent-error-notice`（需要 spawn 子进程）、`test-checkpoint-lock`（脚本自身 helper 返回非字符串）、
+  `test-stats-merge`（缺生成的 `tmp/ui-harness.js`）在本机为环境性失败，与本次改动无关。
+
+### 与上游的差异
+
+上游 0.13.39 仍然按区间折叠（其 CHANGELOG 里写作"被压缩的区间在对话中折叠"）。
+本 fork 已改为保留历史 —— 这是**刻意的行为分歧**，值得单独提一个上游 issue。
+
+---
+
 ## 构建
 
 ```powershell
@@ -138,7 +192,8 @@ $env:DSH_JSDOM_ENTRY = "$PWD\node_modules\jsdom\lib\api.js"
 node tools/test-compaction-row.mjs
 ```
 
-基线：**69 项全部通过，0 失败**。
+基线：**70 项全部通过，0 失败**（0.13.42 起；此前 69 项——修复 1 删掉那条 100% 快捷分支后
+该套件从 69 变 70，修复 3 又把 2 条断言翻面并新增 4 条，合计 70）。
 
 本 fork 已把该测试里两处作者本机硬编码路径改为相对路径（`D:/Workspace/vscode/...`），
 否则在别的机器上跑不起来。**不应把这两处改动推回上游。**
