@@ -1,5 +1,5 @@
 {
-  "displayName": "VS Code için DeepSeek Harness",
+  "displayName": "VS Code için DeepSeek Harness (local fix)",
   "description": "DeepSeek Harness'ı doğrudan VS Code'da kullanın: ikincil kenar çubuğu sohbet paneli, yerleşik @dsh sohbet katılımcısı (@ dosya/oturum/ajan bahsetmeleri), çok modlu görsel ekleri, model/ön ayar/izin/düşünme derinliği kontrolleri, alt ajanlar, Cordis eklenti onayları ve turn düzeyinde Git geri alma (bir turu geri al, kontrol noktalarını geri yükle).",
   "cmd.openChat.title": "DSH: Yerleşik Sohbeti Aç (@dsh)",
   "cmd.openChatWindow.title": "DSH: Bağımsız Sohbet Penceresini Aç",

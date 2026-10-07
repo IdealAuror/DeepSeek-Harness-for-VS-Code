@@ -30,7 +30,7 @@ async function loadJsdom() {
 }
 
 const { JSDOM } = await loadJsdom();
-const bundle = fs.readFileSync("D:/Workspace/vscode/dist/webview/ui.js", "utf8");
+const bundle = fs.readFileSync(process.env.DSH_BUNDLE ?? "dist/webview/ui.js", "utf8");
 
 function boot({ lang = "zh-cn" } = {}) {
   const dom = new JSDOM("<!DOCTYPE html><html><body><div id=\"app\"></div></body></html>", {
@@ -362,7 +362,7 @@ const wire = (event) => ({ event });
 
 // ---------- 10. 头部工具栏配色:跟随 VS Code 主题(不再整排主按钮蓝) ----------
 {
-  const css = fs.readFileSync("D:/Workspace/vscode/media/chat.css", "utf8");
+  const css = fs.readFileSync("media/chat.css", "utf8");
   const block = (pattern) => {
     const m = pattern.exec(css);
     if (!m) return "";

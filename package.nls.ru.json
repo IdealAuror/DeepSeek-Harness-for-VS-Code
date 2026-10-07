@@ -1,5 +1,5 @@
 {
-  "displayName": "DeepSeek Harness for VS Code",
+  "displayName": "DeepSeek Harness for VS Code (local fix)",
   "description": "Используйте DeepSeek Harness прямо в VS Code: панель чата на дополнительной боковой панели, встроенный участник чата @dsh (упоминания @ файл/сессия/агент), мультимодальные вложения изображений, переключатели модели/пресета/разрешений/глубины мышления, субагенты, одобрения плагинов Cordis и откат Git на уровне хода (отменить ход, восстановить контрольные точки).",
   "cmd.openChat.title": "DSH: открыть встроенный чат (@dsh)",
   "cmd.openChatWindow.title": "DSH: открыть отдельное окно чата",

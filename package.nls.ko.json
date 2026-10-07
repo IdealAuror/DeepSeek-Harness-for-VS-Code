@@ -1,5 +1,5 @@
 {
-  "displayName": "VS Code용 DeepSeek Harness",
+  "displayName": "VS Code용 DeepSeek Harness (local fix)",
   "description": "VS Code에서 DeepSeek Harness를 직접 사용: 보조 사이드바 채팅 패널, @dsh 내장 채팅 참여자(@ 파일/세션/에이전트 멘션 지원), 멀티모달 이미지 첨부, 모델/프리셋/권한/사고 깊이 전환, 서브에이전트, Cordis 플러그인 승인, 턴 수준 Git 롤백(턴 변경 취소, 체크포인트 복원).",
   "cmd.openChat.title": "DSH: 기본 채팅 열기 (@dsh)",
   "cmd.openChatWindow.title": "DSH: 독립 채팅 창 열기",

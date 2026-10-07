@@ -1,5 +1,5 @@
 {
-  "displayName": "DeepSeek Harness لـ VS Code",
+  "displayName": "DeepSeek Harness لـ VS Code (local fix)",
   "description": "استخدم DeepSeek Harness مباشرة في VS Code: لوحة دردشة الشريط الجانبي الثانوي، مشارك الدردشة المدمج @dsh (إشارات @ ملف/جلسة/وكيل)، مرفقات الصور متعددة الوسائط، تبديل النموذج/الإعداد المسبق/الأذونات/عمق التفكير، الوكلاء الفرعيون، موافقات إضافة Cordis، وتراجع Git على مستوى الجولة (تراجع عن الجولة، استعادة نقاط التحقق).",
   "cmd.openChat.title": "DSH: فتح الدردشة المدمجة (@dsh)",
   "cmd.openChatWindow.title": "DSH: فتح نافذة الدردشة المستقلة",

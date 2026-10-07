@@ -1,9 +1,9 @@
 {
   "name": "dsh-vscode",
-  "displayName": "DeepSeek Harness for VS Code",
-  "description": "Use DeepSeek Harness directly in VS Code: secondary sidebar chat panel, @dsh built-in chat participant with @ file/session/agent mentions, multimodal image attachments, model/preset/permission/thinking controls, subagents, Cordis plugin approvals, and turn-level Git rollback (undo one turn, restore checkpoints).",
-  "version": "0.13.39",
-  "publisher": "Jager",
+  "displayName": "DeepSeek Harness for VS Code (local fix)",
+  "description": "Use DeepSeek Harness directly in VS Code: secondary sidebar chat panel, @dsh built-in chat participant with @ file/session/agent mentions, multimodal image attachments, model/preset/permission/thinking controls, subagents, Cordis plugin approvals, and turn-level Git rollback (undo one turn, restore checkpoints). Local fork: fixes the token pill reporting a cached-hit rate of 100% (NEXTINDIE/DeepSeek-Harness-for-VS-Code#22).",
+  "version": "0.13.40",
+  "publisher": "IdealAuror",
   "icon": "media/icon.png",
   "license": "MIT",
   "repository": {

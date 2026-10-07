@@ -1,5 +1,5 @@
 {
-  "displayName": "DeepSeek Harness สำหรับ VS Code",
+  "displayName": "DeepSeek Harness สำหรับ VS Code (local fix)",
   "description": "ใช้ DeepSeek Harness ใน VS Code ได้โดยตรง: แผงแชทแถบด้านข้างรอง, ผู้เข้าร่วมแชทในตัว @dsh (การอ้างอิง @ ไฟล์/เซสชัน/เอเจนต์), ไฟล์แนบรูปภาพมัลติมอดัล, การสลับโมเดล/พรีเซ็ต/สิทธิ์/ความลึกของการคิด, เอเจนต์ย่อย, การอนุมัติปลั๊กอิน Cordis และ Git ย้อนกลับระดับเทิร์น (เลิกทำเทิร์น, คืนค่าจุดตรวจสอบ)",
   "cmd.openChat.title": "DSH: เปิดแชทในตัว (@dsh)",
   "cmd.openChatWindow.title": "DSH: เปิดหน้าต่างแชทแบบสแตนด์อโลน",

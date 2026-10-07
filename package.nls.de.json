@@ -1,5 +1,5 @@
 {
-  "displayName": "DeepSeek Harness für VS Code",
+  "displayName": "DeepSeek Harness für VS Code (local fix)",
   "description": "DeepSeek Harness direkt in VS Code nutzen: Sekundär-Sidebar-Chat, integrierter @dsh Chat-Teilnehmer (@ Datei-/Session-/Agent-Erwähnungen), multimodale Bildanhänge, Modell/Preset/Berechtigung/Denktiefe, Subagenten, Cordis-Plugin-Genehmigungen und Turn-Level-Git-Rollback (Turn rückgängig machen, Checkpoints wiederherstellen).",
   "cmd.openChat.title": "DSH: Integrierten Chat öffnen (@dsh)",
   "cmd.openChatWindow.title": "DSH: Eigenständiges Chat-Fenster öffnen",
