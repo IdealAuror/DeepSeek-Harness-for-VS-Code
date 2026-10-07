@@ -4018,6 +4018,27 @@ function findAssistantTail(): NodeState | undefined {
 }
 
 /**
+ * 追加新内容(思考 / 文本 / 工具行)时该挂载的助手段:与 `findAssistantTail()` 的区别是
+ * **遇到用户消息就停下**。
+ *
+ * 运行中发消息(插队 / 排队)时,宿主的日志顺序是「助手段 → 用户消息 → 同一回合的助手段」。
+ * 而节点挂载靠"从尾往前找最后一个 assistant 节点",用户消息只是个兄弟节点、不会切断查找,
+ * 于是消息之后产生的行会被塞回**消息上方**那个旧节点 —— 界面上的表现就是新内容出现在
+ * 气泡上面、自己刚发的那条消息永远停在对话最底下(网页端按事件顺序渲染,不会这样)。
+ * 这里把用户消息当作分段边界:返回 undefined,调用方就会在消息**下方**新建一段。
+ *
+ * 注意 `findAssistantTail()` 本身保持原样(段尾汇总、工具行刷新仍需要"最近一个助手段")。
+ */
+function findOpenAssistantTail(): NodeState | undefined {
+  for (let i = state.nodes.length - 1; i >= 0; i--) {
+    const node = state.nodes[i];
+    if (node.kind === "assistant") return node;
+    if (node.kind === "user" || node.kind === "queued") return undefined;
+  }
+  return undefined;
+}
+
+/**
  * 消费一次模型流增量。
  * 两个来源共用这条路径:0.1.2 的 `assistant/chunk` 会话事件,以及 0.1.5 的
  * assistant-stream 瞬态帧(宿主已在 sessionStore 里翻译为同构的 data)。
@@ -4051,7 +4072,8 @@ function beginAssistantBlock(turn: number, step: number, index: number, blockTyp
   state.streamBlock = null;
   state.streamKey = null;
   // 网页版布局:一个回合一个 assistant 节点,各步骤的文本块追加到同一节点
-  let assistant = findAssistantTail();
+  // (回合内出现用户消息={插队/排队}时分段:见 findOpenAssistantTail)
+  let assistant = findOpenAssistantTail();
   if (!assistant || assistant.turn !== turn) {
     assistant = { kind: "assistant", key: `a:${turn}:${state.nodes.length}`, el: null, blocks: [], turn };
     appendNode(assistant);
@@ -4829,7 +4851,7 @@ function handleEvent(wire: WireEvent) {
         break;
       }
       const callTurn = typeof row.turn === "number" ? row.turn : state.currentStreamTurn;
-      let assistant = findAssistantTail();
+      let assistant = findOpenAssistantTail();
       if (!assistant || (callTurn !== undefined && assistant.turn !== callTurn)) {
         assistant = { kind: "assistant", key: `a:${callTurn ?? state.nodes.length}:${state.nodes.length}`, el: null, blocks: [], turn: callTurn ?? 0, tools: [] };
         appendNode(assistant);
@@ -5013,7 +5035,8 @@ function handleEvent(wire: WireEvent) {
         break;
       }
       // 网页端工作流:工具行内联插入到所属思考块之后(Think → 工具 → Think → 答案),不再使用独立工具合集
-      let assistant = findAssistantTail();
+      // (回合内出现过用户消息时分段:findOpenAssistantTail 会新建一段,避免插到消息上方)
+      let assistant = findOpenAssistantTail();
       const callTurn = typeof data?.turn === "number" ? data.turn : state.currentStreamTurn;
       if (!assistant || (callTurn !== undefined && assistant.turn !== callTurn)) {
         assistant = { kind: "assistant", key: `a:${callTurn ?? state.nodes.length}:${state.nodes.length}`, el: null, blocks: [], turn: callTurn ?? 0, tools: [] };
