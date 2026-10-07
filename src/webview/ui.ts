@@ -6387,11 +6387,17 @@ function formatTokensPerSecond(tps: number): string {
  * 缓存命中占比(网页端 formatCacheHitPercent 同款):四舍五入到整数,
  * 但**绝不把部分命中显示成 100%** —— 会逐位增加小数位直到显示值小于 100;
  * 完全没有提示词输入时返回 null。
+ *
+ * 修复(NEXTINDIE/DeepSeek-Harness-for-VS-Code#22):这里曾有一条
+ * `if (promptTokens - cacheReadTokens <= 0) return "100";` 的快捷分支,
+ * 与本函数自己的文档相矛盾 —— 任何 `cacheReadTokens >= promptTokens` 的输入
+ * (窗口内只剩高命中的近期请求、或分母取自小于缓存读取的子集)都会被无条件
+ * 断言成 100%,不做一致性校验。删除后一律走比例计算:真实的满命中仍显示 100,
+ * 部分命中显示带小数的真实值。分母另取下限,避免输入不一致时算出 >100%。
  */
 function cacheHitPercentText(cacheReadTokens: number, promptTokens: number): string | null {
   if (!Number.isFinite(cacheReadTokens) || !Number.isFinite(promptTokens) || promptTokens <= 0) return null;
-  if (promptTokens - cacheReadTokens <= 0) return "100";
-  const ratio = cacheReadTokens / promptTokens;
+  const ratio = cacheReadTokens / Math.max(promptTokens, cacheReadTokens);
   for (let places = 0; places <= 4; places += 1) {
     const scale = 10 ** places;
     const rounded = Math.round(ratio * 100 * scale) / scale;
