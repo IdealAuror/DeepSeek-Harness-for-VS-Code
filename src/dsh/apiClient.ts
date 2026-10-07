@@ -869,11 +869,17 @@ export class DshApiClient {
     });
   }
 
-  // ---------- 定时任务(0.1.7 新增 schedule/*;未启用定时任务插件的宿主返回 gateway/method-unavailable) ----------
+  // ---------- 定时任务(0.1.7 新增 schedule/*;未启用定时任务插件的宿主返回 404/不可用) ----------
+  //
+  // 0.2.0 起这三个端点的入参是**具名 request 参数**(typert 描述符:
+  // `schedule/list: (request: ScheduleListRequest)`),必须包一层 `request`。
+  // 之前发的是扁平 `{sessionId}`:宿主没装日程插件时只表现为 404 看不出问题,
+  // 一旦启用 @deepseek-ai/dsh-experimental-schedule-bundle 就会报
+  // `args fields do not match the descriptor: missing "request"; unexpected "sessionId"`。
 
   /** 某会话内的任务列表(不激活 Agent)。 */
   scheduleList(sessionId: string) {
-    return this.request<ScheduleRecord[]>("schedule/list", { sessionId });
+    return this.request<ScheduleRecord[]>("schedule/list", { request: { sessionId } });
   }
   /** 全进程保留任务目录(带绑定会话与状态),对应网页端「自动化任务」页。 */
   scheduleCatalog() {
@@ -881,11 +887,11 @@ export class DshApiClient {
   }
   /** 删除任务(按原会话绑定);已不存在时返回 deleted:false,不抛错。 */
   scheduleDelete(sessionId: string, id: string) {
-    return this.request<ScheduleDeleteValue>("schedule/delete", { sessionId, id });
+    return this.request<ScheduleDeleteValue>("schedule/delete", { request: { sessionId, id } });
   }
   /** 某任务的运行记录(新→旧分页,limit 1-100)。 */
   scheduleHistory(request: ScheduleHistoryRequest) {
-    return this.request<ScheduleHistoryValue>("schedule/history", { ...request });
+    return this.request<ScheduleHistoryValue>("schedule/history", { request: { ...request } });
   }
 
   // ---------- 逐消息反馈(0.1.7 新增 messageFeedback/*;put 以 ifVersion 做 CAS) ----------
