@@ -53,6 +53,8 @@
   "hub.startFailed": "Tidak dapat memulai server DSH: {detail}. Jalankan \"dsh web\" secara manual, atau tingkatkan dsh.autoStartTimeoutSec dan coba lagi.",
   "hub.startRestrictedHint": "Pembuatan proses tampaknya diblokir oleh lingkungan saat ini (0xC0000142/EPERM). Jika VS Code diluncurkan dari sesi DSH atau terminal terbatas, mulai VS Code secara normal, atau atur izin sesi ke danger-full-access.",
   "hub.serverNoResponse": "Server DSH di {url} tidak merespons",
+  "hub.serverForeignNoToken": "Server DSH sudah berjalan di {url}, tetapi dijalankan di luar ekstensi ini sehingga token peluncuran tidak dapat dibaca. Hentikan server tersebut terlebih dahulu, lalu jalankan \"DSH: Mulai Server\" (atau muat ulang jendela ini) agar ekstensi dapat memulai dan mengotorisasi instansnya sendiri.",
+  "hub.serverLogLocked": "Tidak dapat menulis log server DSH \"{file}\" ({code}). Kemungkinan proses server DSH lain masih memegang berkas ini; hentikan lalu coba lagi.",
   "hub.sendFailed": "Gagal mengirim: {message}",
   "hub.agentError": "Turn ini gagal: {message}",
   "hub.approvalGone": "Persetujuan tidak lagi tertunda",

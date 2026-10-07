@@ -54,6 +54,8 @@
   "hub.startFailed": "Cannot start the DSH server: {detail}. Run \"dsh web\" manually, or increase dsh.autoStartTimeoutSec and retry.",
   "hub.startRestrictedHint": "Process creation appears to be blocked by the current environment (0xC0000142/EPERM). If VS Code was launched from a DSH session or a restricted terminal, start VS Code normally, or set the session permission to danger-full-access.",
   "hub.serverNoResponse": "DSH server at {url} is not responding",
+  "hub.serverForeignNoToken": "A DSH server is already running at {url}, but it was started outside this extension, so no launch token could be read. Stop that server first, then run \"DSH: Start Server\" (or reload this window) so the extension can start and authorize its own instance.",
+  "hub.serverLogLocked": "Cannot write the DSH server log \"{file}\" ({code}). Another DSH server is probably still running and holding this file; stop it and try again.",
   "hub.sendFailed": "Send failed: {message}",
   "hub.agentError": "This turn failed: {message}",
   "hub.modelNoImages": "The current model \"{model}\" does not support image input: remove the image attachments, or switch to an image-capable model via the model button at the top-right of the composer.",

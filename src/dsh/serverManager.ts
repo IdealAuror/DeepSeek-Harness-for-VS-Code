@@ -99,11 +99,42 @@ export class ServerManager {
     }
   }
 
+  /**
+   * 探测运行中的服务器是否要求授权(0.1.2 起 /api 需要签名 cookie)。
+   * 判定依据是「带 token 的请求达到鉴权层」而不是探测本身:401 既证明服务器在,
+   * 也证明它不会接受我们无 token 的请求。旧版(0.1.1-及更早)返回 200/303,不需要 token。
+   * 仅在「服务器在线但本地没有 token」这一罕见分支调用,失败时保守返回 true。
+   */
+  private async requiresExternalToken(): Promise<boolean> {
+    try {
+      const res = await fetch(this.cfg.url + "/", {
+        signal: AbortSignal.timeout(2500),
+        headers: { accept: "text/html" },
+      });
+      return res.status === 401;
+    } catch {
+      // 探测失败说明服务器状态不稳定;按「不可用」处理,交给上层给出提示
+      return true;
+    }
+  }
+
   /** 确保服务器在运行;必要时按配置自动启动。返回是否可用。 */
   async ensure(): Promise<{ up: boolean; message?: string }> {
     if (await this.isUp()) {
       // 服务器已在线(可能是旧版或外部启动):顺手从常见日志补取授权 token
       this.refreshLaunchToken();
+      if (!this.authToken && (await this.requiresExternalToken())) {
+        // 服务器在跑,但要授权而我们没有 token —— 典型场景是用户自己(或 DSH 桌面端)先在
+        // 同一端口起了 `dsh web`。此时绝不能再去启动我们自己的实例:端口已被占用,而且对方
+        // 持有启动日志句柄,只会以 EBUSY 收场,最后把一个没有可读原因的空白面板留给用户。
+        // 直接失败,把可操作的提示交给上层 onNotice。
+        const msg =
+          this.cfg.t?.("hub.serverForeignNoToken", { url: this.cfg.url }) ??
+          `A DSH server is already running at ${this.cfg.url}, but it was started outside this extension, so no launch token could be read. Stop that server first, then run "DSH: Start Server" (or reload this window) so the extension can start and authorize its own instance.`;
+        this.log(`服务器在线但缺少授权 token(外部启动),不再尝试自启: ${this.cfg.url}`);
+        this.setStatus({ up: false, starting: false, message: msg });
+        return { up: false, message: msg };
+      }
       this.setStatus({ up: true, starting: false });
       return { up: true };
     }
@@ -158,13 +189,33 @@ export class ServerManager {
     let exitInfo = "";
     // 把子进程输出重定向到日志文件(不丢失 npx/dsh 的报错;也避免沙箱下的管道限制)
     const logFile = join(tmpdir(), "dsh-vscode-server.log");
+    let logStale = false;
     try {
       unlinkSync(logFile);
-    } catch {
-      // 首次运行没有旧日志,忽略
+    } catch (error) {
+      // 首次运行没有旧日志属于正常情况;但 Windows 上「文件被占用」也会走到这里
+      // (典型场景:另一个 dsh 服务器进程仍持有该日志句柄)。区分开来,否则下面的
+      // openSync 会抛出一个看不出原因的 EBUSY。
+      const code = (error as { code?: string } | undefined)?.code;
+      logStale = code !== undefined && code !== "ENOENT";
+      if (logStale) this.log(`旧启动日志无法删除(${code}),可能是另一个 dsh 服务器仍持有它: ${logFile}`);
     }
     this.log(`启动日志: ${logFile}`);
-    const fd = openSync(logFile, "a");
+    let fd: number;
+    try {
+      fd = openSync(logFile, "a");
+    } catch (error) {
+      // 日志文件不可写时不要把整个启动流程丢进下面的 spawn 兜底分支(那里会把
+      // 文件系统错误误报成 spawn 异常)。这里给出可操作的原因。
+      const code = (error as { code?: string } | undefined)?.code ?? "unknown";
+      const detail =
+        this.cfg.t?.("hub.serverLogLocked", { file: logFile, code }) ??
+        `Cannot write the DSH server log "${logFile}" (${code}).${logStale ? " Another DSH server is probably still running and holding this file; stop it and try again." : ""}`;
+      this.starting = false;
+      this.setStatus({ starting: false, up: false, message: detail });
+      this.log(detail);
+      return { ok: false, detail };
+    }
     try {
       if (launcher.kind === "direct") {
         // 首次安装(如已安装则秒过),随后 node 直接运行包入口,全程无 cmd shim

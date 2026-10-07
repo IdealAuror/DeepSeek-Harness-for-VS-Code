@@ -53,6 +53,8 @@
   "hub.startFailed": "DSH サーバーを起動できません: {detail}。手動で「dsh web」を実行するか、dsh.autoStartTimeoutSec を増やして再試行してください。",
   "hub.startRestrictedHint": "プロセス作成が現在の環境によってブロックされているようです(0xC0000142/EPERM)。VS Code を DSH セッションや制限付きターミナルから起動した場合は、VS Code を通常どおり起動するか、セッションの権限を danger-full-access に設定してください。",
   "hub.serverNoResponse": "{url} の DSH サーバーが応答していません",
+  "hub.serverForeignNoToken": "DSH サーバーは既に {url} で実行中ですが、この拡張機能の外部で起動されたため起動トークンを読み取れません。先にそのサーバーを停止し、「DSH: サーバーを起動」を実行する(またはこのウィンドウを再読み込みする)と、拡張機能が自身のインスタンスを起動して認証できます。",
+  "hub.serverLogLocked": "DSH サーバーのログ「{file}」に書き込めません({code})。別の DSH サーバープロセスがこのファイルを保持している可能性があります。停止してから再試行してください。",
   "hub.sendFailed": "送信に失敗しました: {message}",
   "hub.agentError": "このターンは失敗しました: {message}",
   "hub.approvalGone": "承認は既に保留中ではありません",

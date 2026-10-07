@@ -54,6 +54,8 @@
   "hub.startFailed": "無法啟動 DSH 伺服器:{detail}。請手動執行 \"dsh web\",或調高 dsh.autoStartTimeoutSec 後重試。",
   "hub.startRestrictedHint": "目前環境似乎封鎖了處理程序的建立 (0xC0000142/EPERM)。如果 VS Code 是從 DSH 工作階段或受限制的終端機啟動,請以正常方式啟動 VS Code,或將工作階段權限設為 danger-full-access。",
   "hub.serverNoResponse": "{url} 的 DSH 伺服器沒有回應",
+  "hub.serverForeignNoToken": "已有一個 DSH 伺服器執行在 {url},但它不是由本擴充功能啟動的,因此讀不到啟動 token。請先停止該伺服器,再執行「DSH: 啟動伺服器」(或重新載入本視窗),讓擴充功能啟動並授權它自己的實例。",
+  "hub.serverLogLocked": "無法寫入 DSH 伺服器日誌「{file}」({code})。很可能仍有另一個 DSH 伺服器處理序占用該檔案,請先停止它再重試。",
   "hub.sendFailed": "傳送失敗:{message}",
   "hub.agentError": "本回合失敗: {message}",
   "hub.modelNoImages": "目前模型「{model}」不支援圖片輸入:請先移除圖片附件,或點擊輸入框右上角的模型按鈕,切換為支援圖片的模型。",

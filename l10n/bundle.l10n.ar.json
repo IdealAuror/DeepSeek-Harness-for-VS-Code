@@ -53,6 +53,8 @@
   "hub.startFailed": "تعذّر تشغيل خادم DSH: {detail}. شغّل \"dsh web\" يدويًا، أو زد قيمة dsh.autoStartTimeoutSec وأعد المحاولة.",
   "hub.startRestrictedHint": "يبدو أن إنشاء العمليات محظور بواسطة البيئة الحالية (0xC0000142/EPERM). إذا تم تشغيل VS Code من جلسة DSH أو من طرفية مقيدة، فابدأ VS Code بشكل عادي، أو اضبط صلاحية الجلسة على danger-full-access.",
   "hub.serverNoResponse": "خادم DSH على {url} لا يستجيب",
+  "hub.serverForeignNoToken": "يوجد بالفعل خادم DSH يعمل على {url}، لكنه بدأ خارج هذا الامتداد، لذا تعذّر قراءة رمز التشغيل. أوقف ذلك الخادم أولاً، ثم نفّذ \"DSH: بدء الخادم\" (أو أعد تحميل هذه النافذة) ليتمكن الامتداد من تشغيل نسخته الخاصة وتفويضها.",
+  "hub.serverLogLocked": "تعذّرت كتابة سجل خادم DSH \"{file}\" ({code}). من المحتمل أن عملية خادم DSH أخرى ما زالت تحتجز هذا الملف؛ أوقفها ثم أعد المحاولة.",
   "hub.sendFailed": "فشل الإرسال: {message}",
   "hub.agentError": "فشل هذا الدور: {message}",
   "hub.approvalGone": "لم تعد الموافقة معلّقة",

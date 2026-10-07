@@ -53,6 +53,8 @@
   "hub.startFailed": "Não foi possível iniciar o servidor DSH: {detail}. Execute \"dsh web\" manualmente ou aumente dsh.autoStartTimeoutSec e tente novamente.",
   "hub.startRestrictedHint": "A criação de processos parece estar bloqueada pelo ambiente atual (0xC0000142/EPERM). Se o VS Code foi iniciado a partir de uma sessão DSH ou de um terminal restrito, inicie o VS Code normalmente ou defina a permissão da sessão como danger-full-access.",
   "hub.serverNoResponse": "O servidor DSH em {url} não está respondendo",
+  "hub.serverForeignNoToken": "Já existe um servidor DSH em execução em {url}, mas ele foi iniciado fora desta extensão, portanto não foi possível ler o token de inicialização. Pare esse servidor primeiro e execute «DSH: Iniciar Servidor» (ou recarregue esta janela) para que a extensão inicie e autorize a própria instância.",
+  "hub.serverLogLocked": "Não é possível gravar o log do servidor DSH «{file}» ({code}). Provavelmente outro processo de servidor DSH ainda mantém esse arquivo; pare-o e tente novamente.",
   "hub.sendFailed": "Falha ao enviar: {message}",
   "hub.agentError": "Este turno falhou: {message}",
   "hub.approvalGone": "A aprovação não está mais pendente",

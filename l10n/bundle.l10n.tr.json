@@ -53,6 +53,8 @@
   "hub.startFailed": "DSH sunucusu başlatılamıyor: {detail}. \"dsh web\" komutunu elle çalıştırın ya da dsh.autoStartTimeoutSec değerini artırıp yeniden deneyin.",
   "hub.startRestrictedHint": "İşlem oluşturma, geçerli ortam tarafından engellenmiş gibi görünüyor (0xC0000142/EPERM). VS Code bir DSH oturumundan ya da kısıtlı bir terminalden başlatıldıysa VS Code'u normal şekilde başlatın veya oturum iznini danger-full-access olarak ayarlayın.",
   "hub.serverNoResponse": "{url} adresindeki DSH sunucusu yanıt vermiyor",
+  "hub.serverForeignNoToken": "{url} adresinde zaten bir DSH sunucusu çalışıyor, ancak bu uzantının dışında başlatıldığı için başlatma token'ı okunamadı. Önce o sunucuyu durdurun, ardından uzantının kendi örneğini başlatıp yetkilendirebilmesi için \"DSH: Sunucuyu Başlat\" komutunu çalıştırın (veya bu pencereyi yeniden yükleyin).",
+  "hub.serverLogLocked": "DSH sunucu günlüğü \"{file}\" yazılamıyor ({code}). Muhtemelen başka bir DSH sunucu süreci bu dosyayı tutuyor; durdurup yeniden deneyin.",
   "hub.sendFailed": "Gönderme başarısız oldu: {message}",
   "hub.agentError": "Bu tur başarısız oldu: {message}",
   "hub.approvalGone": "Onay artık beklemede değil",
