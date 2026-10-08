@@ -1,7 +1,7 @@
 # dsh-vscode (local fork)
 
 [`NEXTINDIE/DeepSeek-Harness-for-VS-Code`](https://github.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code)
-的本地 fork，目前承载修复 1–5（详见 `CHANGELOG.md` 与下文）。
+的本地 fork，目前承载修复 1–6（详见 `CHANGELOG.md` 与下文）。
 
 - 上游 issue：[#22 缓存命中恒显示 100%](https://github.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code/issues/22)
 - 其余修复（服务器生命周期、压缩行、插队消息分段、跟随流重挂）尚未提 issue
@@ -9,7 +9,7 @@
 | | 上游 | 本 fork |
 |---|---|---|
 | 扩展 ID | `Jager.dsh-vscode` | `IdealAuror.dsh-vscode` |
-| 版本 | 0.13.43 | 0.13.44 |
+| 版本 | 0.13.43 | 0.13.46 |
 | 显示名 | DeepSeek Harness for VS Code | … (local fix) |
 | 适配的内核 | 0.1.x | 0.2.0-rc.2（`@deepseek-ai/dsh@latest`） |
 
@@ -246,6 +246,33 @@ undefined**，调用方随即在消息**下方**新建一段。三个挂载点�
 真实场景待验证：本次改动装的 0.13.44 需要 **reload 窗口** 才生效。
 
 ---
+
+## 修复 6：服务器"启动 / 停止 / 连接"三条链路上的四个坑（0.13.46）
+
+### 症状（都实际发生过）
+- 启动弹框：**「无法启动 DSH 服务器: 服务器进程在就绪前退出(exit code=1 signal=none)…日志尾部: 系统找不到指定的路径。」**
+- 或：「**无法写入 DSH 服务器日志「…\\Temp\\dsh-vscode-server.log」(EBUSY)**」
+- 或：服务器明明在监听、浏览器也连得上，面板却报**「DSH 服务器在 http://127.0.0.1:3080 无响应」**；同一时刻日志是 `serverUp=true muxConnected=false`，紧接着三条 `[follow] 会话跟随已打开`
+- 服务图半死（`session/follow: active Service "sessionController" is unavailable`）时，命令面板的「停止服务器」**拒绝执行**，只能去任务管理器杀进程
+
+### 根因
+1. **启动器引号**：`shellCommand()` 对 `[file, ...args].map(quote)` 逐项加引号，但 `resolveLauncher()` 把 `npx.cmd --yes @deepseek-ai/dsh@latest` **整串**当成 `file` 返回 → 整串被引号包住 → cmd 当路径找 → 「系统找不到指定的路径。」→ exit 1。npx / npm exec 两条兜底**必然失败**。
+2. **固定名日志**：`start()` 先 `unlinkSync(logFile)` 再 `openSync(logFile, "a")`，文件名恒为 `dsh-vscode-server.log`。上一台服务器（或它的 cmd 重定向句柄）还持有该文件时 → `EBUSY` → 启动流程直接返回失败。
+3. **停不掉外部服务器**：`stop()` 只认 `this.startedByUs && this.child?.pid`；窗口重载/手动 `dsh web`/上一实例留下的服务器一律"不是本扩展启动"，于是**面板提示无响应时你无法从 UI 里救**。
+4. **ping 抢跑**：`doEnsureReady()` 的顺序是 `ping()` →（成功后）`startStreams()`，而 `ping` 是走 `remote.mux` 的请求。`server.ensure()` 只做 HTTP 探活，HTTP 通过 ≠ WS 已握手 → 那几百毫秒里 ping 必失败 → 报"无响应/启动失败"。
+   附带两处：`errorMessage()` 把 `gateway/service-unavailable` 归进笼统的 serverNoResponse；服务器启动时默认自己开一次浏览器，时机不可控。
+
+### 修复
+1. `ShellLauncher` 增加 `args?: string[]`；npx/npm 返回 `{command, args}`；`start()` 用 `shellCommand(launcher.command, [...(launcher.args ?? []), "web", "--no-open"])`。新增 `splitCommandLine()` 支持在 `dsh.command` 里写带参数的命令。
+2. 启动日志改为 `dsh-vscode-server-${Date.now().toString(36)}.log`（不再 unlink），并在 `captureLaunchToken()` 成功后调用新的 `publishLaunchToken()` 把 `dsh web: <url>?token=…` 镜像写回固定名文件（写不进去就跳过）。
+3. `stop()`：有子进程照旧 `taskkill /T /F`；否则用新增的 `findListenerPid()`（`netstat -ano -p tcp` 解析 `LISTENING` 行的 PID，POSIX 走 `lsof`）找到监听进程再 `killTree()`。原 kill 逻辑抽成模块级 `killTree()`。
+4. `doEnsureReady()`：`startStreams()` 提到 ping **之前**；新增 `pingWithRetry()`（默认 8 次 × 400ms，`DshAuthError` 立即抛出交给补 token 路径，其余退避重试，首次失败打 `[ping] …重试` 日志）。`errorMessage()` 为 `gateway/service-unavailable` 增加专门文案。服务器一律 `--no-open`；新增设置 `dsh.openBrowserOnStartup`（默认 false），开启后由 `channel.maybeOpenBrowser()` 用 `vscode.env.openExternal` 打开带 token 的地址，同一 token 只开一次。
+
+### 验证
+- `npm run typecheck`（`tsc --noEmit`）通过；`node esbuild.mjs` 构建、`vsce package` 打包后重装，安装目录 `dist/extension.js` 与构建产物 SHA256 一致。
+- `findListenerPid()` 的解析逻辑用真实 `netstat` 输出单独跑过：`3080 → PID 30836` 正确。
+- 现场证据：修复生效后的第一次启动日志名为 `dsh-vscode-server-muyu15wx.log`（旧代码不会产生这种文件名），内容含 `dsh web: http://127.0.0.1:3080/?token=…`。
+- 反向证据：09:02:52 那次仍是"服务器已就绪 → 无响应 → 三条 follow 成功"，即根因 4 的现场，修复后该组合不应再出现。
 
 ## 附带修复：0.2.0 内核下的两处适配
 

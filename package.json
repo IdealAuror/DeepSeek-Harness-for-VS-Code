@@ -2,7 +2,7 @@
   "name": "dsh-vscode",
   "displayName": "DeepSeek Harness for VS Code (local fix)",
   "description": "Use DeepSeek Harness directly in VS Code: secondary sidebar chat panel, @dsh built-in chat participant with @ file/session/agent mentions, multimodal image attachments, model/preset/permission/thinking controls, subagents, Cordis plugin approvals, and turn-level Git rollback (undo one turn, restore checkpoints). Local fork: fixes the token pill reporting a cached-hit rate of 100% (NEXTINDIE/DeepSeek-Harness-for-VS-Code#22).",
-  "version": "0.13.45",
+  "version": "0.13.46",
   "publisher": "IdealAuror",
   "icon": "media/icon.png",
   "license": "MIT",
@@ -221,6 +221,11 @@
           "type": "boolean",
           "default": false,
           "description": "%config.openPanelOnStartup%"
+        },
+        "dsh.openBrowserOnStartup": {
+          "type": "boolean",
+          "default": false,
+          "description": "Open the DSH Web UI in the default browser once the extension is connected to a server (the URL carries the launch token, so no 401 page). Off by default: the server is started with --no-open so no browser window pops up unless you enable this, or run \"DSH: Open in Browser\"."
         },
         "dsh.defaultReasoningEffort": {
           "type": "string",
