@@ -242,9 +242,13 @@ export class DshHub {
       return { ok: false, message: ensured.message };
     }
     this.syncLaunchTokenFromServer();
+    // remote.mux 必须先连上:ping 走的就是这条 WebSocket 多路复用流。过去这里是
+    // 「先 ping、成功后才 startStreams()」,服务器 HTTP 刚就绪、WS 还没握手时 ping 必然
+    // 失败 → 面板报「服务器无响应 / 启动失败」,而服务器其实是好的(体感:经常连不上)。
+    this.client.startStreams();
     let describe;
     try {
-      describe = await this.client.ping();
+      describe = await this.pingWithRetry();
     } catch (error) {
       if (error instanceof DshAuthError && this.server.refreshLaunchToken()) {
         // 服务器由上一个扩展实例(或终端)启动:从常见日志补取授权 token 后再试一次
@@ -276,6 +280,32 @@ export class DshHub {
     return { ok: true };
   }
 
+  /**
+   * 服务器已在线时重试 ping:覆盖「HTTP 已就绪、remote.mux 仍在握手」的竞态。
+   * 认证类错误立即抛出(交给调用方补 token 后再试),其余错误短暂退避后重试。
+   */
+  private async pingWithRetry(attempts = 8, delayMs = 400) {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      try {
+        const describe = await this.client.ping();
+        if (describe !== undefined) return describe;
+        lastError = undefined;
+      } catch (error) {
+        if (error instanceof DshAuthError) throw error;
+        lastError = error;
+        if (attempt === 0) {
+          this.deps.onLog?.(
+            `[ping] 首次 ping 失败(${error instanceof Error ? error.message : String(error)}),等 remote.mux 就绪后重试`,
+          );
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    if (lastError !== undefined) throw lastError;
+    return undefined;
+  }
+
   /** 把服务器管理器已解析的授权 token 同步给 API 客户端。 */
   private syncLaunchTokenFromServer() {
     const token = this.server.launchToken;
@@ -291,6 +321,14 @@ export class DshHub {
   private errorMessage(error: unknown): string {
     if (error instanceof DshApiError && error.code === "server-old-version") return error.message;
     if (error instanceof DshAuthError) return error.message;
+    // 服务器进程活着、但内部服务图半死(sessionController 不再激活):单说"无响应"会
+    // 把人引向网络/端口排查。这里明确告诉用户"重启服务器即可",并指向命令面板。
+    if (error instanceof DshApiError && error.code === "gateway/service-unavailable") {
+      return (
+        this.deps.t?.("hub.serverServiceUnavailable") ??
+        `DSH server at ${this.deps.url} is running but its internal services are unavailable (${error.message}). Restart it: "DSH: Stop Server" then "DSH: Start Server".`
+      );
+    }
     return this.deps.t?.("hub.serverNoResponse", { url: this.deps.url }) ?? `DSH server at ${this.deps.url} is not responding`;
   }
 

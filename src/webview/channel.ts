@@ -159,6 +159,8 @@ export class ChatChannel {
   private lastServerUp = false;
   /** 前端是否已上报 "ready"(脚本尾部无条件发送);未就绪说明平台预载或 bundle 执行失败 */
   private booted = false;
+  /** 已经为其开过浏览器的服务器 token(同一台服务器只开一次标签页) */
+  private lastOpenedBrowserToken: string | undefined;
 
   constructor(
     private readonly hub: DshHub,
@@ -466,6 +468,9 @@ export class ChatChannel {
 
   private async ensureAndPush() {
     await this.hub.ensureReady();
+    // 连上服务器后(需要时)自动打开浏览器里的 Web UI:服务器自己那次 open 常被吞掉/开在后台,
+    // 这里用 VS Code 的 openExternal 再开一次带 token 的地址,保证"插件一起来浏览器就有窗口"。
+    void this.maybeOpenBrowser();
     // 权限目录是进程级的:启动时拉一次,拉回后重推当前会话 → 权限下拉一开始就有可选项
     void this.ensurePermissionCatalog().then(() => {
       const sid = this.hub.store.currentSessionId;
@@ -485,6 +490,26 @@ export class ChatChannel {
       void this.hub.updateCurrentModel(current);
     }
     await this.pushFullState();
+  }
+
+  /**
+   * 按需自动打开浏览器里的 DSH Web UI(`dsh.openBrowserOnStartup`,**默认关**)。
+   * 服务器自己那次 open 被 `--no-open` 关掉了,所以默认不会弹任何浏览器窗口;
+   * 只有显式打开该设置(或执行 "DSH: 在浏览器中打开")才会有标签页。
+   * 地址带授权 token,不会落到 401 页面;同一台服务器(同一 token)只开一次。
+   */
+  private async maybeOpenBrowser(): Promise<void> {
+    if (vscode.workspace.getConfiguration("dsh").get<boolean>("openBrowserOnStartup", false) !== true) return;
+    const token = this.hub.server.launchToken;
+    if (!token || token === this.lastOpenedBrowserToken) return;
+    this.lastOpenedBrowserToken = token;
+    const base = vscode.workspace.getConfiguration("dsh").get<string>("url", "http://127.0.0.1:3080").replace(/\/+$/, "");
+    try {
+      this.sink.log?.(`[browser] 自动打开 Web UI(带 token)`);
+      await vscode.env.openExternal(vscode.Uri.parse(`${base}/?token=${token}`));
+    } catch (error) {
+      this.sink.log?.(`[browser] 打开失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**

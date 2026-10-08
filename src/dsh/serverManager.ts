@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -15,6 +15,13 @@ interface DirectLauncher {
 interface ShellLauncher {
   kind: "shell";
   command: string;
+  /**
+   * 启动器的固定前缀参数(如 npx 的 `--yes @deepseek-ai/dsh@latest`)。
+   * 必须与 command 分开保存:`shellCommand()` 只对**单个 token** 加引号,过去把
+   * `npx.cmd --yes @deepseek-ai/dsh@latest` 整串当成一个 token 拼进命令行,会被
+   * 整体加引号 → cmd 报「系统找不到指定的路径。」→ npx/npm 兜底**必然**失败。
+   */
+  args?: string[];
   label: string;
 }
 
@@ -187,19 +194,11 @@ export class ServerManager {
     this.setStatus({ starting: true, up: false });
     let childExited = false;
     let exitInfo = "";
-    // 把子进程输出重定向到日志文件(不丢失 npx/dsh 的报错;也避免沙箱下的管道限制)
-    const logFile = join(tmpdir(), "dsh-vscode-server.log");
-    let logStale = false;
-    try {
-      unlinkSync(logFile);
-    } catch (error) {
-      // 首次运行没有旧日志属于正常情况;但 Windows 上「文件被占用」也会走到这里
-      // (典型场景:另一个 dsh 服务器进程仍持有该日志句柄)。区分开来,否则下面的
-      // openSync 会抛出一个看不出原因的 EBUSY。
-      const code = (error as { code?: string } | undefined)?.code;
-      logStale = code !== undefined && code !== "ENOENT";
-      if (logStale) this.log(`旧启动日志无法删除(${code}),可能是另一个 dsh 服务器仍持有它: ${logFile}`);
-    }
+    // 把子进程输出重定向到日志文件(不丢失 npx/dsh 的报错;也避免沙箱下的管道限制)。
+    // 日志名**每次启动唯一**:过去固定用 dsh-vscode-server.log,只要上一台 dsh 服务器
+    // 还持有它,这里就以 EBUSY 收场、整个启动流程直接失败(用户只能手动杀进程自救)。
+    // 唯一命名后不再需要"先删旧日志",EBUSY 这一类失败从根上消失。
+    const logFile = join(tmpdir(), `dsh-vscode-server-${Date.now().toString(36)}.log`);
     this.log(`启动日志: ${logFile}`);
     let fd: number;
     try {
@@ -210,7 +209,7 @@ export class ServerManager {
       const code = (error as { code?: string } | undefined)?.code ?? "unknown";
       const detail =
         this.cfg.t?.("hub.serverLogLocked", { file: logFile, code }) ??
-        `Cannot write the DSH server log "${logFile}" (${code}).${logStale ? " Another DSH server is probably still running and holding this file; stop it and try again." : ""}`;
+        `Cannot write the DSH server log "${logFile}" (${code}).`;
       this.starting = false;
       this.setStatus({ starting: false, up: false, message: detail });
       this.log(detail);
@@ -232,15 +231,15 @@ export class ServerManager {
           this.setStatus({ starting: false });
           return { ok: false, detail: "无法解析 @deepseek-ai/dsh 的 bin 入口(包结构变化?)" };
         }
-        this.child = spawn(launcher.node, [binJs, "web"], {
+        this.child = spawn(launcher.node, [binJs, "web", "--no-open"], {
           shell: false,
           stdio: ["ignore", fd, fd],
           windowsHide: true,
           detached: process.platform !== "win32",
         });
-        this.log(`直接启动: node ${binJs} web (pid=${this.child.pid ?? "?"})`);
+        this.log(`直接启动: node ${binJs} web --no-open (pid=${this.child.pid ?? "?"})`);
       } else {
-        this.child = spawn(`${shellCommand(launcher.command, ["web"])} > "${logFile}" 2>&1`, {
+        this.child = spawn(`${shellCommand(launcher.command, [...(launcher.args ?? []), "web", "--no-open"])} > "${logFile}" 2>&1`, {
           shell: true,
           stdio: "ignore",
           windowsHide: true,
@@ -341,9 +340,25 @@ export class ServerManager {
       if (match?.[1]) {
         this.authToken = match[1];
         this.log(`已解析授权 token(0.1.2 浏览器认证)`);
+        this.publishLaunchToken();
       }
     } catch {
       // 日志尚不可读:首次安装输出较慢,后续请求 401 时会重试解析
+    }
+  }
+
+  /**
+   * 把当前 token 写成固定名日志(dsh-vscode-server.log),让**其他实例**的
+   * refreshLaunchToken() 也能读到 —— 例如扩展重载后接管上一轮启动的服务器,
+   * 或用户手动跑 open-dsh-browser.cmd。写不进去(被占用)就跳过,不影响本次启动。
+   */
+  private publishLaunchToken(): void {
+    if (!this.authToken) return;
+    try {
+      const base = this.cfg.url.replace(/\/+$/, "");
+      writeFileSync(join(tmpdir(), "dsh-vscode-server.log"), `dsh web: ${base}/?token=${this.authToken}\n`, "utf8");
+    } catch {
+      // 固定名日志被其他进程占用:跳过
     }
   }
 
@@ -358,7 +373,8 @@ export class ServerManager {
     const configured = await this.canRun(this.cfg.command);
     if (configured.ok) {
       this.log(`启动器命中配置 dsh.command = ${this.cfg.command}`);
-      return { launcher: { kind: "shell", command: this.cfg.command, label: `dsh.command=${this.cfg.command}` } };
+      const [command, ...args] = splitCommandLine(this.cfg.command);
+      return { launcher: { kind: "shell", command, args, label: `dsh.command=${this.cfg.command}` } };
     }
     failures.push(`${this.cfg.command}:${configured.detail}`);
     this.log(`dsh.command = ${this.cfg.command} 不可用(${configured.detail})`);
@@ -375,7 +391,7 @@ export class ServerManager {
       const r = await this.canRun(npx);
       if (r.ok) {
         this.log(`npx 可用: ${npx}`);
-        return { launcher: { kind: "shell", command: `${npx} --yes @deepseek-ai/dsh@latest`, label: `npx ${npx}` } };
+        return { launcher: { kind: "shell", command: npx, args: ["--yes", "@deepseek-ai/dsh@latest"], label: `npx ${npx}` } };
       }
       failures.push(`${npx}:${r.detail}`);
     }
@@ -383,7 +399,7 @@ export class ServerManager {
       const r = await this.canRun(npm);
       if (r.ok) {
         this.log(`npm 可用: ${npm}`);
-        return { launcher: { kind: "shell", command: `${npm} exec --yes @deepseek-ai/dsh@latest`, label: `npm exec ${npm}` } };
+        return { launcher: { kind: "shell", command: npm, args: ["exec", "--yes", "@deepseek-ai/dsh@latest"], label: `npm exec ${npm}` } };
       }
       failures.push(`${npm}:${r.detail}`);
     }
@@ -654,27 +670,78 @@ export class ServerManager {
     });
   }
 
-  /** 停止由本扩展启动的服务器(杀进程树)。 */
+  /**
+   * 停止服务器。
+   * - 本扩展启动的:直接杀子进程树;
+   * - **不是**本扩展启动的(上一轮窗口、手动 dsh web、外部工具):按 cfg.url 的端口
+   *   找到监听 PID 再杀。否则遇到"服务图半死(sessionController unavailable)、面板又
+   *   提示无响应"时,用户在命令面板里根本停不掉它,只能去任务管理器。
+   */
   async stop(): Promise<{ ok: boolean; message?: string }> {
-    if (!this.startedByUs || !this.child?.pid) {
+    if (this.startedByUs && this.child?.pid) {
+      const pid = this.child.pid;
+      try {
+        await killTree(pid);
+      } catch (error) {
+        return { ok: false, message: this.cfg.t?.("hub.stopFailed", { error: error instanceof Error ? error.message : String(error) }) ?? `Stop failed: ${error instanceof Error ? error.message : String(error)}` };
+      }
+      this.startedByUs = false;
+      this.child = undefined;
+      this.setStatus({ up: false, startedByUs: false, starting: false });
+      return { ok: true };
+    }
+    const pid = await this.findListenerPid();
+    if (pid === undefined) {
       return { ok: false, message: this.cfg.t?.("hub.notStartedByUs") ?? "The current server was not started by this extension; stop it in the terminal that launched it." };
     }
-    const pid = this.child.pid;
     try {
-      if (process.platform === "win32") {
-        await runDetached("taskkill", ["/pid", String(pid), "/T", "/F"]);
-      } else {
-        await runDetached("kill", ["-TERM", "-" + pid]);
-        await sleep(500);
-        await runDetached("kill", ["-KILL", "-" + pid]).catch(() => undefined);
-      }
+      await killTree(pid);
     } catch (error) {
       return { ok: false, message: this.cfg.t?.("hub.stopFailed", { error: error instanceof Error ? error.message : String(error) }) ?? `Stop failed: ${error instanceof Error ? error.message : String(error)}` };
     }
-    this.startedByUs = false;
-    this.child = undefined;
+    this.log(`已停止外部启动的服务器(pid ${pid})`);
     this.setStatus({ up: false, startedByUs: false, starting: false });
     return { ok: true };
+  }
+
+  /** 按 cfg.url 的端口找监听进程的 PID(用于停止非本扩展启动的服务器)。 */
+  private findListenerPid(): Promise<number | undefined> {
+    let port = 0;
+    try {
+      const u = new URL(this.cfg.url);
+      port = Number(u.port || (u.protocol === "https:" ? 443 : 80));
+    } catch {
+      return Promise.resolve(undefined);
+    }
+    if (!Number.isFinite(port) || port <= 0) return Promise.resolve(undefined);
+    const win = process.platform === "win32";
+    const cmd = win ? "netstat" : "lsof";
+    const args = win ? ["-ano", "-p", "tcp"] : ["-ti", `tcp:${port}`, "-sTCP:LISTEN"];
+    return new Promise((resolve) => {
+      let out = "";
+      const child = spawn(cmd, args, { windowsHide: true });
+      child.stdout?.on("data", (chunk) => (out += String(chunk)));
+      child.once("error", () => resolve(undefined));
+      child.once("close", () => {
+        if (!win) {
+          const pid = Number(out.trim().split(/\s+/)[0]);
+          resolve(Number.isFinite(pid) && pid > 0 ? pid : undefined);
+          return;
+        }
+        for (const line of out.split(/\r?\n/)) {
+          const f = line.trim().split(/\s+/);
+          if (f.length < 5 || f[0].toUpperCase() !== "TCP") continue;
+          if (!f[1].endsWith(`:${port}`)) continue;
+          if (f[3].toUpperCase() !== "LISTENING") continue;
+          const pid = Number(f[4]);
+          if (Number.isFinite(pid) && pid > 0) {
+            resolve(pid);
+            return;
+          }
+        }
+        resolve(undefined);
+      });
+    });
   }
 }
 
@@ -686,6 +753,47 @@ function sleep(ms: number): Promise<void> {
 function shellCommand(file: string, args: string[]): string {
   const quote = (s: string) => (process.platform === "win32" && /\s/.test(s) && !/^".*"$/.test(s) ? `"${s}"` : s);
   return [file, ...args].map(quote).join(" ");
+}
+
+/**
+ * 把一行"命令 + 参数"拆开:整串本身是可执行文件时原样返回(兼容含空格的绝对路径),
+ * 否则按双引号 / 空白拆分。用于允许用户在 dsh.command 里写
+ * `node C:\path\to\bin.js` 这种带参数的值。
+ */
+function splitCommandLine(line: string): string[] {
+  const trimmed = line.trim();
+  if (trimmed === "") return [line];
+  if (existsSync(trimmed)) return [trimmed];
+  const parts: string[] = [];
+  let current = "";
+  let quoted = false;
+  for (const ch of trimmed) {
+    if (ch === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (!quoted && /\s/.test(ch)) {
+      if (current !== "") {
+        parts.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += ch;
+  }
+  if (current !== "") parts.push(current);
+  return parts.length > 0 ? parts : [trimmed];
+}
+
+/** 杀掉一个进程及其子进程树。 */
+async function killTree(pid: number): Promise<void> {
+  if (process.platform === "win32") {
+    await runDetached("taskkill", ["/pid", String(pid), "/T", "/F"]);
+    return;
+  }
+  await runDetached("kill", ["-TERM", "-" + pid]).catch(() => undefined);
+  await sleep(500);
+  await runDetached("kill", ["-KILL", "-" + pid]).catch(() => undefined);
 }
 
 function runDetached(command: string, args: string[]): Promise<void> {
