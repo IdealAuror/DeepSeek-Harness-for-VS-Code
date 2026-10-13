@@ -1,7 +1,7 @@
 # dsh-vscode (local fork)
 
 [`NEXTINDIE/DeepSeek-Harness-for-VS-Code`](https://github.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code)
-的本地 fork，目前承载修复 1–6（详见 `CHANGELOG.md` 与下文）。
+的本地 fork，目前承载修复 1–7（详见 `CHANGELOG.md` 与下文）。
 
 - 上游 issue：[#22 缓存命中恒显示 100%](https://github.com/NEXTINDIE/DeepSeek-Harness-for-VS-Code/issues/22)
 - 其余修复（服务器生命周期、压缩行、插队消息分段、跟随流重挂）尚未提 issue
@@ -9,7 +9,7 @@
 | | 上游 | 本 fork |
 |---|---|---|
 | 扩展 ID | `Jager.dsh-vscode` | `IdealAuror.dsh-vscode` |
-| 版本 | 0.13.43 | 0.13.46 |
+| 版本 | 0.13.43 | 0.13.47 |
 | 显示名 | DeepSeek Harness for VS Code | … (local fix) |
 | 适配的内核 | 0.1.x | 0.2.0-rc.2（`@deepseek-ai/dsh@latest`） |
 
@@ -47,7 +47,9 @@ const ratio = cacheReadTokens / Math.max(promptTokens, cacheReadTokens);
 删掉快捷分支后一律走比例计算：真实满命中仍显示 `100`，部分命中显示带小数的真实值。
 分母取下限是防止输入不一致时算出 >100%。
 
-### 残留（未修）
+### 残留（已在 0.13.47 修掉）
+
+> 0.13.47 起改为直接使用宿主投影 `tokenUsage.totals`（权威口径），不再依赖事件窗口求和；下面这段保留作历史记录。
 
 修好后仍可能与原生端差约 1 个百分点（如插件 99% vs 原生 98%）。
 那是另一个问题：插件用 `HISTORY_PAGE_MESSAGES = 60`（`src/dsh/hub.ts`）只拉 60 条消息，
@@ -273,6 +275,38 @@ undefined**，调用方随即在消息**下方**新建一段。三个挂载点�
 - `findListenerPid()` 的解析逻辑用真实 `netstat` 输出单独跑过：`3080 → PID 30836` 正确。
 - 现场证据：修复生效后的第一次启动日志名为 `dsh-vscode-server-muyu15wx.log`（旧代码不会产生这种文件名），内容含 `dsh web: http://127.0.0.1:3080/?token=…`。
 - 反向证据：09:02:52 那次仍是"服务器已就绪 → 无响应 → 三条 follow 成功"，即根因 4 的现场，修复后该组合不应再出现。
+
+## 修复 7：面板永久卡在「服务器拒绝了授权令牌」（0.13.47）
+
+### 症状
+面板停在「— 选择会话 — / 连接中…」，右下角反复弹：
+
+```
+DSH: 服务器拒绝了授权令牌(令牌可能已过期):请重启服务器后重试
+```
+
+而同一时刻服务器是好的：`GET /?token=<固定名日志里那个>` 实测 **303**。
+
+### 机制（实测链条）
+Temp 里会积累多份启动日志，各有来历：
+
+| 文件 | 来历 | 里面的 token |
+|---|---|---|
+| `dsh-vscode-server-mv6ardug.log` | 扩展尝试自启 → `EADDRINUSE`(端口被占) | 无 |
+| `dsh-vscode-server-mv5ydnkx.log` | 08:38 那次成功启动 | 属于**已死**的服务器 ❌ |
+| `dsh-vscode-server.log` | 当前服务器的启动日志(重定向写入) | **有效** ✅ |
+
+旧逻辑是"解析到第一个 token 就返回"，于是取到死服务器的 token 就一直用：服务器回 401 → 面板重试 → 又取同一个 → 死循环。更早一版还有两个帮凶：`refreshLaunchToken()` 开头的缓存短路让被拒的 token 永远换不掉；以及把"从固定名日志读到的 token"再写回它自己，让过期 token 看起来永远新鲜。
+
+### 修复
+1. `refreshLaunchToken(): Promise<boolean>` —— 逐个候选读 token，**用 `GET /?token=…` 实测**（`303` 或下发 cookie 才算通过），只采纳通过验证的那份，并把它镜像回固定名日志（因此固定名槽位只会有可用值）。
+2. 新增 `readTokenFrom()` / `verifyLaunchToken()`；`launchLogCandidates()` 改为**固定名优先**，唯一名日志按 mtime 新→旧最多 3 份，且显式排除 `-install.log`（它本来会被正则误匹配）。
+3. 新增 `invalidateLaunchToken()`，`hub.doEnsureReady()` 在 `DshAuthError` 时先作废缓存再刷新；就绪轮询改为 `captureLaunchToken(logFile, true)`，刚启动服务器的 token 一律覆盖缓存。
+4. 回写规则收紧：只有"刚解析到的"或"已验证过的" token 才写回固定名日志。
+
+### 验证
+- `tsc --noEmit` 通过；构建、打包、安装后 `dist/extension.js` 与构建产物哈希一致。
+- 现场处置：把 Temp 里 4 份过期/无用的唯一名日志改名为 `*.stale` 后，扩展在下一次重试时自愈（日志出现 `[status] serverUp=true muxConnected=true`），固定名里的 token 同时实测 303 —— 证明"卡住的原因就是读到了死服务器的 token"。
 
 ## 附带修复：0.2.0 内核下的两处适配
 
