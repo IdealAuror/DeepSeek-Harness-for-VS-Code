@@ -6355,7 +6355,23 @@ function renderStatsLine() {
     steps?: number; turns?: number; llmMs?: number; toolMs?: number;
     ttftMs?: number; ttftSteps?: number; decodeMs?: number; decodeTokens?: number;
   } | undefined;
-  const tu = state.stats?.tokenUsage;
+  const tuRaw = state.stats?.tokenUsage as
+    | {
+        uncachedInputTokens?: number;
+        cacheReadTokens?: number;
+        cacheWriteTokens?: number;
+        outputTokens?: number;
+        /** 0.2.0 内核:tokenUsage 投影是分桶结构 { totals, last: { turn, step, buckets } }(ver 2) */
+        totals?: unknown;
+      }
+    | undefined;
+  // 兼容两种投影形状:新内核给 { totals, last },旧宿主直接给扁平用量对象。
+  // 过去这里只按扁平形状读,于是 billedInputTokens(tu) 恒为 0 → 永远退回派生值
+  // (派生值只覆盖已加载的事件窗口,口径偏窄),表现就是「缓存命中比网页端高一截」。
+  const tu =
+    tuRaw !== undefined && typeof tuRaw === "object" && tuRaw.totals !== undefined && typeof tuRaw.totals === "object"
+      ? (tuRaw.totals as typeof tuRaw)
+      : tuRaw;
   // 派生值同时用于两块:轮/步统计与 token 用量。
   // 宿主的 tokenUsage 投影只在回合动作后异步到达,派生值保证回合进行中胶囊也在。
   const derived = deriveStatsFromEvents(state.rawEvents);
