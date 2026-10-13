@@ -250,7 +250,11 @@ export class DshHub {
     try {
       describe = await this.pingWithRetry();
     } catch (error) {
-      if (error instanceof DshAuthError && this.server.refreshLaunchToken()) {
+      // token 被拒时先作废缓存再刷新:否则 refreshLaunchToken() 里的
+      // `if (this.authToken) return true` 会直接"成功"返回,新服务器的 token 永远读不进来,
+      // 面板就一直卡在「服务器拒绝了授权令牌(令牌可能已过期)」无法自愈。
+      this.server.invalidateLaunchToken();
+      if (error instanceof DshAuthError && (await this.server.refreshLaunchToken())) {
         // 服务器由上一个扩展实例(或终端)启动:从常见日志补取授权 token 后再试一次
         this.syncLaunchTokenFromServer();
         try {

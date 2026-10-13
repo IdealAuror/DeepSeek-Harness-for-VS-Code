@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 /** 直接 node 启动器:完全绕开 npm 的 cmd shim(规避部分机器上 PATH/shims 损坏导致的 npx 执行包失败)。 */
 interface DirectLauncher {
@@ -48,6 +48,8 @@ export interface ServerStatus {
 
 /** 从启动器日志解析 $events 授权 URL 的启动 token(0.1.2 起 /api 需要 cookie)。 */
 const AUTH_URL_PATTERN = /token=([A-Za-z0-9_-]+)/;
+/** 固定名启动日志:扩展与其他脚本(open-dsh-browser.cmd)都从这里补取 token。 */
+const canonicalLaunchLog = (): string => join(tmpdir(), "dsh-vscode-server.log");
 
 /**
  * DSH Web 服务器生命周期管理:探测、按需自动启动(`dsh web`,回退 npx)、停止(仅限由本扩展启动的进程)。
@@ -77,14 +79,93 @@ export class ServerManager {
     return this.authToken;
   }
 
-  /** 从扩展常用日志位置补取授权 token(服务器由上一个扩展实例或终端启动的场景)。返回是否补全。 */
-  refreshLaunchToken(): boolean {
-    if (this.authToken) return true;
-    for (const file of [join(tmpdir(), "dsh-vscode-server.log"), join(tmpdir(), "dsh-vscode-server-install.log")]) {
-      this.captureLaunchToken(file);
-      if (this.authToken) return true;
+  /**
+   * 从候选日志里补取授权 token,并**实测验证**。
+   *
+   * 只"解析到"是不够的:Temp 里往往堆着好几份启动日志,其中不少属于**已经死掉的**
+   * 服务器(启动失败留下的、或上一次运行的残留)。过去取到第一个能解析的 token 就返回,
+   * 于是拿一个死服务器的 token 去撞墙 → 服务器回 401 → 面板永远循环
+   * 「服务器拒绝了授权令牌(令牌可能已过期)」,而真正有效的那份反而轮不到。
+   * 现在逐个候选交换 cookie,**303 才算数**;全都不通过就清空缓存返回 false。
+   */
+  async refreshLaunchToken(): Promise<boolean> {
+    if (this.authToken !== undefined && (await this.verifyLaunchToken(this.authToken))) return true;
+    this.authToken = undefined;
+    for (const file of this.launchLogCandidates()) {
+      const token = this.readTokenFrom(file);
+      if (token === undefined) continue;
+      if (await this.verifyLaunchToken(token)) {
+        this.authToken = token;
+        this.log(`已从 ${basename(file)} 解析并验证授权 token`);
+        this.publishLaunchToken();
+        return true;
+      }
+      this.log(`${basename(file)} 里的 token 已被当前服务器拒绝,继续找下一个`);
     }
     return false;
+  }
+
+  /**
+   * 作废缓存里的 token(服务器拒绝授权后调用)。
+   * 不做这一步,`refreshLaunchToken()` 会因为开头的缓存判断直接返回成功,
+   * 永远不去读新启动日志 —— 面板就卡在「服务器拒绝了授权令牌」不再自愈。
+   */
+  invalidateLaunchToken(): void {
+    this.authToken = undefined;
+  }
+
+  /**
+   * 候选启动日志:**固定名优先**(它只接受验证通过的 token,是最可信的一份),
+   * 再退回最近写过的唯一名日志 `dsh-vscode-server-<stamp>.log`。
+   * 注意 `-install.log` 不参与唯一名匹配(它是安装日志,不是服务器启动日志)。
+   */
+  private launchLogCandidates(): string[] {
+    const dir = tmpdir();
+    const candidates: string[] = [canonicalLaunchLog()];
+    try {
+      const unique = readdirSync(dir)
+        .filter((name) => /^dsh-vscode-server-(?!install\.log$)[0-9a-z]+\.log$/.test(name))
+        .map((name) => join(dir, name))
+        .sort((a, b) => {
+          try {
+            return statSync(b).mtimeMs - statSync(a).mtimeMs;
+          } catch {
+            return 0;
+          }
+        })
+        .slice(0, 3);
+      candidates.push(...unique);
+    } catch {
+      // 目录不可读:只试固定名
+    }
+    candidates.push(join(dir, "dsh-vscode-server-install.log"));
+    return candidates;
+  }
+
+  /** 读一份启动日志里的 token(只读,不落缓存)。 */
+  private readTokenFrom(logFile: string): string | undefined {
+    try {
+      return readFileSync(logFile, "utf8").match(AUTH_URL_PATTERN)?.[1];
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** 用 `GET /?token=…` 实测 token 是否被当前服务器接受(303 + 下发 cookie 才算有效)。 */
+  private async verifyLaunchToken(token: string): Promise<boolean> {
+    try {
+      const url = new URL("/", this.cfg.url);
+      url.searchParams.set("token", token);
+      const res = await fetch(url, {
+        redirect: "manual",
+        headers: { accept: "text/html" },
+        signal: AbortSignal.timeout(4000),
+      });
+      return res.status === 303 || res.headers.get("set-cookie") !== null;
+    } catch {
+      // 网络层失败(服务器刚重启/暂时不可达):不能当作"有效",也不算"被拒绝"
+      return false;
+    }
   }
 
   private setStatus(patch: Partial<ServerStatus>) {
@@ -128,8 +209,8 @@ export class ServerManager {
   /** 确保服务器在运行;必要时按配置自动启动。返回是否可用。 */
   async ensure(): Promise<{ up: boolean; message?: string }> {
     if (await this.isUp()) {
-      // 服务器已在线(可能是旧版或外部启动):顺手从常见日志补取授权 token
-      this.refreshLaunchToken();
+      // 服务器已在线(可能是旧版或外部启动):顺手从常见日志补取授权 token(逐个实测验证)
+      await this.refreshLaunchToken();
       if (!this.authToken && (await this.requiresExternalToken())) {
         // 服务器在跑,但要授权而我们没有 token —— 典型场景是用户自己(或 DSH 桌面端)先在
         // 同一端口起了 `dsh web`。此时绝不能再去启动我们自己的实例:端口已被占用,而且对方
@@ -284,9 +365,12 @@ export class ServerManager {
       if (await this.isUp(800)) {
         // 解析启动日志中的授权 URL(0.1.2 起打印 dsh web: http://…/?token=…);
         // 首次安装时 URL 行出现较晚,轮询几秒
-        for (let attempt = 0; attempt < 8 && !this.authToken; attempt++) {
-          this.captureLaunchToken(logFile);
-          if (!this.authToken) await sleep(500);
+        for (let attempt = 0; attempt < 8; attempt++) {
+          // replace=true:刚起的这台服务器打印的 token 一定比缓存里的旧 token 权威
+          // (旧 token 常常来自固定名日志里上一台服务器的镜像)。
+          this.captureLaunchToken(logFile, true);
+          if (this.authToken) break;
+          await sleep(500);
         }
         this.log("服务器已就绪");
         return { ok: true };
@@ -332,15 +416,18 @@ export class ServerManager {
   }
 
   /** 从启动日志抓取授权 URL 的 token(0.1.2 起 /api 需要签名 cookie)。 */
-  private captureLaunchToken(logFile: string): void {
-    if (this.authToken) return;
+  private captureLaunchToken(logFile: string, replace = false): void {
+    if (this.authToken && !replace) return;
     try {
       const text = readFileSync(logFile, "utf8");
       const match = text.match(AUTH_URL_PATTERN);
       if (match?.[1]) {
         this.authToken = match[1];
         this.log(`已解析授权 token(0.1.2 浏览器认证)`);
-        this.publishLaunchToken();
+        // 只把"本次启动日志里的新 token"镜像到固定名文件。把从固定名文件里读到的 token
+        // 再写回去,会把过期令牌永久固化:之后每次 refreshLaunchToken() 都先读到它,
+        // 新服务器的 token 永远解析不进来 —— 面板就永远报「服务器拒绝了授权令牌」。
+        if (logFile !== canonicalLaunchLog()) this.publishLaunchToken();
       }
     } catch {
       // 日志尚不可读:首次安装输出较慢,后续请求 401 时会重试解析
@@ -356,7 +443,7 @@ export class ServerManager {
     if (!this.authToken) return;
     try {
       const base = this.cfg.url.replace(/\/+$/, "");
-      writeFileSync(join(tmpdir(), "dsh-vscode-server.log"), `dsh web: ${base}/?token=${this.authToken}\n`, "utf8");
+      writeFileSync(canonicalLaunchLog(), `dsh web: ${base}/?token=${this.authToken}\n`, "utf8");
     } catch {
       // 固定名日志被其他进程占用:跳过
     }
